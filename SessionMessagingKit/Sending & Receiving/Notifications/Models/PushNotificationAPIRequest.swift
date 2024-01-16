@@ -27,7 +27,7 @@ public struct PushNotificationAPIRequest<T: Encodable>: Encodable {
     public func encode(to encoder: Encoder) throws {
         var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
 
-        try container.encode(endpoint.rawValue, forKey: .method)
+        try container.encode(endpoint.path, forKey: .method)
         try container.encode(body, forKey: .body)
     }
 }

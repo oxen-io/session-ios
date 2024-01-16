@@ -8,6 +8,7 @@ import SessionUIKit
 import SignalUtilitiesKit
 import SignalCoreKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 protocol ImagePickerGridControllerDelegate: AnyObject {
     func imagePickerDidCompleteSelection(_ imagePicker: ImagePickerGridController)
@@ -425,8 +426,10 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         addChild(collectionPickerController)
 
         view.addSubview(collectionPickerView)
-        collectionPickerView.autoPinEdgesToSuperviewEdges(with: .zero, excludingEdge: .top)
-        collectionPickerView.autoPinEdge(toSuperviewSafeArea: .top)
+        collectionPickerView.pin(.top, to: .top, of: view.safeAreaLayoutGuide)
+        collectionPickerView.pin(.leading, to: .leading, of: view)
+        collectionPickerView.pin(.trailing, to: .trailing, of: view)
+        collectionPickerView.pin(.bottom, to: .bottom, of: view)
         collectionPickerView.layoutIfNeeded()
         
         // Initially position offscreen, we'll animate it in.
@@ -519,7 +522,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
 
     override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         guard let delegate = delegate else {
-            return UICollectionViewCell(forAutoLayout: ())
+            return UICollectionViewCell()
         }
 
         let cell: PhotoGridViewCell = collectionView.dequeue(type: PhotoGridViewCell.self, for: indexPath)
@@ -581,7 +584,7 @@ class TitleView: UIView {
         super.init(frame: frame)
 
         addSubview(stackView)
-        stackView.autoPinEdgesToSuperviewEdges()
+        stackView.pin(to: self)
         
         label.font = .boldSystemFont(ofSize: Values.mediumFontSize)
         label.themeTextColor = .textPrimary

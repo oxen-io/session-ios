@@ -26,7 +26,7 @@ public struct SessionApp {
         let versionInfo: [String] = [
             "iOS \(UIDevice.current.systemVersion)",
             appVersion,
-            "libSession: \(SessionUtil.libSessionVersion)",
+            "libSession: \(LibSession.version)",
             commitInfo
         ].compactMap { $0 }
         
@@ -40,24 +40,18 @@ public struct SessionApp {
         variant: SessionThread.Variant,
         action: ConversationViewModel.Action = .none,
         dismissing presentingViewController: UIViewController?,
-        animated: Bool
+        animated: Bool,
+        using dependencies: Dependencies
     ) {
-        let threadInfo: (threadExists: Bool, isMessageRequest: Bool)? = Storage.shared.read { db in
+        let threadInfo: (threadExists: Bool, isMessageRequest: Bool)? = dependencies[singleton: .storage].read { db in
             let isMessageRequest: Bool = {
                 switch variant {
-                    case .contact:
+                    case .contact, .group:
                         return SessionThread
                             .isMessageRequest(
-                                id: threadId,
-                                variant: .contact,
-                                currentUserPublicKey: getUserHexEncodedPublicKey(db),
-                                shouldBeVisible: nil,
-                                contactIsApproved: (try? Contact
-                                    .filter(id: threadId)
-                                    .select(.isApproved)
-                                    .asRequest(of: Bool.self)
-                                    .fetchOne(db))
-                                    .defaulting(to: false),
+                                db,
+                                threadId: threadId,
+                                userSessionId: getUserSessionId(db, using: dependencies),
                                 includeNonVisible: true
                             )
                         
@@ -86,8 +80,15 @@ public struct SessionApp {
         /// should do it on a background thread just in case something is keeping the DBWrite thread busy as in the past this could cause the app to hang
         guard threadInfo?.threadExists == true else {
             DispatchQueue.global(qos: .userInitiated).async {
-                Storage.shared.write { db in
-                    try SessionThread.fetchOrCreate(db, id: threadId, variant: variant, shouldBeVisible: nil)
+                dependencies[singleton: .storage].write { db in
+                    try SessionThread.fetchOrCreate(
+                        db,
+                        id: threadId,
+                        variant: variant,
+                        shouldBeVisible: nil,
+                        calledFromConfigHandling: false,
+                        using: dependencies
+                    )
                 }
 
                 // Send back to main thread for UI transitions
@@ -111,16 +112,17 @@ public struct SessionApp {
 
     // MARK: - Functions
     
-    public static func resetAppData(onReset: (() -> ())? = nil) {
+    public static func resetAppData(using dependencies: Dependencies, onReset: (() -> ())? = nil) {
         // This _should_ be wiped out below.
         Logger.error("")
         DDLog.flushLog()
         
-        SessionUtil.clearMemoryState()
-        Storage.resetAllStorage()
-        ProfileManager.resetProfileStorage()
+        LibSession.clearMemoryState(using: dependencies)
+        Storage.resetAllStorage(using: dependencies)
+        DisplayPictureManager.resetStorage(using: dependencies)
         Attachment.resetAttachmentStorage()
-        AppEnvironment.shared.notificationPresenter.clearAllNotifications()
+        dependencies[singleton: .notificationsManager].clearAllNotifications()
+        dependencies[singleton: .keychain].removeAll()
 
         onReset?()
         exit(0)

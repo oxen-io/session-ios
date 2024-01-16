@@ -5,6 +5,7 @@ import Reachability
 import SessionUIKit
 import SessionSnodeKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 final class PathStatusView: UIView {
     enum Size {
@@ -45,10 +46,15 @@ final class PathStatusView: UIView {
     // MARK: - Initialization
     
     private let size: Size
+    private let dependencies: Dependencies
     private let reachability: Reachability? = Environment.shared?.reachabilityManager.reachability
     
-    init(size: Size = .small) {
+    init(
+        size: Size = .small,
+        using dependencies: Dependencies = Dependencies()
+    ) {
         self.size = size
+        self.dependencies = dependencies
         
         super.init(frame: .zero)
         
@@ -58,6 +64,7 @@ final class PathStatusView: UIView {
 
     required init?(coder: NSCoder) {
         self.size = .small
+        self.dependencies = Dependencies()
         
         super.init(coder: coder)
         
@@ -67,6 +74,7 @@ final class PathStatusView: UIView {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        dependencies.removeFeatureObserver(self)
     }
     
     // MARK: - Layout
@@ -77,7 +85,7 @@ final class PathStatusView: UIView {
         self.set(.width, to: self.size.pointSize)
         self.set(.height, to: self.size.pointSize)
         
-        switch (reachability?.isReachable(), OnionRequestAPI.paths.isEmpty) {
+        switch (reachability?.isReachable(), dependencies[cache: .onionRequestAPI].paths.isEmpty) {
             case (.some(false), _), (nil, _): setStatus(to: .error)
             case (.some(true), true): setStatus(to: .connecting)
             case (.some(true), false): setStatus(to: .connected)
@@ -89,22 +97,18 @@ final class PathStatusView: UIView {
     private func registerObservers() {
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleBuildingPathsNotification),
-            name: .buildingPaths,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handlePathsBuiltNotification),
-            name: .pathsBuilt,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(reachabilityChanged),
             name: .reachabilityChanged,
             object: nil
         )
+        
+        dependencies.addFeatureObserver(self, for: .networkLayers, events: [.buildingPaths, .pathsBuilt]) { [weak self] _, event in
+            switch event {
+                case .buildingPaths: self?.handleBuildingPathsNotification()
+                case .pathsBuilt: self?.handlePathsBuiltNotification()
+                default: break
+            }
+        }
     }
 
     private func setStatus(to status: Status) {
@@ -124,7 +128,7 @@ final class PathStatusView: UIView {
         }
     }
 
-    @objc private func handleBuildingPathsNotification() {
+    private func handleBuildingPathsNotification() {
         guard reachability?.isReachable() == true else {
             setStatus(to: .error)
             return
@@ -133,7 +137,7 @@ final class PathStatusView: UIView {
         setStatus(to: .connecting)
     }
 
-    @objc private func handlePathsBuiltNotification() {
+    private func handlePathsBuiltNotification() {
         guard reachability?.isReachable() == true  else {
             setStatus(to: .error)
             return
@@ -153,6 +157,6 @@ final class PathStatusView: UIView {
             return
         }
         
-        setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
+        setStatus(to: (!dependencies[cache: .onionRequestAPI].paths.isEmpty ? .connected : .connecting))
     }
 }

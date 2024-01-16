@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import GRDB
@@ -40,8 +42,8 @@ public final class DataExtractionNotification: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid, let kind = kind else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies), let kind = kind else { return false }
         
         switch kind {
             case .screenshot: return true
@@ -81,7 +83,7 @@ public final class DataExtractionNotification: ControlMessage {
         return DataExtractionNotification(kind: kind)
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(_ db: Database, threadId: String) -> SNProtoContent? {
         guard let kind = kind else {
             SNLog("Couldn't construct data extraction notification proto from: \(self).")
             return nil
@@ -97,6 +99,8 @@ public final class DataExtractionNotification: ControlMessage {
             }
             let contentProto = SNProtoContent.builder()
             contentProto.setDataExtractionNotification(try dataExtractionNotification.build())
+            // DisappearingMessagesConfiguration
+            setDisappearingMessagesConfigurationIfNeeded(db, on: contentProto, threadId: threadId)
             return try contentProto.build()
         } catch {
             SNLog("Couldn't construct data extraction notification proto from: \(self).")

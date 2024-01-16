@@ -9,13 +9,14 @@ extension MessageReceiver {
         _ db: Database,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        message: TypingIndicator
+        message: TypingIndicator,
+        using dependencies: Dependencies
     ) throws {
         guard try SessionThread.exists(db, id: threadId) else { return }
         
         switch message.kind {
             case .started:
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+                let currentUserSessionId: SessionId = getUserSessionId(db, using: dependencies)
                 let threadIsBlocked: Bool = (
                     threadVariant == .contact &&
                     (try? Contact
@@ -27,7 +28,10 @@ extension MessageReceiver {
                 )
                 let threadIsMessageRequest: Bool = (try? SessionThread
                     .filter(id: threadId)
-                    .filter(SessionThread.isMessageRequest(userPublicKey: userPublicKey, includeNonVisible: true))
+                    .filter(SessionThread.isMessageRequest(
+                        userSessionId: currentUserSessionId,
+                        includeNonVisible: true
+                    ))
                     .isEmpty(db))
                     .defaulting(to: false)
                 let needsToStartTypingIndicator: Bool = TypingIndicators.didStartTypingNeedsToStart(

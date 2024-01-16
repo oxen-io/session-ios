@@ -2,7 +2,7 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 //
 
-import Foundation
+import UIKit
 import SignalUtilitiesKit
 
 @objc class OWSImagePickerController: UIImagePickerController {
@@ -10,6 +10,6 @@ import SignalUtilitiesKit
     // MARK: Orientation
 
     override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return DefaultUIInterfaceOrientationMask()
+        return (UIDevice.current.isIPad ? .all : .portrait)
     }
 }

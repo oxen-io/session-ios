@@ -29,7 +29,7 @@ public class PlaceholderIcon {
         var hash = seed
         
         if (hash.matches("^[0-9A-Fa-f]+$") && hash.count >= 12) {
-            hash = SHA512.hash(data: Data(seed.bytes)).hexString
+            hash = Data(SHA512.hash(data: Data(Array(seed.utf8))).makeIterator()).toHexString()
         }
         
         guard let number = Int(hash.substring(to: 12), radix: 16) else {
@@ -54,7 +54,7 @@ public class PlaceholderIcon {
                 text
         )
 
-        if content.count > 2 && SessionId.Prefix(from: content) != nil {
+        if content.count > 2 && (try? SessionId.Prefix(from: content)) != nil {
             content.removeFirst(2)
         }
         

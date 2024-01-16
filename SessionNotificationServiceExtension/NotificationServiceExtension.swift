@@ -17,10 +17,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     private var request: UNNotificationRequest?
     private var openGroupPollCancellable: AnyCancellable?
 
-    public static let isFromRemoteKey = "remote"
-    public static let threadIdKey = "Signal.AppNotificationsUserInfoKey.threadId"
-    public static let threadVariantRaw = "Signal.AppNotificationsUserInfoKey.threadVariantRaw"
-    public static let threadNotificationCounter = "Session.AppNotificationsUserInfoKey.threadNotificationCounter"
+    public static let isFromRemoteKey = "remote"    // stringlint:disable
+    public static let threadIdKey = "Signal.AppNotificationsUserInfoKey.threadId"    // stringlint:disable
+    public static let threadVariantRaw = "Signal.AppNotificationsUserInfoKey.threadVariantRaw"    // stringlint:disable
+    public static let threadNotificationCounter = "Session.AppNotificationsUserInfoKey.threadNotificationCounter"    // stringlint:disable
     private static let callPreOfferLargeNotificationSupressionDuration: TimeInterval = 30
 
     // MARK: Did receive a remote push notification request
@@ -29,49 +29,55 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         self.contentHandler = contentHandler
         self.request = request
         
+        // Called via the OS so create a default 'Dependencies' instance
+        let dependencies: Dependencies = Dependencies()
+        
         guard let notificationContent = request.content.mutableCopy() as? UNMutableNotificationContent else {
-            return self.completeSilenty()
+            return self.completeSilenty(using: dependencies)
         }
 
         // Abort if the main app is running
-        guard !(UserDefaults.sharedLokiProject?[.isMainAppActive]).defaulting(to: false) else {
-            return self.completeSilenty()
+        guard !dependencies[defaults: .appGroup, key: .isMainAppActive] else {
+            return self.completeSilenty(using: dependencies)
         }
         
         /// Create the context if we don't have it (needed before _any_ interaction with the database)
-        if !HasAppContext() {
-            SetCurrentAppContext(NotificationServiceExtensionContext())
+        if !dependencies.hasInitialised(singleton: .appContext) {
+            dependencies.set(singleton: .appContext, to: NotificationServiceExtensionContext())
+            Dependencies.setIsRTLRetriever(requiresMainThread: false) {
+                NotificationServiceExtensionContext.determineDeviceRTL()
+            }
         }
         
-        let isCallOngoing: Bool = (UserDefaults.sharedLokiProject?[.isCallOngoing])
-            .defaulting(to: false)
-        let lastCallPreOffer: Date? = UserDefaults.sharedLokiProject?[.lastCallPreOffer]
+        let isCallOngoing: Bool = dependencies[defaults: .appGroup, key: .isCallOngoing]
+        let lastCallPreOffer: Date? = dependencies[defaults: .appGroup, key: .lastCallPreOffer]
 
         // Perform main setup
-        Storage.resumeDatabaseAccess()
-        DispatchQueue.main.sync { self.setUpIfNecessary() { } }
+        Storage.resumeDatabaseAccess(using: dependencies)
+        DispatchQueue.main.sync { self.setUpIfNecessary(using: dependencies) }
 
         // Handle the push notification
-        AppReadiness.runNowOrWhenAppDidBecomeReady {
-            let openGroupPollingPublishers: [AnyPublisher<Void, Error>] = self.pollForOpenGroups()
+        dependencies[singleton: .appReadiness].runNowOrWhenAppDidBecomeReady {
+            let openGroupPollingPublishers: [AnyPublisher<Void, Error>] = self.pollForOpenGroups(using: dependencies)
             defer {
                 self.openGroupPollCancellable = Publishers
                     .MergeMany(openGroupPollingPublishers)
                     .subscribe(on: DispatchQueue.global(qos: .background))
                     .subscribe(on: DispatchQueue.main)
                     .sink(
-                        receiveCompletion:  { [weak self] _ in self?.completeSilenty() },
+                        receiveCompletion:  { [weak self] _ in self?.completeSilenty(using: dependencies) },
                         receiveValue: { _ in }
                     )
             }
             
-            let (maybeEnvelope, result) = PushNotificationAPI.processNotification(
-                notificationContent: notificationContent
+            let (maybeData, metadata, result) = PushNotificationAPI.processNotification(
+                notificationContent: notificationContent,
+                using: dependencies
             )
             
             guard
                 (result == .success || result == .legacySuccess),
-                let envelope: SNProtoEnvelope = maybeEnvelope
+                let data: Data = maybeData
             else {
                 switch result {
                     // If we got an explicit failure, or we got a success but no content then show
@@ -98,108 +104,122 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
             // HACK: It is important to use write synchronously here to avoid a race condition
             // where the completeSilenty() is called before the local notification request
             // is added to notification center
-            Storage.shared.write { db in
+            dependencies[singleton: .storage].write { db in
                 do {
-                    guard let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, envelope: envelope) else {
+                    guard let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, data: data, metadata: metadata, using: dependencies) else {
                         self.handleFailure(for: notificationContent, error: .messageProcessing)
                         return
                     }
                     
-                    /// Due to the way the `CallMessage` and `SharedConfigMessage` work we need to custom
-                    /// handle their behaviours, for all other message types we want to just use standard messages
-                    switch processedMessage.messageInfo.message {
-                        case is CallMessage, is SharedConfigMessage: break
-                        default:
-                            try MessageReceiver.handle(
+                    switch processedMessage {
+                        /// Custom handle config messages (as they don't get handled by the normal `MessageReceiver.handle` call
+                        case .config(let publicKey, let namespace, let serverHash, let serverTimestampMs, let data):
+                            try LibSession.handleConfigMessages(
                                 db,
-                                threadId: processedMessage.threadId,
-                                threadVariant: processedMessage.threadVariant,
-                                message: processedMessage.messageInfo.message,
-                                serverExpirationTimestamp: processedMessage.messageInfo.serverExpirationTimestamp,
-                                associatedWithProto: processedMessage.proto
+                                sessionIdHexString: publicKey,
+                                messages: [
+                                    ConfigMessageReceiveJob.Details.MessageInfo(
+                                        namespace: namespace,
+                                        serverHash: serverHash,
+                                        serverTimestampMs: serverTimestampMs,
+                                        data: data
+                                    )
+                                ]
                             )
-                            return
-                    }
-                    
-                    // Throw if the message is outdated and shouldn't be processed
-                    try MessageReceiver.throwIfMessageOutdated(
-                        db,
-                        message: processedMessage.messageInfo.message,
-                        threadId: processedMessage.threadId,
-                        threadVariant: processedMessage.threadVariant
-                    )
-                    
-                    switch processedMessage.messageInfo.message {
-                        case let callMessage as CallMessage:
+                            
+                        /// Due to the way the `CallMessage` works we need to custom handle it's behaviour within the notification
+                        /// extension, for all other message types we want to just use the standard `MessageReceiver.handle` call
+                        case .standard(let threadId, let threadVariant, _, let messageInfo) where messageInfo.message is CallMessage:
+                            guard let callMessage = messageInfo.message as? CallMessage else {
+                                return self.completeSilenty(using: dependencies)
+                            }
+                            
+                            // Throw if the message is outdated and shouldn't be processed
+                            try MessageReceiver.throwIfMessageOutdated(
+                                db,
+                                message: messageInfo.message,
+                                threadId: threadId,
+                                threadVariant: threadVariant
+                            )
+                            
                             try MessageReceiver.handleCallMessage(
                                 db,
-                                threadId: processedMessage.threadId,
-                                threadVariant: processedMessage.threadVariant,
+                                threadId: threadId,
+                                threadVariant: threadVariant,
                                 message: callMessage
                             )
                             
-                            guard case .preOffer = callMessage.kind else { return self.completeSilenty() }
+                            guard case .preOffer = callMessage.kind else {
+                                return self.completeSilenty(using: dependencies)
+                            }
                             
-                            if !db[.areCallsEnabled] {
-                                if
-                                    let sender: String = callMessage.sender,
-                                    let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(
-                                        db,
-                                        for: callMessage,
-                                        state: .permissionDenied
-                                    )
-                                {
-                                    let thread: SessionThread = try SessionThread
-                                        .fetchOrCreate(
+                            switch (db[.areCallsEnabled], isCallOngoing) {
+                                case (false, _):
+                                    if
+                                        let sender: String = callMessage.sender,
+                                        let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(
                                             db,
-                                            id: sender,
-                                            variant: .contact,
-                                            shouldBeVisible: nil
+                                            for: callMessage,
+                                            state: .permissionDenied
                                         )
+                                    {
+                                        let thread: SessionThread = try SessionThread
+                                            .fetchOrCreate(
+                                                db,
+                                                id: sender,
+                                                variant: .contact,
+                                                shouldBeVisible: nil,
+                                                calledFromConfigHandling: false,
+                                                using: dependencies
+                                            )
 
-                                    // Notify the user if the call message wasn't already read
-                                    if !interaction.wasRead {
-                                        Environment.shared?.notificationsManager.wrappedValue?
-                                            .notifyUser(
+                                        // Notify the user if the call message wasn't already read
+                                        if !interaction.wasRead {
+                                            dependencies[singleton: .notificationsManager].notifyUser(
                                                 db,
                                                 forIncomingCall: interaction,
                                                 in: thread,
                                                 applicationState: .background
                                             )
+                                        }
                                     }
-                                }
-                                break
+                                    
+                                case (true, true):
+                                    try MessageReceiver.handleIncomingCallOfferInBusyState(
+                                        db,
+                                        message: callMessage
+                                    )
+                                    
+                                case (true, false):
+                                    try MessageReceiver.insertCallInfoMessage(db, for: callMessage)
+                                    self.handleSuccessForIncomingCall(db, for: callMessage, using: dependencies)
                             }
                             
-                            if isCallOngoing {
-                                try MessageReceiver.handleIncomingCallOfferInBusyState(db, message: callMessage)
-                                break
-                            }
-                            
-                            try MessageReceiver.insertCallInfoMessage(db, for: callMessage)
-                            self.handleSuccessForIncomingCall(db, for: callMessage)
-                            
-                        case let sharedConfigMessage as SharedConfigMessage:
-                            try SessionUtil.handleConfigMessages(
+                            // Perform any required post-handling logic
+                            try MessageReceiver.postHandleMessage(
                                 db,
-                                messages: [sharedConfigMessage],
-                                publicKey: processedMessage.threadId
+                                threadId: threadId,
+                                message: messageInfo.message,
+                                using: dependencies
                             )
                             
-                        default: break
+                        case .standard(let threadId, let threadVariant, let proto, let messageInfo):
+                            try MessageReceiver.handle(
+                                db,
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                message: messageInfo.message,
+                                serverExpirationTimestamp: messageInfo.serverExpirationTimestamp,
+                                associatedWithProto: proto
+                            )
                     }
-                    
-                    // Perform any required post-handling logic
-                    try MessageReceiver.postHandleMessage(
-                        db,
-                        threadId: processedMessage.threadId,
-                        message: processedMessage.messageInfo.message
-                    )
                 }
                 catch {
                     if let error = error as? MessageReceiverError, error.isRetryable {
                         switch error {
-                            case .invalidGroupPublicKey, .noGroupKeyPair, .outdatedMessage: self.completeSilenty()
+                            case .invalidGroupPublicKey, .noGroupKeyPair, .outdatedMessage:
+                                self.completeSilenty(using: dependencies)
+                            
                             default: self.handleFailure(for: notificationContent, error: .messageHandling(error))
                         }
                     }
@@ -210,7 +230,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
     // MARK: Setup
 
-    private func setUpIfNecessary(completion: @escaping () -> Void) {
+    private func setUpIfNecessary(
+        using dependencies: Dependencies,
+        completion: @escaping () -> Void = {}
+    ) {
         AssertIsOnMainThread()
 
         // The NSE will often re-use the same process, so if we're
@@ -221,23 +244,21 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         NSLog("[NotificationServiceExtension] Performing setup")
         didPerformSetup = true
 
-        _ = AppVersion.sharedInstance()
-
+        AppVersion.configure(using: dependencies)
         Cryptography.seedRandom()
 
         AppSetup.setupEnvironment(
             retrySetupIfDatabaseInvalid: true,
             appSpecificBlock: {
-                Environment.shared?.notificationsManager.mutate {
-                    $0 = NSENotificationPresenter()
-                }
+                /// The `NotificationServiceExtension` needs custom behaviours for it's notification presenter so set it up here
+                dependencies.set(singleton: .notificationsManager, to: NSENotificationPresenter())
             },
             migrationsCompletion: { [weak self] result, needsConfigSync in
                 switch result {
                     // Only 'NSLog' works in the extension - viewable via Console.app
                     case .failure(let error):
                         NSLog("[NotificationServiceExtension] Failed to complete migrations: \(error)")
-                        self?.completeSilenty()
+                        self?.completeSilenty(using: dependencies)
                         
                     case .success:
                         // We should never receive a non-voip notification on an app that doesn't support
@@ -245,69 +266,86 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                         // this path should never occur. However, the service does have our push token
                         // so it is possible that could change in the future. If it does, do nothing
                         // and don't disturb the user. Messages will be processed when they open the app.
-                        guard Storage.shared[.isReadyForAppExtensions] else {
+                        guard dependencies[singleton: .storage, key: .isReadyForAppExtensions] else {
                             NSLog("[NotificationServiceExtension] Not ready for extensions")
-                            self?.completeSilenty()
+                            self?.completeSilenty(using: dependencies)
                             return
                         }
                         
                         DispatchQueue.main.async {
-                            self?.versionMigrationsDidComplete(needsConfigSync: needsConfigSync)
+                            self?.versionMigrationsDidComplete(
+                                needsConfigSync: needsConfigSync,
+                                using: dependencies
+                            )
                         }
                 }
                 
                 completion()
-            }
+            },
+            using: dependencies
         )
     }
     
-    private func versionMigrationsDidComplete(needsConfigSync: Bool) {
+    private func versionMigrationsDidComplete(
+        needsConfigSync: Bool,
+        using dependencies: Dependencies
+    ) {
         AssertIsOnMainThread()
 
         // If we need a config sync then trigger it now
         if needsConfigSync {
-            Storage.shared.write { db in
-                ConfigurationSyncJob.enqueue(db, publicKey: getUserHexEncodedPublicKey(db))
+            dependencies[singleton: .storage].write { db in
+                ConfigurationSyncJob.enqueue(
+                    db,
+                    sessionIdHexString: getUserSessionId(db, using: dependencies).hexString,
+                    using: dependencies
+                )
             }
         }
 
-        checkIsAppReady(migrationsCompleted: true)
+        checkIsAppReady(migrationsCompleted: true, using: dependencies)
     }
 
-    private func checkIsAppReady(migrationsCompleted: Bool) {
+    private func checkIsAppReady(
+        migrationsCompleted: Bool,
+        using dependencies: Dependencies
+    ) {
         AssertIsOnMainThread()
 
         // Only mark the app as ready once.
-        guard !AppReadiness.isAppReady() else { return }
+        guard !dependencies[singleton: .appReadiness].isAppReady else { return }
 
         // App isn't ready until storage is ready AND all version migrations are complete.
-        guard Storage.shared.isValid && migrationsCompleted else {
+        guard dependencies[singleton: .storage].isValid && migrationsCompleted else {
             NSLog("[NotificationServiceExtension] Storage invalid")
-            self.completeSilenty()
+            self.completeSilenty(using: dependencies)
             return
         }
 
-        SignalUtilitiesKit.Configuration.performMainSetup()
+        SignalUtilitiesKit.Configuration.performMainSetup(using: dependencies)
 
         // Note that this does much more than set a flag; it will also run all deferred blocks.
-        AppReadiness.setAppIsReady()
+        dependencies[singleton: .appReadiness].setAppReady()
     }
     
     // MARK: Handle completion
     
     override public func serviceExtensionTimeWillExpire() {
+        // Called via the OS so create a default 'Dependencies' instance
+        let dependencies: Dependencies = Dependencies()
+        
         // Called just before the extension will be terminated by the system.
         // Use this as an opportunity to deliver your "best attempt" at modified content, otherwise the original push payload will be used.
         NSLog("[NotificationServiceExtension] Execution time expired")
         openGroupPollCancellable?.cancel()
-        completeSilenty()
+        completeSilenty(using: dependencies)
     }
     
-    private func completeSilenty() {
+    private func completeSilenty(using dependencies: Dependencies) {
         NSLog("[NotificationServiceExtension] Complete silently")
         let silentContent: UNMutableNotificationContent = UNMutableNotificationContent()
-        silentContent.badge = Storage.shared
-            .read { db in try Interaction.fetchUnreadCount(db) }
+        silentContent.badge = dependencies[singleton: .storage]
+            .read { db in try Interaction.fetchUnreadCount(db, using: dependencies) }
             .map { NSNumber(value: $0) }
             .defaulting(to: NSNumber(value: 0))
         Storage.suspendDatabaseAccess()
@@ -315,7 +353,11 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         self.contentHandler!(silentContent)
     }
     
-    private func handleSuccessForIncomingCall(_ db: Database, for callMessage: CallMessage) {
+    private func handleSuccessForIncomingCall(
+        _ db: Database,
+        for callMessage: CallMessage,
+        using dependencies: Dependencies
+    ) {
         if #available(iOSApplicationExtension 14.5, *), Preferences.isCallKitSupported {
             guard let caller: String = callMessage.sender, let timestamp = callMessage.sentTimestamp else { return }
             
@@ -332,8 +374,8 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                 }
                 else {
                     NSLog("[NotificationServiceExtension] Successfully notified main app of call message.")
-                    UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
-                    self.completeSilenty()
+                    dependencies[defaults: .appGroup, key: .lastCallPreOffer] = Date()
+                    self.completeSilenty(using: dependencies)
                 }
             }
         }
@@ -385,8 +427,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     
     // MARK: - Poll for open groups
     
-    private func pollForOpenGroups() -> [AnyPublisher<Void, Error>] {
-        return Storage.shared
+    private func pollForOpenGroups(
+        using dependencies: Dependencies
+    ) -> [AnyPublisher<Void, Error>] {
+        return dependencies[singleton: .storage]
             .read { db in
                 // The default room promise creates an OpenGroup with an empty `roomToken` value,
                 // we don't want to start a poller for this as the user hasn't actually joined a room

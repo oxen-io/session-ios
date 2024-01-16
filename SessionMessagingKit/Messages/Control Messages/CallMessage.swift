@@ -165,7 +165,7 @@ public final class CallMessage: ControlMessage {
         )
     }
     
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(_ db: Database, threadId: String) -> SNProtoContent? {
         let type: SNProtoCallMessage.SNProtoCallMessageType
         
         switch kind {
@@ -188,6 +188,10 @@ public final class CallMessage: ControlMessage {
         }
         
         let contentProto = SNProtoContent.builder()
+        
+        // DisappearingMessagesConfiguration
+        setDisappearingMessagesConfigurationIfNeeded(db, on: contentProto, threadId: threadId)
+        
         do {
             contentProto.setCallMessage(try callMessageProto.build())
             

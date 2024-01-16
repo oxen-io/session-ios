@@ -5,6 +5,10 @@ import SessionUIKit
 import SessionMessagingKit
 
 final class ContextMenuVC: UIViewController {
+    public static let dismissDurationPartOne: TimeInterval = 0.15
+    public static let dismissDurationPartTwo: TimeInterval = 0.25
+    public static let dismissDuration: TimeInterval = (dismissDurationPartOne + dismissDurationPartTwo)
+    
     private static let actionViewHeight: CGFloat = 40
     private static let menuCornerRadius: CGFloat = 8
     
@@ -385,7 +389,7 @@ final class ContextMenuVC: UIViewController {
         self.timestampLabel.frame = currentLabelFrame
         
         UIView.animate(
-            withDuration: 0.15,
+            withDuration: ContextMenuVC.dismissDurationPartOne,
             delay: 0,
             options: .curveEaseOut,
             animations: { [weak self] in
@@ -396,7 +400,7 @@ final class ContextMenuVC: UIViewController {
         )
         
         UIView.animate(
-            withDuration: 0.25,
+            withDuration: ContextMenuVC.dismissDurationPartTwo,
             animations: { [weak self] in
                 self?.blurView.effect = nil
                 self?.menuView.alpha = 0

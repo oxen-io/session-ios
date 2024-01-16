@@ -8,11 +8,12 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
-final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewDataSource, UITableViewDelegate, SeedReminderViewDelegate {
+final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataSource, UITableViewDelegate, SeedReminderViewDelegate {
     private static let loadingHeaderHeight: CGFloat = 40
     public static let newConversationButtonSize: CGFloat = 60
     
-    private let viewModel: HomeViewModel = HomeViewModel()
+    private let dependencies: Dependencies
+    private let viewModel: HomeViewModel
     private var dataChangeObservable: DatabaseCancellable? {
         didSet { oldValue?.cancel() }   // Cancel the old observable if there was one
     }
@@ -22,14 +23,17 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
     private var isAutoLoadingNextPage: Bool = false
     private var viewHasAppeared: Bool = false
     
-    // MARK: - SessionUtilRespondingViewController
+    // MARK: - LibSessionRespondingViewController
     
     let isConversationList: Bool = true
     
     // MARK: - Intialization
     
-    init() {
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+    init(using dependencies: Dependencies = Dependencies()) {
+        self.dependencies = dependencies
+        self.viewModel = HomeViewModel(using: dependencies)
+        
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
         
         super.init(nibName: nil, bundle: nil)
     }
@@ -45,6 +49,8 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
     // MARK: - UI
     
     private var tableViewTopConstraint: NSLayoutConstraint!
+    private var loadingConversationsLabelTopConstraint: NSLayoutConstraint!
+    private var navBarProfileView: ProfilePictureView?
     
     private lazy var seedReminderView: SeedReminderView = {
         let result = SeedReminderView(hasContinueButton: true)
@@ -220,11 +226,6 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Note: This is a hack to ensure `isRTL` is initially gets run on the main thread so the value
-        // is cached (it gets called on background threads and if it hasn't cached the value then it can
-        // cause odd performance issues since it accesses UIKit)
-        _ = CurrentAppContext().isRTL
-        
         // Preparation
         SessionApp.homeViewController.mutate { $0 = self }
         
@@ -240,21 +241,23 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         // Loading conversations label
         view.addSubview(loadingConversationsLabel)
         
-        loadingConversationsLabel.pin(.top, to: .top, of: view, withInset: Values.veryLargeSpacing)
         loadingConversationsLabel.pin(.leading, to: .leading, of: view, withInset: 50)
         loadingConversationsLabel.pin(.trailing, to: .trailing, of: view, withInset: -50)
         
         // Table view
         view.addSubview(tableView)
         tableView.pin(.leading, to: .leading, of: view)
+        tableView.pin(.trailing, to: .trailing, of: view)
+        tableView.pin(.bottom, to: .bottom, of: view)
+        
         if self.viewModel.state.showViewedSeedBanner {
+            loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .bottom, of: seedReminderView, withInset: Values.mediumSpacing)
             tableViewTopConstraint = tableView.pin(.top, to: .bottom, of: seedReminderView)
         }
         else {
+            loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .top, of: view, withInset: Values.veryLargeSpacing)
             tableViewTopConstraint = tableView.pin(.top, to: .top, of: view)
         }
-        tableView.pin(.trailing, to: .trailing, of: view)
-        tableView.pin(.bottom, to: .bottom, of: view)
         
         // Empty state view
         view.addSubview(emptyStateView)
@@ -282,7 +285,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         
         // Start polling if needed (i.e. if the user just created or restored their Session ID)
         if Identity.userExists(), let appDelegate: AppDelegate = UIApplication.shared.delegate as? AppDelegate {
-            appDelegate.startPollersIfNeeded()
+            appDelegate.startPollersIfNeeded(using: Dependencies())
         }
         
         // Onion request path countries cache
@@ -333,7 +336,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
             runAndClearInitialChangeCallback = nil
         }
         
-        dataChangeObservable = Storage.shared.start(
+        dataChangeObservable = Dependencies()[singleton: .storage].start(
             viewModel.observableState,
             onError: { _ in },
             onChange: { [weak self] state in
@@ -380,12 +383,15 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         // Update the 'view seed' UI
         if updatedState.showViewedSeedBanner != self.viewModel.state.showViewedSeedBanner {
             tableViewTopConstraint.isActive = false
+            loadingConversationsLabelTopConstraint.isActive = false
             seedReminderView.isHidden = !updatedState.showViewedSeedBanner
             
             if updatedState.showViewedSeedBanner {
+                loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .bottom, of: seedReminderView, withInset: Values.mediumSpacing)
                 tableViewTopConstraint = tableView.pin(.top, to: .bottom, of: seedReminderView)
             }
             else {
+                loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .top, of: view, withInset: Values.veryLargeSpacing)
                 tableViewTopConstraint = tableView.pin(.top, to: .top, of: view, withInset: Values.smallSpacing)
             }
         }
@@ -485,7 +491,9 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         }
     }
     
-    private func updateNavBarButtons(userProfile: Profile) {
+    private func updateNavBarButtons(userProfile: Profile, using dependencies: Dependencies = Dependencies()) {
+        if let oldView: ProfilePictureView = navBarProfileView { dependencies.removeFeatureObserver(oldView) }
+        
         // Profile picture view
         let profilePictureView = ProfilePictureView(size: .navigation)
         profilePictureView.accessibilityIdentifier = "User settings"
@@ -494,10 +502,15 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         profilePictureView.update(
             publicKey: userProfile.id,
             threadVariant: .contact,
-            customImageData: nil,
+            displayPictureFilename: nil,
             profile: userProfile,
+            profileIcon: (dependencies[feature: .serviceNetwork] == .testnet ?
+                .letter("T") :     // stringlint:disable
+                .none
+            ),
             additionalProfile: nil
         )
+        navBarProfileView = profilePictureView
         
         let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(openSettings))
         profilePictureView.addGestureRecognizer(tapGestureRecognizer)
@@ -506,10 +519,14 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         let pathStatusView = PathStatusView()
         pathStatusView.accessibilityLabel = "Current onion routing path indicator"
         
+        dependencies.addFeatureObserver(profilePictureView, for: .serviceNetwork) { [weak self] updatedValue, _ in
+            self?.updateNavBarButtons(userProfile: userProfile, using: dependencies)
+        }
+        
         // Container view
         let profilePictureViewContainer = UIView()
         profilePictureViewContainer.addSubview(profilePictureView)
-        profilePictureView.autoPinEdgesToSuperviewEdges()
+        profilePictureView.pin(to: profilePictureViewContainer)
         profilePictureViewContainer.addSubview(pathStatusView)
         pathStatusView.pin(.trailing, to: .trailing, of: profilePictureViewContainer)
         pathStatusView.pin(.bottom, to: .bottom, of: profilePictureViewContainer)
@@ -553,7 +570,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
             case .threads:
                 let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
                 let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
-                cell.update(with: threadViewModel)
+                cell.update(with: threadViewModel, using: dependencies)
                 cell.accessibilityIdentifier = "Conversation list item"
                 cell.accessibilityLabel = threadViewModel.displayName
                 return cell
@@ -618,7 +635,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         switch section.model {
             case .messageRequests:
                 let viewController: SessionTableViewController = SessionTableViewController(
-                    viewModel: MessageRequestsViewModel()
+                    viewModel: MessageRequestsViewModel(using: viewModel.dependencies)
                 )
                 self.navigationController?.pushViewController(viewController, animated: true)
                 
@@ -658,7 +675,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
                 // Cannot properly sync outgoing blinded message requests so don't provide the option
                 guard
                     threadViewModel.threadVariant != .contact ||
-                    SessionId(from: section.elements[indexPath.row].threadId)?.prefix == .standard
+                    (try? SessionId(from: section.elements[indexPath.row].threadId))?.prefix == .standard
                 else { return nil }
                 
                 return UIContextualAction.configuration(
@@ -694,7 +711,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
                 )
                 
             case .threads:
-                let sessionIdPrefix: SessionId.Prefix? = SessionId(from: threadViewModel.threadId)?.prefix
+                let sessionIdPrefix: SessionId.Prefix? = try? SessionId.Prefix(from: threadViewModel.threadId)
                 
                 // Cannot properly sync outgoing blinded message requests so only provide valid options
                 let shouldHavePinAction: Bool = (
@@ -778,11 +795,14 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         
         let finalViewControllers: [UIViewController] = [
             self,
-            (isMessageRequest ? SessionTableViewController(viewModel: MessageRequestsViewModel()) : nil),
+            (!isMessageRequest ? nil :
+                SessionTableViewController(viewModel: MessageRequestsViewModel(using: viewModel.dependencies))
+            ),
             ConversationVC(
                 threadId: threadId,
                 threadVariant: variant,
-                focusedInteractionInfo: focusedInteractionInfo
+                focusedInteractionInfo: focusedInteractionInfo,
+                using: viewModel.dependencies
             )
         ].compactMap { $0 }
         
@@ -791,7 +811,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
     
     @objc private func openSettings() {
         let settingsViewController: SessionTableViewController = SessionTableViewController(
-            viewModel: SettingsViewModel()
+            viewModel: SettingsViewModel(using: viewModel.dependencies)
         )
         let navigationController = StyledNavigationController(rootViewController: settingsViewController)
         navigationController.modalPresentationStyle = .fullScreen
@@ -802,12 +822,12 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         if let presentedVC = self.presentedViewController {
             presentedVC.dismiss(animated: false, completion: nil)
         }
-        let searchController = GlobalSearchViewController()
+        let searchController = GlobalSearchViewController(using: dependencies)
         self.navigationController?.setViewControllers([ self, searchController ], animated: true)
     }
     
     @objc func createNewConversation() {
-        let newConversationVC = NewConversationVC()
+        let newConversationVC = NewConversationVC(using: viewModel.dependencies)
         let navigationController = StyledNavigationController(rootViewController: newConversationVC)
         if UIDevice.current.isIPad {
             navigationController.modalPresentationStyle = .fullScreen
@@ -817,7 +837,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
     }
     
     func createNewDMFromDeepLink(sessionId: String) {
-        let newDMVC = NewDMVC(sessionId: sessionId, shouldShowBackButton: false)
+        let newDMVC = NewDMVC(sessionId: sessionId, shouldShowBackButton: false, using: dependencies)
         let navigationController = StyledNavigationController(rootViewController: newDMVC)
         if UIDevice.current.isIPad {
             navigationController.modalPresentationStyle = .fullScreen

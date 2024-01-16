@@ -13,7 +13,7 @@ enum _001_InitialSetupMigration: Migration {
         Identity.self, Job.self, JobDependencies.self, Setting.self
     ]
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: Identity.self) { t in
             t.column(.variant, .text)
                 .notNull()
@@ -72,6 +72,6 @@ enum _001_InitialSetupMigration: Migration {
             t.column(.value, .blob).notNull()
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

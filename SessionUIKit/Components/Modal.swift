@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import SessionUtilitiesKit
 
 open class Modal: UIViewController, UIGestureRecognizerDelegate {
     private static let cornerRadius: CGFloat = 11

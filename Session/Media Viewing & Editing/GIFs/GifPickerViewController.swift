@@ -7,6 +7,7 @@ import SignalUtilitiesKit
 import SessionUIKit
 import SignalCoreKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollectionViewDataSource, UICollectionViewDelegate, GifPickerLayoutDelegate {
 
@@ -26,6 +27,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     var lastQuery: String = ""
 
+    private let dependencies: Dependencies
     public weak var delegate: GifPickerViewControllerDelegate?
 
     let searchBar: SearchBar
@@ -50,7 +52,8 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         notImplemented()
     }
 
-    required init() {
+    required init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.searchBar = SearchBar()
         self.layout = GifPickerLayout()
         self.collectionView = UICollectionView(frame: CGRect.zero, collectionViewLayout: self.layout)
@@ -123,7 +126,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(didBecomeActive),
-            name: .OWSApplicationDidBecomeActive,
+            name: .sessionDidBecomeActive,
             object: nil
         )
         
@@ -152,8 +155,8 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         searchBar.delegate = self
 
         self.view.addSubview(searchBar)
-        searchBar.autoPinWidthToSuperview()
-        searchBar.autoPinEdge(.top, to: .top, of: view)
+        searchBar.set(.width, to: .width, of: view)
+        searchBar.pin(.top, to: .top, of: view)
 
         self.collectionView.delegate = self
         self.collectionView.dataSource = self
@@ -162,9 +165,9 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         // Inserted below searchbar because we later occlude the collectionview
         // by inserting a masking layer between the search bar and collectionview
         self.view.insertSubview(self.collectionView, belowSubview: searchBar)
-        self.collectionView.autoPinEdge(toSuperviewSafeArea: .leading)
-        self.collectionView.autoPinEdge(toSuperviewSafeArea: .trailing)
-        self.collectionView.autoPinEdge(.top, to: .bottom, of: searchBar)
+        self.collectionView.pin(.top, to: .bottom, of: searchBar)
+        self.collectionView.pin(.leading, to: .leading, of: view.safeAreaLayoutGuide)
+        self.collectionView.pin(.trailing, to: .trailing, of: view.safeAreaLayoutGuide)
         
         // Block UIKit from adjust insets of collection view which screws up
         // min/max scroll positions
@@ -174,35 +177,35 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         let bottomBannerContainer = UIView()
         bottomBannerContainer.themeBackgroundColor = .backgroundPrimary
         self.view.addSubview(bottomBannerContainer)
-        bottomBannerContainer.autoPinWidthToSuperview()
-        bottomBannerContainer.autoPinEdge(.top, to: .bottom, of: self.collectionView)
-        bottomBannerContainer.autoPinEdge(toSuperviewEdge: .bottom)
+        bottomBannerContainer.set(.width, to: .width, of: self.collectionView)
+        bottomBannerContainer.pin(.top, to: .bottom, of: self.collectionView)
+        bottomBannerContainer.pin(.bottom, to: .bottom, of: view)
 
         let bottomBanner = UIView()
         bottomBannerContainer.addSubview(bottomBanner)
 
-        bottomBanner.autoPinEdge(toSuperviewEdge: .top)
-        bottomBanner.autoPinWidthToSuperview()
-        self.autoPinView(toBottomOfViewControllerOrKeyboard: bottomBanner, avoidNotch: true)
+        bottomBanner.set(.width, to: .width, of: bottomBannerContainer)
+        bottomBanner.pin(.top, to: .top, of: bottomBannerContainer)
+        self.pinViewToBottomOfViewControllerOrKeyboard(bottomBanner, avoidNotch: true)
 
         // The Giphy API requires us to "show their trademark prominently" in our GIF experience.
         let logoImage = UIImage(named: "giphy_logo")
         let logoImageView = UIImageView(image: logoImage)
         bottomBanner.addSubview(logoImageView)
-        logoImageView.autoPinHeightToSuperview(withMargin: 3)
-        logoImageView.autoHCenterInSuperview()
+        logoImageView.set(.height, to: .height, of: bottomBanner, withOffset: -3)
+        logoImageView.center(.horizontal, in: bottomBanner)
 
         let noResultsView = createErrorLabel(text: "GIF_VIEW_SEARCH_NO_RESULTS".localized())
         self.noResultsView = noResultsView
         self.view.addSubview(noResultsView)
-        noResultsView.autoPinWidthToSuperview(withMargin: 20)
-        noResultsView.autoAlignAxis(.horizontal, toSameAxisOf: self.collectionView)
+        noResultsView.set(.width, to: .width, of: self.view, withOffset: -20)
+        noResultsView.center(.horizontal, in: self.collectionView)
 
         let searchErrorView = createErrorLabel(text: "GIF_VIEW_SEARCH_ERROR".localized())
         self.searchErrorView = searchErrorView
         self.view.addSubview(searchErrorView)
-        searchErrorView.autoPinWidthToSuperview(withMargin: 20)
-        searchErrorView.autoAlignAxis(.horizontal, toSameAxisOf: self.collectionView)
+        searchErrorView.set(.width, to: .width, of: self.view, withOffset: -20)
+        searchErrorView.center(.horizontal, in: self.collectionView)
 
         searchErrorView.isUserInteractionEnabled = true
         searchErrorView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(retryTapped)))
@@ -210,8 +213,8 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         let activityIndicator = UIActivityIndicatorView(style: .large)
         self.activityIndicator = activityIndicator
         self.view.addSubview(activityIndicator)
-        activityIndicator.autoHCenterInSuperview()
-        activityIndicator.autoAlignAxis(.horizontal, toSameAxisOf: self.collectionView)
+        activityIndicator.center(.horizontal, in: self.view)
+        activityIndicator.center(.vertical, in: self.collectionView)
         
         self.updateContents()
     }
@@ -308,6 +311,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
             owsFailDebug("Unexpected cell type.")
             return cell
         }
+        gifCell.dependencies = dependencies
         gifCell.imageInfo = imageInfo
         return cell
     }
@@ -333,13 +337,13 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         self.hasSelectedCell = true
 
         // Fade out all cells except the selected one.
-        let maskingView = OWSBezierPathView()
+        let maskingView = BezierPathView()
 
         // Selecting cell behind searchbar masks part of search bar.
         // So we insert mask *behind* the searchbar.
         self.view.insertSubview(maskingView, belowSubview: searchBar)
         let cellRect = self.collectionView.convert(cell.frame, to: self.view)
-        maskingView.configureShapeLayerBlock = { layer, bounds in
+        maskingView.configureShapeLayer = { layer, bounds in
             let path = UIBezierPath(rect: bounds)
             path.append(UIBezierPath(rect: cellRect))
 
@@ -348,7 +352,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
             layer.themeFillColor = .black
             layer.opacity = 0.7
         }
-        maskingView.autoPinEdgesToSuperviewEdges()
+        maskingView.pin(to: self.view)
 
         cell.isCellSelected = true
         self.collectionView.isUserInteractionEnabled = false
@@ -357,7 +361,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     }
 
     public func getFileForCell(_ cell: GifPickerCell) {
-        GiphyDownloader.giphyDownloader.cancelAllRequests()
+        dependencies[singleton: .giphyDownloader].cancelAllRequests()
         
         cell
             .requestRenditionForSending()
@@ -391,11 +395,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
                     }
 
                     let filePath = asset.filePath
-                    guard let dataSource = DataSourcePath.dataSource(withFilePath: filePath,
-                        shouldDeleteOnDeallocation: false) else {
-                        owsFailDebug("couldn't load asset.")
-                        return
-                    }
+                    let dataSource = DataSourcePath(filePath: asset.filePath, shouldDeleteOnDeinit: false)
                     let attachment = SignalAttachment.attachment(dataSource: dataSource, dataUTI: rendition.utiType, imageQuality: .medium)
 
                     self?.dismiss(animated: true) {
@@ -442,7 +442,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         progressiveSearchTimer?.invalidate()
         progressiveSearchTimer = nil
         let kProgressiveSearchDelaySeconds = 1.0
-        progressiveSearchTimer = WeakTimer.scheduledTimer(timeInterval: kProgressiveSearchDelaySeconds, target: self, userInfo: nil, repeats: true) { [weak self] _ in
+        progressiveSearchTimer = Timer.scheduledTimerOnMainThread(withTimeInterval: kProgressiveSearchDelaySeconds, repeats: true) { [weak self] _ in
             self?.tryToSearch()
         }
     }

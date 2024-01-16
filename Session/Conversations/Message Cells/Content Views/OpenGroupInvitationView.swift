@@ -68,7 +68,7 @@ final class OpenGroupInvitationView: UIView {
         let iconImageViewSize = OpenGroupInvitationView.iconImageViewSize
         let iconImageView = UIImageView(
             image: UIImage(named: iconName)?
-                .resizedImage(to: CGSize(width: iconSize, height: iconSize))?
+                .resized(to: CGSize(width: iconSize, height: iconSize))?
                 .withRenderingMode(.alwaysTemplate)
         )
         iconImageView.themeTintColor = (isOutgoing ? .messageBubble_outgoingText : .textPrimary)

@@ -10,16 +10,16 @@ public class GetMessagesResponse: SnodeResponse {
     
     public class RawMessage: Codable {
         private enum CodingKeys: String, CodingKey {
-            case data
+            case base64EncodedDataString = "data"
             case expiration
             case hash
-            case timestamp
+            case timestampMs = "timestamp"
         }
         
-        public let data: String
+        public let base64EncodedDataString: String
         public let expiration: Int64?
         public let hash: String
-        public let timestamp: Int64
+        public let timestampMs: Int64
     }
     
     public let messages: [RawMessage]

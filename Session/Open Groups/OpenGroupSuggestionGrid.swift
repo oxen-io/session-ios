@@ -1,15 +1,29 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import GRDB
 import Combine
 import NVActivityIndicatorView
 import SessionMessagingKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 final class OpenGroupSuggestionGrid: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     private let itemsPerSection: Int = (UIDevice.current.isIPad ? 4 : 2)
     private var maxWidth: CGFloat
-    private var data: [OpenGroupManager.DefaultRoomInfo] = [] { didSet { update() } }
+    private var data: [OpenGroupManager.DefaultRoomInfo] = [] {
+        didSet {
+            // Start an observer for changes
+            let updatedIds: Set<String> = data.map { $0.openGroup.id }.asSet()
+            
+            if oldValue.map({ $0.openGroup.id }).asSet() != updatedIds {
+                startObservingRoomChanges(for: updatedIds)
+            }
+        }
+    }
+    private var dataChangeObservable: DatabaseCancellable? {
+        didSet { oldValue?.cancel() }   // Cancel the old observable if there was one
+    }
     private var heightConstraint: NSLayoutConstraint!
     
     var delegate: OpenGroupSuggestionGridDelegate?
@@ -158,6 +172,36 @@ final class OpenGroupSuggestionGrid: UIView, UICollectionViewDataSource, UIColle
     
     // MARK: - Updating
     
+    private func startObservingRoomChanges(
+        for openGroupIds: Set<String>,
+        using dependenices: Dependencies = Dependencies()
+    ) {
+        // We don't actually care about the updated data as the 'update' function has the logic
+        // to fetch any newly downloaded images
+        dataChangeObservable = dependenices[singleton: .storage].start(
+            ValueObservation
+                .tracking(
+                    regions: [
+                        OpenGroup.select(.name).filter(ids: openGroupIds),
+                        OpenGroup.select(.roomDescription).filter(ids: openGroupIds),
+                        OpenGroup.select(.displayPictureFilename).filter(ids: openGroupIds)
+                    ],
+                    fetch: { db in try OpenGroup.filter(ids: openGroupIds).fetchAll(db) }
+                )
+                .removeDuplicates(),
+            onError: { _ in },
+            onChange: { [weak self] result in
+                guard let strongSelf = self else { return }
+                
+                let updatedGroupsByToken: [String: OpenGroup] = result
+                    .reduce(into: [:]) { result, next in result[next.roomToken] = next }
+                strongSelf.data = strongSelf.data
+                    .map { room, oldGroup in (room, (updatedGroupsByToken[room.token] ?? oldGroup)) }
+                strongSelf.update()
+            }
+        )
+    }
+    
     private func update() {
         spinner.stopAnimating()
         spinner.isHidden = true
@@ -202,7 +246,7 @@ final class OpenGroupSuggestionGrid: UIView, UICollectionViewDataSource, UIColle
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell: Cell = collectionView.dequeue(type: Cell.self, for: indexPath)
-        cell.update(with: data[indexPath.item].room, existingImageData: data[indexPath.item].existingImageData)
+        cell.update(with: data[indexPath.item].room, openGroup: data[indexPath.item].openGroup)
         
         return cell
     }
@@ -310,53 +354,12 @@ extension OpenGroupSuggestionGrid {
             snContentView.pin(to: self)
         }
         
-        fileprivate func update(with room: OpenGroupAPI.Room, existingImageData: Data?) {
+        fileprivate func update(with room: OpenGroupAPI.Room, openGroup: OpenGroup) {
             label.text = room.name
-            
-            // Only continue if we have a room image
-            guard let imageId: String = room.imageId else {
-                imageView.isHidden = true
-                return
-            }
-            
-            imageView.image = nil
-            
-            Publishers
-                .MergeMany(
-                    OpenGroupManager
-                        .roomImage(
-                            fileId: imageId,
-                            for: room.token,
-                            on: OpenGroupAPI.defaultServer,
-                            existingData: existingImageData
-                        )
-                        .map { ($0, true) }
-                        .eraseToAnyPublisher(),
-                    // If we have already received the room image then the above will emit first and
-                    // we can ignore this 'Just' call which is used to hide the image while loading
-                    Just((Data(), false))
-                        .setFailureType(to: Error.self)
-                        .delay(for: .milliseconds(10), scheduler: DispatchQueue.main)
-                        .eraseToAnyPublisher()
-                )
-                .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                .receive(on: DispatchQueue.main)
-                .sinkUntilComplete(
-                    receiveValue: { [weak self] imageData, hasData in
-                        guard hasData else {
-                            // This will emit twice (once with the data and once without it), if we
-                            // have actually received the images then we don't want the second emission
-                            // to hide the imageView anymore
-                            if self?.imageView.image == nil {
-                                self?.imageView.isHidden = true
-                            }
-                            return
-                        }
-                        
-                        self?.imageView.image = UIImage(data: imageData)
-                        self?.imageView.isHidden = (self?.imageView.image == nil)
-                    }
-                )
+            imageView.image = DisplayPictureManager
+                .displayPicture(owner: .community(openGroup))
+                .map { UIImage(data: $0) }
+            imageView.isHidden = (imageView.image == nil)
         }
     }
 }

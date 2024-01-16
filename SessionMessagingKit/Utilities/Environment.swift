@@ -13,16 +13,6 @@ public class Environment {
     public let windowManager: OWSWindowManager
     public var isRequestingPermission: Bool
     
-    // Note: This property is configured after Environment is created.
-    public let callManager: Atomic<CallManagerProtocol?> = Atomic(nil)
-    
-    // Note: This property is configured after Environment is created.
-    public let notificationsManager: Atomic<NotificationsProtocol?> = Atomic(nil)
-    
-    public var isComplete: Bool {
-        (notificationsManager.wrappedValue != nil)
-    }
-    
     // MARK: - Initialization
     
     public init(
@@ -57,6 +47,4 @@ public class SMKEnvironment: NSObject {
     
     @objc public var audioSession: OWSAudioSession? { Environment.shared?.audioSession }
     @objc public var windowManager: OWSWindowManager? { Environment.shared?.windowManager }
-    
-    @objc public var isRequestingPermission: Bool { (Environment.shared?.isRequestingPermission == true) }
 }

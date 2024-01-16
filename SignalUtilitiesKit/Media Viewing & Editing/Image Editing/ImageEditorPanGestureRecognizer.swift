@@ -55,9 +55,9 @@ public class ImageEditorPanGestureRecognizer: UIPanGestureRecognizer {
         // Find the centroid.
         var location = CGPoint.zero
         for touch in touches {
-            location = location.plus(touch.location(in: referenceView))
+            location = location.adding(touch.location(in: referenceView))
         }
-        location = location.times(CGFloat(1) / CGFloat(touches.count))
+        location = location.multiplying(by: CGFloat(1) / CGFloat(touches.count))
         locationHistory.append(location)
     }
 

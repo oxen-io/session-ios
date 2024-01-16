@@ -1,6 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
 import AVFoundation
 import SessionUtilitiesKit
 
@@ -93,7 +93,7 @@ public class ThumbnailService {
 
         let thumbnailDirPath = (thumbnailPath as NSString).deletingLastPathComponent
         
-        guard OWSFileSystem.ensureDirectoryExists(thumbnailDirPath) else {
+        guard case .success = Result(try FileSystem.ensureDirectoryExists(at: thumbnailDirPath)) else {
             throw ThumbnailError.failure(description: "Could not create attachment's thumbnail directory.")
         }
         guard let originalFilePath = attachment.originalFilePath else {
@@ -104,10 +104,10 @@ public class ThumbnailService {
         let thumbnailImage: UIImage
         
         if attachment.isImage || attachment.isAnimated {
-            thumbnailImage = try OWSMediaUtils.thumbnail(forImageAtPath: originalFilePath, maxDimension: maxDimension)
+            thumbnailImage = try MediaUtils.thumbnail(forImageAtPath: originalFilePath, maxDimension: maxDimension)
         }
         else if attachment.isVideo {
-            thumbnailImage = try OWSMediaUtils.thumbnail(forVideoAtPath: originalFilePath, maxDimension: maxDimension)
+            thumbnailImage = try MediaUtils.thumbnail(forVideoAtPath: originalFilePath, maxDimension: maxDimension)
         }
         else {
             throw ThumbnailError.assertionFailure(description: "Invalid attachment type.")
@@ -124,7 +124,7 @@ public class ThumbnailService {
             throw ThumbnailError.externalError(description: "File write failed: \(thumbnailPath), \(error)", underlyingError: error)
         }
         
-        OWSFileSystem.protectFileOrFolder(atPath: thumbnailPath)
+        try? FileSystem.protectFileOrFolder(at: thumbnailPath)
         
         return LoadedThumbnail(image: thumbnailImage, data: thumbnailData)
     }

@@ -7,19 +7,21 @@ import SessionMessagingKit
 import SignalCoreKit
 
 /// This is _NOT_ a singleton and will be instantiated each time that the SAE is used.
-final class ShareAppExtensionContext: NSObject, AppContext {
+final class ShareAppExtensionContext: AppContext {
+    var _temporaryDirectory: String?
     var rootViewController: UIViewController
     var reportedApplicationState: UIApplication.State
     
-    let appLaunchTime = Date()
-    let isMainApp = false
-    let isMainAppAndActive = false
-    var isShareExtension: Bool = true
+    let appLaunchTime: Date = Date()
+    let isShareExtension: Bool = true
     
     var mainWindow: UIWindow?
     var wasWokenUpByPushNotification: Bool = false
     
-    private static var _isRTL: Bool = {
+    var statusBarHeight: CGFloat { return 20 }
+    var openSystemSettingsAction: UIAlertAction?
+    
+    static func determineDeviceRTL() -> Bool {
         // Borrowed from PureLayout's AppExtension compatible RTL support.
         // App Extensions may not access -[UIApplication sharedApplication]; fall back
         // to checking the bundle's preferred localization character direction
@@ -28,20 +30,14 @@ final class ShareAppExtensionContext: NSObject, AppContext {
                 forLanguage: (Bundle.main.preferredLocalizations.first ?? "")
             ) == Locale.LanguageDirection.rightToLeft
         )
-    }()
-
-    var isRTL: Bool { return ShareAppExtensionContext._isRTL }
-    
-    var statusBarHeight: CGFloat { return 20 }
-    var openSystemSettingsAction: UIAlertAction?
+    }
     
     // MARK: - Initialization
 
     init(rootViewController: UIViewController) {
         self.rootViewController = rootViewController
         self.reportedApplicationState = .active
-        
-        super.init()
+        self.createTemporaryDirectory()
         
         NotificationCenter.default.addObserver(
             self,
@@ -82,7 +78,7 @@ final class ShareAppExtensionContext: NSObject, AppContext {
         self.reportedApplicationState = .active
         
         NotificationCenter.default.post(
-            name: .OWSApplicationDidBecomeActive,
+            name: .sessionDidBecomeActive,
             object: nil
         )
     }
@@ -96,7 +92,7 @@ final class ShareAppExtensionContext: NSObject, AppContext {
         DDLog.flushLog()
 
         NotificationCenter.default.post(
-            name: .OWSApplicationWillResignActive,
+            name: .sessionWillResignActive,
             object: nil
         )
     }
@@ -110,7 +106,7 @@ final class ShareAppExtensionContext: NSObject, AppContext {
         self.reportedApplicationState = .background
 
         NotificationCenter.default.post(
-            name: .OWSApplicationDidEnterBackground,
+            name: .sessionDidEnterBackground,
             object: nil
         )
     }
@@ -123,74 +119,22 @@ final class ShareAppExtensionContext: NSObject, AppContext {
         self.reportedApplicationState = .inactive
 
         NotificationCenter.default.post(
-            name: .OWSApplicationWillEnterForeground,
+            name: .sessionWillEnterForeground,
             object: nil
         )
     }
     
     // MARK: - AppContext Functions
     
-    func isAppForegroundAndActive() -> Bool {
-        return (reportedApplicationState == .active)
-    }
-    
-    func isInBackground() -> Bool {
-        return (reportedApplicationState == .background)
-    }
-    
     func frontmostViewController() -> UIViewController? {
         return rootViewController.findFrontmostViewController(ignoringAlerts: true)
-    }
-    
-    func appDocumentDirectoryPath() -> String {
-        let targetPath: String? = FileManager.default
-            .urls(
-                for: .documentDirectory,
-                in: .userDomainMask
-            )
-            .last?
-            .path
-        owsAssertDebug(targetPath != nil)
-        
-        return (targetPath ?? "")
-    }
-    
-    func appSharedDataDirectoryPath() -> String {
-        let targetPath: String? = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: UserDefaults.applicationGroup)?
-            .path
-        owsAssertDebug(targetPath != nil)
-        
-        return (targetPath ?? "")
-    }
-    
-    func appUserDefaults() -> UserDefaults {
-        owsAssertDebug(UserDefaults.sharedLokiProject != nil)
-        
-        return (UserDefaults.sharedLokiProject ?? UserDefaults.standard)
     }
     
     func setStatusBarHidden(_ isHidden: Bool, animated isAnimated: Bool) {
         OWSLogger.info("Ignoring request to show/hide status bar since we're in an app extension")
     }
     
-    func beginBackgroundTask(expirationHandler: @escaping BackgroundTaskExpirationHandler) -> UIBackgroundTaskIdentifier {
-        return .invalid
-    }
-    
-    func endBackgroundTask(_ backgroundTaskIdentifier: UIBackgroundTaskIdentifier) {
-        owsAssertDebug(backgroundTaskIdentifier == .invalid)
-    }
-    
-    func ensureSleepBlocking(_ shouldBeBlocking: Bool, blockingObjects: [Any]) {
-        OWSLogger.debug("Ignoring request to block sleep.")
-    }
-    
     func setNetworkActivityIndicatorVisible(_ value: Bool) {
         owsFailDebug("")
-    }
-    
-    func runNowOr(whenMainAppIsActive block: @escaping AppActiveBlock) {
-        owsFailDebug("cannot run main app active blocks in share extension.")
     }
 }

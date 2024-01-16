@@ -29,7 +29,7 @@ extension MessageReceiver {
                 interactionTimestampMs: timestampMs,
                 readTimestampMs: readTimestampMs,
                 serverExpirationTimestamp: (serverExpirationTimestamp ?? 0)
-            ).save(db)
+            ).upsert(db)
         }
     }
 }

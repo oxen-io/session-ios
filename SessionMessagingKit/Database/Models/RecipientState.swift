@@ -71,7 +71,7 @@ public struct RecipientState: Codable, Equatable, FetchableRecord, PersistableRe
         }
         
         public func statusIconInfo(variant: Interaction.Variant, hasAtLeastOneReadReceipt: Bool) -> (image: UIImage?, text: String?, themeTintColor: ThemeValue) {
-            guard variant == .standardOutgoing else { return (nil, nil, .textPrimary) }
+            guard variant == .standardOutgoing else { return (nil, "MESSAGE_DELIVERY_STATUS_READ".localized(), .messageBubble_deliveryStatus) }
 
             switch (self, hasAtLeastOneReadReceipt) {
                 case (.sending, _):

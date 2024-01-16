@@ -4,12 +4,11 @@
 
 import UIKit
 
-@objc public enum ImageEditorError: Int, Error {
+public enum ImageEditorError: Int, Error {
     case assertionError
     case invalidInput
 }
 
-@objc
 public enum ImageEditorItemType: Int {
     case test
     case stroke
@@ -37,29 +36,19 @@ public typealias ImageEditorSample = CGPoint
 
 // Instances of ImageEditorItem should be treated
 // as immutable, once configured.
-@objc
-public class ImageEditorItem: NSObject {
-    @objc
+
+public class ImageEditorItem {
     public let itemId: String
-
-    @objc
     public let itemType: ImageEditorItemType
-
-    @objc
+    
     public init(itemType: ImageEditorItemType) {
         self.itemId = UUID().uuidString
         self.itemType = itemType
-
-        super.init()
     }
 
-    @objc
-    public init(itemId: String,
-                itemType: ImageEditorItemType) {
+    public init(itemId: String, itemType: ImageEditorItemType) {
         self.itemId = itemId
         self.itemType = itemType
-
-        super.init()
     }
 
     // The scale with which to render this item's content

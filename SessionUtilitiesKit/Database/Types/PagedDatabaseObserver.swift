@@ -41,6 +41,8 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
     private let changesInCommit: Atomic<Set<PagedData.TrackedChange>> = Atomic([])
     private let onChangeUnsorted: (([T], PagedData.PageInfo) -> ())
     
+    private let dependencies: Dependencies
+    
     // MARK: - Initialization
     
     public init(
@@ -54,7 +56,8 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         orderSQL: SQL,
         dataQuery: @escaping ([Int64]) -> any FetchRequest<T>,
         associatedRecords: [ErasedAssociatedRecord] = [],
-        onChangeUnsorted: @escaping ([T], PagedData.PageInfo) -> ()
+        onChangeUnsorted: @escaping ([T], PagedData.PageInfo) -> (),
+        using dependencies: Dependencies = Dependencies()
     ) {
         let associatedTables: Set<String> = associatedRecords.map { $0.databaseTableName }.asSet()
         assert(!associatedTables.contains(pagedTable.databaseTableName), "The paged table cannot also exist as an associatedRecord")
@@ -94,6 +97,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             .filter { $0.events.contains(.delete) }
             .map { $0.databaseTableName }
             .asSet()
+        self.dependencies = dependencies
     }
     
     // MARK: - TransactionObserver
@@ -133,7 +137,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             // Retrieve the pagedRowId for the related value that is
             // getting deleted
             let pagedTableName: String = self.pagedTableName
-            let pagedRowIds: [Int64] = Storage.shared
+            let pagedRowIds: [Int64] = dependencies[singleton: .storage]
                 .read { db in
                     PagedData.pagedRowIdsForRelatedRowIds(
                         db,
@@ -223,7 +227,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             .filter { $0.kind == .delete }
         
         // Process and retrieve the updated data
-        let updatedData: UpdatedData = Storage.shared
+        let updatedData: UpdatedData = dependencies[singleton: .storage]
             .read { db -> UpdatedData in
                 // If there aren't any direct or related changes then early-out
                 guard !directChanges.isEmpty || !relatedChanges.isEmpty || !relatedDeletions.isEmpty else {
@@ -493,7 +497,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         let orderSQL: SQL = self.orderSQL
         let dataQuery: ([Int64]) -> any FetchRequest<T> = self.dataQuery
         
-        let loadedPage: (data: [T]?, pageInfo: PagedData.PageInfo, failureCallback: (() -> ())?)? = Storage.shared.read { [weak self] db in
+        let loadedPage: (data: [T]?, pageInfo: PagedData.PageInfo, failureCallback: (() -> ())?)? = dependencies[singleton: .storage].read { [weak self] db in
             typealias QueryInfo = (limit: Int, offset: Int, updatedCacheOffset: Int)
             let totalCount: Int = PagedData.totalCount(
                 db,
@@ -633,11 +637,13 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                             )
                         else { return (nil, nil) }
                         
-                        // If the target id is within a single page of the current cached data
-                        // then trigger the `untilInclusive` behaviour instead
+                        // If the targetIndex is over a page before the current content or more than a page
+                        // after the current content then we want to reload the entire content (to avoid
+                        // loading an excessive amount of data), otherwise we should load all messages between
+                        // the current content and the targetIndex (plus padding)
                         guard
-                            abs(targetIndex - cacheCurrentEndIndex) > currentPageInfo.pageSize ||
-                            abs(targetIndex - currentPageInfo.pageOffset) > currentPageInfo.pageSize
+                            (targetIndex < (currentPageInfo.pageOffset - currentPageInfo.pageSize)) ||
+                            (targetIndex > (cacheCurrentEndIndex + currentPageInfo.pageSize))
                         else {
                             let callback: () -> () = {
                                 self?.load(.untilInclusive(id: targetId, padding: paddingForInclusive))
@@ -650,14 +656,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                         let callback: () -> () = {
                             self?.dataCache.mutate { $0 = DataCache() }
                             self?.associatedRecords.forEach { $0.clearCache(db) }
-                            self?.pageInfo.mutate {
-                                $0 = PagedData.PageInfo(
-                                    pageSize: currentPageInfo.pageSize,
-                                    pageOffset: 0,
-                                    currentCount: 0,
-                                    totalCount: 0
-                                )
-                            }
+                            self?.pageInfo.mutate { $0 = PagedData.PageInfo(pageSize: currentPageInfo.pageSize) }
                             self?.load(.initialPageAround(id: targetId))
                         }
                         
@@ -908,9 +907,15 @@ public enum PagedData {
             case initialPageAround(id: SQLExpression)
             case pageBefore
             case pageAfter
-            case untilInclusive(id: SQLExpression, padding: Int)
             case jumpTo(id: SQLExpression, paddingForInclusive: Int)
             case reloadCurrent
+            
+            /// This will be used when `jumpTo`  is called and the `id` is within a single `pageSize` of the currently
+            /// cached data (plus the padding amount)
+            ///
+            /// **Note:** If the id is already within the cache then this will do nothing (even if
+            /// the padding would mean more data should be loaded)
+            case untilInclusive(id: SQLExpression, padding: Int)
         }
         
         public enum Target<ID: SQLExpressible> {
@@ -925,13 +930,6 @@ public enum PagedData {
             /// This will attempt to load a page of data after the last item in the cache
             case pageAfter
             
-            /// This will attempt to load all data between what is currently in the cache until the
-            /// specified id (plus the padding amount)
-            ///
-            /// **Note:** If the id is already within the cache then this will do nothing (even if
-            /// the padding would mean more data should be loaded)
-            case untilInclusive(id: ID, padding: Int)
-            
             /// This will jump to the specified id, loading a page around it and clearing out any
             /// data that was previously cached
             ///
@@ -944,8 +942,6 @@ public enum PagedData {
                     case .initialPageAround(let id): return .initialPageAround(id: id.sqlExpression)
                     case .pageBefore: return .pageBefore
                     case .pageAfter: return .pageAfter
-                    case .untilInclusive(let id, let padding):
-                        return .untilInclusive(id: id.sqlExpression, padding: padding)
                     
                     case .jumpTo(let id, let paddingForInclusive):
                         return .jumpTo(id: id.sqlExpression, paddingForInclusive: paddingForInclusive)

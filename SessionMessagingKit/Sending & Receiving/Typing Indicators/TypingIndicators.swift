@@ -28,7 +28,8 @@ public class TypingIndicators {
             threadIsBlocked: Bool,
             threadIsMessageRequest: Bool,
             direction: Direction,
-            timestampMs: Int64?
+            timestampMs: Int64?,
+            using dependencies: Dependencies = Dependencies()
         ) {
             // The `typingIndicatorsEnabled` flag reflects the user-facing setting in the app
             // preferences, if it's disabled we don't want to emit "typing indicator" messages
@@ -36,7 +37,7 @@ public class TypingIndicators {
             //
             // We also don't want to show/send typing indicators for message requests
             guard
-                Storage.shared[.typingIndicatorsEnabled] &&
+                dependencies[singleton: .storage, key: .typingIndicatorsEnabled] &&
                 !threadIsBlocked &&
                 !threadIsMessageRequest
             else { return nil }
@@ -65,11 +66,11 @@ public class TypingIndicators {
                         threadId: threadId,
                         timestampMs: timestampMs
                     )
-                    .save(db)
+                    .upsert(db)
             }
             
             // Refresh the timeout since we just started
-            refreshTimeout()
+            refreshTimeout(using: dependencies)
         }
         
         fileprivate func stop(_ db: Database, using dependencies: Dependencies = Dependencies()) {
@@ -96,7 +97,7 @@ public class TypingIndicators {
             }
         }
         
-        fileprivate func refreshTimeout() {
+        fileprivate func refreshTimeout(using dependencies: Dependencies) {
             let threadId: String = self.threadId
             let direction: Direction = self.direction
             
@@ -104,9 +105,10 @@ public class TypingIndicators {
             stopTimer?.invalidate()
             stopTimer = Timer.scheduledTimerOnMainThread(
                 withTimeInterval: (direction == .outgoing ? 3 : 5),
-                repeats: false
+                repeats: false,
+                using: dependencies
             ) { _ in
-                Storage.shared.writeAsync { db in
+                dependencies[singleton: .storage].writeAsync { db in
                     TypingIndicators.didStopTyping(db, threadId: threadId, direction: direction)
                 }
             }
@@ -133,7 +135,7 @@ public class TypingIndicators {
                 withTimeInterval: 10,
                 repeats: false
             ) { [weak self] _ in
-                dependencies.storage.writeAsync { db in
+                dependencies[singleton: .storage].writeAsync { db in
                     self?.scheduleRefreshCallback(db, using: dependencies)
                 }
             }
@@ -155,14 +157,15 @@ public class TypingIndicators {
         threadIsBlocked: Bool,
         threadIsMessageRequest: Bool,
         direction: Direction,
-        timestampMs: Int64?
+        timestampMs: Int64?,
+        using dependencies: Dependencies = Dependencies()
     ) -> Bool {
         switch direction {
             case .outgoing:
                 // If we already have an existing typing indicator for this thread then just
                 // refresh it's timeout (no need to do anything else)
                 if let existingIndicator: Indicator = outgoing.wrappedValue[threadId] {
-                    existingIndicator.refreshTimeout()
+                    existingIndicator.refreshTimeout(using: dependencies)
                     return false
                 }
                 
@@ -174,7 +177,7 @@ public class TypingIndicators {
                     direction: direction,
                     timestampMs: timestampMs
                 )
-                newIndicator?.refreshTimeout()
+                newIndicator?.refreshTimeout(using: dependencies)
                 
                 outgoing.mutate { $0[threadId] = newIndicator }
                 return true
@@ -183,7 +186,7 @@ public class TypingIndicators {
                 // If we already have an existing typing indicator for this thread then just
                 // refresh it's timeout (no need to do anything else)
                 if let existingIndicator: Indicator = incoming.wrappedValue[threadId] {
-                    existingIndicator.refreshTimeout()
+                    existingIndicator.refreshTimeout(using: dependencies)
                     return false
                 }
                 
@@ -195,7 +198,7 @@ public class TypingIndicators {
                     direction: direction,
                     timestampMs: timestampMs
                 )
-                newIndicator?.refreshTimeout()
+                newIndicator?.refreshTimeout(using: dependencies)
                 
                 incoming.mutate { $0[threadId] = newIndicator }
                 return true

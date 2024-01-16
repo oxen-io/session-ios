@@ -31,36 +31,36 @@ class EmojiSkinTonePicker: UIView {
 
         superview.addSubview(picker)
 
-        picker.referenceOverlay.autoMatch(.width, to: .width, of: referenceView)
-        picker.referenceOverlay.autoMatch(.height, to: .height, of: referenceView, withOffset: 30)
-        picker.referenceOverlay.autoPinEdge(.leading, to: .leading, of: referenceView)
+        picker.referenceOverlay.set(.width, to: .width, of: referenceView)
+        picker.referenceOverlay.set(.height, to: .height, of: referenceView, withOffset: 30)
+        picker.referenceOverlay.pin(.leading, to: .leading, of: referenceView)
 
-        let leadingConstraint = picker.autoPinEdge(toSuperviewEdge: .leading)
+        let leadingConstraint = picker.pin(.leading, to: .leading, of: superview)
 
         picker.layoutIfNeeded()
-
-        let halfWidth = picker.width() / 2
+        
+        let halfWidth = picker.bounds.width / 2
         let margin: CGFloat = 8
 
         if (halfWidth + margin) > referenceView.center.x {
             leadingConstraint.constant = margin
-        } else if (halfWidth + margin) > (superview.width() - referenceView.center.x) {
-            leadingConstraint.constant = superview.width() - picker.width() - margin
+        } else if (halfWidth + margin) > (superview.bounds.width - referenceView.center.x) {
+            leadingConstraint.constant = superview.bounds.width - picker.bounds.width - margin
         } else {
             leadingConstraint.constant = referenceView.center.x - halfWidth
         }
 
         let distanceFromTop = referenceView.frame.minY - superview.bounds.minY
-        if distanceFromTop > picker.containerView.height() {
-            picker.containerView.autoPinEdge(toSuperviewEdge: .top)
-            picker.referenceOverlay.autoPinEdge(.top, to: .bottom, of: picker.containerView, withOffset: -20)
-            picker.referenceOverlay.autoPinEdge(toSuperviewEdge: .bottom)
-            picker.autoPinEdge(.bottom, to: .bottom, of: referenceView)
+        if distanceFromTop > picker.containerView.bounds.height {
+            picker.containerView.pin(.top, to: .top, of: picker)
+            picker.referenceOverlay.pin(.top, to: .bottom, of: picker.containerView, withInset: -20)
+            picker.referenceOverlay.pin(.bottom, to: .bottom, of: picker)
+            picker.pin(.bottom, to: .bottom, of: referenceView)
         } else {
-            picker.containerView.autoPinEdge(toSuperviewEdge: .bottom)
-            picker.referenceOverlay.autoPinEdge(.bottom, to: .top, of: picker.containerView, withOffset: 20)
-            picker.referenceOverlay.autoPinEdge(toSuperviewEdge: .top)
-            picker.autoPinEdge(.top, to: .top, of: referenceView)
+            picker.containerView.pin(.bottom, to: .bottom, of: picker)
+            picker.referenceOverlay.pin(.bottom, to: .top, of: picker.containerView, withInset: 20)
+            picker.referenceOverlay.pin(.top, to: .top, of: picker)
+            picker.pin(.top, to: .top, of: referenceView)
         }
 
         picker.alpha = 0
@@ -128,8 +128,8 @@ class EmojiSkinTonePicker: UIView {
         containerView.themeBackgroundColor = .backgroundSecondary
         containerView.layer.cornerRadius = 11
         addSubview(containerView)
-        containerView.autoPinWidthToSuperview()
-        containerView.setCompressionResistanceHigh()
+        containerView.set(.width, to: .width, of: self)
+        containerView.setCompressionResistance(to: .required)
 
         if emoji.baseEmoji!.allowsMultipleSkinTones {
             prepareForMultipleSkinTones()
@@ -156,14 +156,14 @@ class EmojiSkinTonePicker: UIView {
         hStack.axis = .horizontal
         hStack.spacing = 8
         containerView.addSubview(hStack)
-        hStack.autoPinEdgesToSuperviewMargins()
+        hStack.pin(toMarginsOf: containerView)
 
         hStack.addArrangedSubview(yellowButton)
 
         hStack.addArrangedSubview(.spacer(withWidth: 2))
 
         let divider = UIView()
-        divider.autoSetDimension(.width, toSize: 1)
+        divider.set(.width, to: 1)
         divider.themeBackgroundColor = .borderSeparator
         hStack.addArrangedSubview(divider)
 
@@ -246,7 +246,7 @@ class EmojiSkinTonePicker: UIView {
         vStack.axis = .vertical
         vStack.spacing = 6
         containerView.addSubview(vStack)
-        vStack.autoPinEdgesToSuperviewMargins()
+        vStack.pin(toMarginsOf: containerView)
 
         for (idx, emoji) in skinToneComponentEmoji.enumerated() {
             let skinToneButtons = self.skinToneButtons(for: emoji) { [weak self] emojiWithSkinTone in
@@ -270,7 +270,7 @@ class EmojiSkinTonePicker: UIView {
         }
 
         let divider = UIView()
-        divider.autoSetDimension(.height, toSize: 1)
+        divider.set(.height, to: 1)
         divider.themeBackgroundColor = .borderSeparator
         vStack.addArrangedSubview(divider)
 
@@ -282,8 +282,8 @@ class EmojiSkinTonePicker: UIView {
         hStack.axis = .horizontal
         vStack.addArrangedSubview(hStack)
 
-        leftSpacer.autoMatch(.width, to: .width, of: rightSpacer)
-        middleSpacer.autoMatch(.width, to: .width, of: rightSpacer)
+        leftSpacer.set(.width, to: .width, of: rightSpacer)
+        middleSpacer.set(.width, to: .width, of: rightSpacer)
     }
 
     // MARK: - Button Helpers
@@ -304,7 +304,8 @@ class EmojiSkinTonePicker: UIView {
         button.setThemeBackgroundColor(.backgroundPrimary, for: .selected)
         button.layer.cornerRadius = 6
         button.clipsToBounds = true
-        button.autoSetDimensions(to: CGSize(width: 38, height: 38))
+        button.set(.width, to: 38)
+        button.set(.height, to: 38)
         return button
     }
 }

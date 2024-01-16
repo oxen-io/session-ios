@@ -7,6 +7,7 @@ import SignalUtilitiesKit
 import SignalCoreKit
 import SessionUIKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 class SendMediaNavigationController: UINavigationController {
     public override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -17,13 +18,15 @@ class SendMediaNavigationController: UINavigationController {
     // on iPhone5, 6, 6+, X, layouts.
     static let bottomButtonsCenterOffset: CGFloat = -50
     
+    private let dependencies: Dependencies
     private let threadId: String
     private let threadVariant: SessionThread.Variant
     private var disposables: Set<AnyCancellable> = Set()
     
     // MARK: - Initialization
     
-    init(threadId: String, threadVariant: SessionThread.Variant) {
+    init(threadId: String, threadVariant: SessionThread.Variant, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.threadId = threadId
         self.threadVariant = threadVariant
         
@@ -42,30 +45,26 @@ class SendMediaNavigationController: UINavigationController {
         self.delegate = self
 
         let bottomButtonsCenterOffset = SendMediaNavigationController.bottomButtonsCenterOffset
-
         view.addSubview(batchModeButton)
-        batchModeButton.setCompressionResistanceHigh()
+        batchModeButton.setCompressionResistance(to: .required)
         batchModeButton.centerYAnchor.constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: bottomButtonsCenterOffset).isActive = true
         batchModeButton.centerXAnchor
             .constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -20)
             .isActive = true
-
         view.addSubview(doneButton)
-        doneButton.setCompressionResistanceHigh()
+        doneButton.setCompressionResistance(to: .required)
         doneButton.centerYAnchor.constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: bottomButtonsCenterOffset).isActive = true
-        doneButton.autoPinEdge(toSuperviewMargin: .trailing)
-
+        doneButton.pin(.trailing, toMargin: .trailing, of: view)
         view.addSubview(cameraModeButton)
-        cameraModeButton.setCompressionResistanceHigh()
+        cameraModeButton.setCompressionResistance(to: .required)
         cameraModeButton.centerYAnchor
             .constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: bottomButtonsCenterOffset)
             .isActive = true
         cameraModeButton.centerXAnchor
             .constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 20)
             .isActive = true
-
         view.addSubview(mediaLibraryModeButton)
-        mediaLibraryModeButton.setCompressionResistanceHigh()
+        mediaLibraryModeButton.setCompressionResistance(to: .required)
         mediaLibraryModeButton.centerYAnchor.constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: bottomButtonsCenterOffset).isActive = true
         mediaLibraryModeButton.centerXAnchor
             .constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 20)
@@ -76,15 +75,15 @@ class SendMediaNavigationController: UINavigationController {
 
     public weak var sendMediaNavDelegate: SendMediaNavDelegate?
 
-    public class func showingCameraFirst(threadId: String, threadVariant: SessionThread.Variant) -> SendMediaNavigationController {
-        let navController = SendMediaNavigationController(threadId: threadId, threadVariant: threadVariant)
+    public class func showingCameraFirst(threadId: String, threadVariant: SessionThread.Variant, using dependencies: Dependencies) -> SendMediaNavigationController {
+        let navController = SendMediaNavigationController(threadId: threadId, threadVariant: threadVariant, using: dependencies)
         navController.viewControllers = [navController.captureViewController]
 
         return navController
     }
 
-    public class func showingMediaLibraryFirst(threadId: String, threadVariant: SessionThread.Variant) -> SendMediaNavigationController {
-        let navController = SendMediaNavigationController(threadId: threadId, threadVariant: threadVariant)
+    public class func showingMediaLibraryFirst(threadId: String, threadVariant: SessionThread.Variant, using dependencies: Dependencies) -> SendMediaNavigationController {
+        let navController = SendMediaNavigationController(threadId: threadId, threadVariant: threadVariant, using: dependencies)
         navController.viewControllers = [navController.mediaLibraryViewController]
 
         return navController
@@ -145,7 +144,7 @@ class SendMediaNavigationController: UINavigationController {
     }
 
     private func didTapCameraModeButton() {
-        Permissions.requestCameraPermissionIfNeeded { [weak self] in
+        Permissions.requestCameraPermissionIfNeeded(using: dependencies) { [weak self] in
             DispatchQueue.main.async {
                 self?.fadeTo(viewControllers: ((self?.captureViewController).map { [$0] } ?? []))
             }
@@ -153,7 +152,7 @@ class SendMediaNavigationController: UINavigationController {
     }
 
     private func didTapMediaLibraryModeButton() {
-        Permissions.requestLibraryPermissionIfNeeded { [weak self] in
+        Permissions.requestLibraryPermissionIfNeeded(using: dependencies) { [weak self] in
             DispatchQueue.main.async {
                 self?.fadeTo(viewControllers: ((self?.mediaLibraryViewController).map { [$0] } ?? []))
             }
@@ -224,22 +223,29 @@ class SendMediaNavigationController: UINavigationController {
         return vc
     }()
 
-    private func pushApprovalViewController() {
+    private func pushApprovalViewController() -> Bool {
         guard let sendMediaNavDelegate = self.sendMediaNavDelegate else {
             owsFailDebug("sendMediaNavDelegate was unexpectedly nil")
-            return
+            return false
+        }
+        
+        guard
+            let approvalViewController: AttachmentApprovalViewController = AttachmentApprovalViewController(
+                mode: .sharedNavigation,
+                threadId: self.threadId,
+                threadVariant: self.threadVariant,
+                attachments: self.attachments,
+                using: dependencies
+            )
+        else {
+            return false
         }
 
-        let approvalViewController = AttachmentApprovalViewController(
-            mode: .sharedNavigation,
-            threadId: self.threadId,
-            threadVariant: self.threadVariant,
-            attachments: self.attachments
-        )
         approvalViewController.approvalDelegate = self
         approvalViewController.messageText = sendMediaNavDelegate.sendMediaNavInitialMessageText(self)
 
         pushViewController(approvalViewController, animated: true)
+        return true
     }
 
     private func didRequestExit() {
@@ -358,7 +364,18 @@ extension SendMediaNavigationController: ImagePickerGridControllerDelegate {
                         Logger.debug("built all attachments")
                         modal.dismiss {
                             self?.attachmentDraftCollection.selectedFromPicker(attachments: attachments)
-                            self?.pushApprovalViewController()
+                            
+                            guard self?.pushApprovalViewController() == true else {
+                                let modal: ConfirmationModal = ConfirmationModal(
+                                    info: ConfirmationModal.Info(
+                                        title: "IMAGE_PICKER_FAILED_TO_PROCESS_ATTACHMENTS".localized(),
+                                        cancelTitle: "BUTTON_OK".localized(),
+                                        cancelStyle: .alert_text
+                                    )
+                                )
+                                self?.present(modal, animated: true)
+                                return
+                            }
                         }
                     }
                 )
@@ -437,16 +454,14 @@ extension SendMediaNavigationController: AttachmentApprovalViewControllerDelegat
         didApproveAttachments attachments: [SignalAttachment],
         forThreadId threadId: String,
         threadVariant: SessionThread.Variant,
-        messageText: String?,
-        using dependencies: Dependencies
+        messageText: String?
     ) {
         sendMediaNavDelegate?.sendMediaNav(
             self,
             didApproveAttachments: attachments,
             forThreadId: threadId,
             threadVariant: threadVariant,
-            messageText: messageText,
-            using: dependencies
+            messageText: messageText
         )
     }
 
@@ -637,7 +652,7 @@ private class DoneButton: UIView {
 
     private lazy var chevron: UIView = {
         let image: UIImage = {
-            guard CurrentAppContext().isRTL else { return #imageLiteral(resourceName: "small_chevron_right") }
+            guard Dependencies.isRTL else { return #imageLiteral(resourceName: "small_chevron_right") }
             
             return #imageLiteral(resourceName: "small_chevron_left")
         }()
@@ -665,10 +680,8 @@ private class DoneButton: UIView {
         badgeLabel.pin(to: badge, withInset: 4)
         
         // Constrain to be a pill that is at least a circle, and maybe wider.
-        badgeLabel.autoPin(toAspectRatio: 1.0, relation: .greaterThanOrEqual)
-        NSLayoutConstraint.autoSetPriority(.defaultLow) {
-            badgeLabel.autoPinToSquareAspectRatio()
-        }
+        badgeLabel.set(.width, greaterThanOrEqualTo: .height, of: badgeLabel, multiplier: 1)
+        badgeLabel.set(.width, to: .height, of: badgeLabel, multiplier: 1).setting(priority: .defaultLow)
 
         let stackView = UIStackView(arrangedSubviews: [badge, chevron])
         stackView.axis = .horizontal
@@ -703,7 +716,7 @@ private class DoneButton: UIView {
         themeTintColor: ThemeValue
     ) {
         UIView.animate(withDuration: 0.25) {
-            self.container.transform = CGAffineTransform.identity.scale(scale)
+            self.container.transform = CGAffineTransform.identity.scaledBy(x: scale, y: scale)
             self.badgeLabel.themeTextColor = themeTintColor
             self.badge.themeBackgroundColor = themeBadgeBackgroundColor
             self.container.themeBackgroundColor = themeBackgroundColor
@@ -780,7 +793,7 @@ private class DoneButton: UIView {
 
 protocol SendMediaNavDelegate: AnyObject {
     func sendMediaNavDidCancel(_ sendMediaNavigationController: SendMediaNavigationController?)
-    func sendMediaNav(_ sendMediaNavigationController: SendMediaNavigationController, didApproveAttachments attachments: [SignalAttachment], forThreadId threadId: String, threadVariant: SessionThread.Variant, messageText: String?, using dependencies: Dependencies)
+    func sendMediaNav(_ sendMediaNavigationController: SendMediaNavigationController, didApproveAttachments attachments: [SignalAttachment], forThreadId threadId: String, threadVariant: SessionThread.Variant, messageText: String?)
 
     func sendMediaNavInitialMessageText(_ sendMediaNavigationController: SendMediaNavigationController) -> String?
     func sendMediaNav(_ sendMediaNavigationController: SendMediaNavigationController, didChangeMessageText newMessageText: String?)

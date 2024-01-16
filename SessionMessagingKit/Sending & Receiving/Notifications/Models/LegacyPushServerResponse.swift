@@ -2,7 +2,7 @@
 
 import Foundation
 
-extension PushNotificationAPI {
+public extension PushNotificationAPI {
     struct LegacyPushServerResponse: Codable {
         let code: Int
         let message: String?

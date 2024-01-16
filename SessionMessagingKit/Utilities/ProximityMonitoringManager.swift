@@ -4,20 +4,16 @@ import Foundation
 import SignalCoreKit
 import SessionUtilitiesKit
 
-@objc
 public protocol OWSProximityMonitoringManager: AnyObject {
     func add(lifetime: AnyObject)
     func remove(lifetime: AnyObject)
 }
 
-@objc
-public class OWSProximityMonitoringManagerImpl: NSObject, OWSProximityMonitoringManager {
+public class OWSProximityMonitoringManagerImpl: OWSProximityMonitoringManager {
     var lifetimes: [Weak<AnyObject>] = []
 
-    public override init() {
-        super.init()
-
-        AppReadiness.runNowOrWhenAppWillBecomeReady {
+    public init(using dependencies: Dependencies) {
+        dependencies[singleton: .appReadiness].runNowOrWhenAppWillBecomeReady {
             self.setup()
         }
     }

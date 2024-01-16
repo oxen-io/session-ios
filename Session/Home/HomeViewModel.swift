@@ -23,34 +23,31 @@ public class HomeViewModel {
     public static let pageSize: Int = (UIDevice.current.isIPad ? 20 : 15)
     
     public struct State: Equatable {
+        let userSessionId: SessionId
         let showViewedSeedBanner: Bool
         let hasHiddenMessageRequests: Bool
         let unreadMessageRequestThreadCount: Int
         let userProfile: Profile
     }
     
+    public let dependencies: Dependencies
+    
     // MARK: - Initialization
     
-    init() {
-        typealias InitialData = (
-            showViewedSeedBanner: Bool,
-            hasHiddenMessageRequests: Bool,
-            profile: Profile
-        )
-        
-        let initialData: InitialData? = Storage.shared.read { db -> InitialData in
-            (
-                !db[.hasViewedSeed],
-                db[.hasHiddenMessageRequests],
-                Profile.fetchOrCreateCurrentUser(db)
-            )
+    init(
+        using dependencies: Dependencies = Dependencies()
+    ) {
+        let initialState: State? = dependencies[singleton: .storage].read { db -> State in
+            try HomeViewModel.retrieveState(db, excludingMessageRequestThreadCount: true, using: dependencies)
         }
         
+        self.dependencies = dependencies
         self.state = State(
-            showViewedSeedBanner: (initialData?.showViewedSeedBanner ?? true),
-            hasHiddenMessageRequests: (initialData?.hasHiddenMessageRequests ?? false),
+            userSessionId: (initialState?.userSessionId ?? getUserSessionId(using: dependencies)),
+            showViewedSeedBanner: (initialState?.showViewedSeedBanner ?? true),
+            hasHiddenMessageRequests: (initialState?.hasHiddenMessageRequests ?? false),
             unreadMessageRequestThreadCount: 0,
-            userProfile: (initialData?.profile ?? Profile.fetchOrCreateCurrentUser())
+            userProfile: (initialState?.userProfile ?? Profile.fetchOrCreateCurrentUser())
         )
         self.pagedDataObserver = nil
         
@@ -58,7 +55,7 @@ public class HomeViewModel {
         // also want to skip the initial query and trigger it async so that the push animation
         // doesn't stutter (it should load basically immediately but without this there is a
         // distinct stutter)
-        let userPublicKey: String = self.state.userProfile.id
+        let userSessionId: SessionId = self.state.userSessionId
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
         self.pagedDataObserver = PagedDatabaseObserver(
             pagedTable: SessionThread.self,
@@ -120,7 +117,7 @@ public class HomeViewModel {
                                             WHERE (
                                                 \(groupMember[.groupId]) = \(thread[.id]) AND
                                                 \(SQL("\(groupMember[.role]) = \(targetRole)")) AND
-                                                \(groupMember[.profileId]) != \(userPublicKey)
+                                                \(groupMember[.profileId]) != \(userSessionId.hexString)
                                             )
                                         ) OR
                                         profile.id = (  -- Back profile
@@ -130,10 +127,10 @@ public class HomeViewModel {
                                             WHERE (
                                                 \(groupMember[.groupId]) = \(thread[.id]) AND
                                                 \(SQL("\(groupMember[.role]) = \(targetRole)")) AND
-                                                \(groupMember[.profileId]) != \(userPublicKey)
+                                                \(groupMember[.profileId]) != \(userSessionId.hexString)
                                             )
                                         ) OR (  -- Fallback profile
-                                            profile.id = \(userPublicKey) AND
+                                            profile.id = \(userSessionId.hexString) AND
                                             (
                                                 SELECT COUNT(\(groupMember[.profileId]))
                                                 FROM \(GroupMember.self)
@@ -141,7 +138,7 @@ public class HomeViewModel {
                                                 WHERE (
                                                     \(groupMember[.groupId]) = \(thread[.id]) AND
                                                     \(SQL("\(groupMember[.role]) = \(targetRole)")) AND
-                                                    \(groupMember[.profileId]) != \(userPublicKey)
+                                                    \(groupMember[.profileId]) != \(userSessionId.hexString)
                                                 )
                                             ) = 1
                                         )
@@ -153,7 +150,7 @@ public class HomeViewModel {
                 ),
                 PagedData.ObservedChanges(
                     table: ClosedGroup.self,
-                    columns: [.name],
+                    columns: [.name, .invited, .displayPictureFilename],
                     joinToPagedType: {
                         let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
                         
@@ -162,7 +159,7 @@ public class HomeViewModel {
                 ),
                 PagedData.ObservedChanges(
                     table: OpenGroup.self,
-                    columns: [.name, .imageData],
+                    columns: [.name, .displayPictureFilename],
                     joinToPagedType: {
                         let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
                         
@@ -195,11 +192,11 @@ public class HomeViewModel {
             /// **Note:** This `optimisedJoinSQL` value includes the required minimum joins needed for the query but differs
             /// from the JOINs that are actually used for performance reasons as the basic logic can be simpler for where it's used
             joinSQL: SessionThreadViewModel.optimisedJoinSQL,
-            filterSQL: SessionThreadViewModel.homeFilterSQL(userPublicKey: userPublicKey),
+            filterSQL: SessionThreadViewModel.homeFilterSQL(userSessionId: userSessionId),
             groupSQL: SessionThreadViewModel.groupSQL,
             orderSQL: SessionThreadViewModel.homeOrderSQL,
             dataQuery: SessionThreadViewModel.baseQuery(
-                userPublicKey: userPublicKey,
+                userSessionId: userSessionId,
                 groupSQL: SessionThreadViewModel.groupSQL,
                 orderSQL: SessionThreadViewModel.homeOrderSQL
             ),
@@ -217,7 +214,8 @@ public class HomeViewModel {
                 )
                 
                 self?.hasReceivedInitialThreadData = true
-            }
+            },
+            using: dependencies
         )
         
         // Run the initial query on a background thread so we don't block the main thread
@@ -240,20 +238,30 @@ public class HomeViewModel {
     /// fetch (after the ones in `ValueConcurrentObserver.asyncStart`/`ValueConcurrentObserver.syncStart`)
     /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
     public lazy var observableState = ValueObservation
-        .trackingConstantRegion { db -> State in try HomeViewModel.retrieveState(db) }
+        .trackingConstantRegion { [dependencies] db -> State in
+            try HomeViewModel.retrieveState(db, using: dependencies)
+        }
         .removeDuplicates()
         .handleEvents(didFail: { SNLog("[HomeViewModel] Observation failed with error: \($0)") })
     
-    private static func retrieveState(_ db: Database) throws -> State {
+    private static func retrieveState(
+        _ db: Database,
+        excludingMessageRequestThreadCount: Bool = false,
+        using dependencies: Dependencies
+    ) throws -> State {
+        let userSessionId: SessionId = getUserSessionId(db)
         let hasViewedSeed: Bool = db[.hasViewedSeed]
         let hasHiddenMessageRequests: Bool = db[.hasHiddenMessageRequests]
         let userProfile: Profile = Profile.fetchOrCreateCurrentUser(db)
-        let unreadMessageRequestThreadCount: Int = try SessionThread
-            .unreadMessageRequestsCountQuery(userPublicKey: userProfile.id)
-            .fetchOne(db)
-            .defaulting(to: 0)
+        let unreadMessageRequestThreadCount: Int = (excludingMessageRequestThreadCount ? 0 :
+            try SessionThread
+                .unreadMessageRequestsCountQuery(userSessionId: userSessionId)
+                .fetchOne(db)
+                .defaulting(to: 0)
+        )
         
         return State(
+            userSessionId: userSessionId,
             showViewedSeedBanner: !hasViewedSeed,
             hasHiddenMessageRequests: hasHiddenMessageRequests,
             unreadMessageRequestThreadCount: unreadMessageRequestThreadCount,
@@ -361,13 +369,13 @@ public class HomeViewModel {
                             return lhs.lastInteractionDate > rhs.lastInteractionDate
                         }
                         .map { viewModel -> SessionThreadViewModel in
-                            viewModel.populatingCurrentUserBlindedKeys(
-                                currentUserBlinded15PublicKeyForThisThread: groupedOldData[viewModel.threadId]?
+                            viewModel.populatingCurrentUserBlindedIds(
+                                currentUserBlinded15SessionIdForThisThread: groupedOldData[viewModel.threadId]?
                                     .first?
-                                    .currentUserBlinded15PublicKey,
-                                currentUserBlinded25PublicKeyForThisThread: groupedOldData[viewModel.threadId]?
+                                    .currentUserBlinded15SessionId,
+                                currentUserBlinded25SessionIdForThisThread: groupedOldData[viewModel.threadId]?
                                     .first?
-                                    .currentUserBlinded25PublicKey
+                                    .currentUserBlinded25SessionId
                             )
                         }
                 )

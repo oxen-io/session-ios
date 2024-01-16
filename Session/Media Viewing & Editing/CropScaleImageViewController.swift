@@ -81,7 +81,7 @@ import SessionUtilitiesKit
 
     @objc required init(srcImage: UIImage, successCompletion : @escaping (Data) -> Void) {
         // normalized() can be slightly expensive but in practice this is fine.
-        self.srcImage = srcImage.normalized()
+        self.srcImage = srcImage.normalizedImage()
         self.successCompletion = successCompletion
         super.init(nibName: nil, bundle: nil)
 
@@ -151,7 +151,7 @@ import SessionUtilitiesKit
         let contentView = UIView()
         contentView.themeBackgroundColor = .backgroundPrimary
         self.view.addSubview(contentView)
-        contentView.autoPinEdgesToSuperviewEdges()
+        contentView.pin(to: self.view)
         
         let titleLabel: UILabel = UILabel()
         titleLabel.font = .boldSystemFont(ofSize: Values.veryLargeFontSize)
@@ -159,10 +159,10 @@ import SessionUtilitiesKit
         titleLabel.themeTextColor = .textPrimary
         titleLabel.textAlignment = .center
         contentView.addSubview(titleLabel)
-        titleLabel.autoPinWidthToSuperview()
+        titleLabel.set(.width, to: .width, of: contentView)
         
-        let titleLabelMargin = ScaleFromIPhone5(16)
-        titleLabel.autoPinEdge(toSuperviewSafeArea: .top, withInset: titleLabelMargin)
+        let titleLabelMargin = Values.scaleFromIPhone5(16)
+        titleLabel.pin(.top, to: .top, of: titleLabel.safeAreaLayoutGuide, withInset: titleLabelMargin)
         
         let buttonRow: UIView = createButtonRow()
         contentView.addSubview(buttonRow)
@@ -172,7 +172,7 @@ import SessionUtilitiesKit
         buttonRow.set(
             .height,
             to: (
-                ScaleFromIPhone5To7Plus(35, 45) +
+                Values.scaleFromIPhone5To7Plus(35, 45) +
                 Values.mediumSpacing +
                 (UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? Values.mediumSpacing)
             )
@@ -195,10 +195,10 @@ import SessionUtilitiesKit
         imageLayer.contents = srcImage.cgImage
         imageView.layer.addSublayer(imageLayer)
 
-        let maskingView = OWSBezierPathView()
+        let maskingView = BezierPathView()
         contentView.addSubview(maskingView)
 
-        maskingView.configureShapeLayerBlock = { [weak self] layer, bounds in
+        maskingView.configureShapeLayer = { [weak self] layer, bounds in
             guard let strongSelf = self else {
                 return
             }

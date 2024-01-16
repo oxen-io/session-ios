@@ -29,6 +29,7 @@ extension Publishers {
 
 public extension Publisher {
     func retry(_ retries: Int, using dependencies: Dependencies) -> AnyPublisher<Output, Failure> {
+        guard retries > 0 else { return self.eraseToAnyPublisher() }
         guard !dependencies.forceSynchronous else {
             return Publishers.RetryWithDependencies(upstream: self, retries: retries, dependencies: dependencies)
                 .eraseToAnyPublisher()

@@ -89,7 +89,7 @@ final class SimplifiedConversationCell: UITableViewCell {
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
             threadVariant: cellViewModel.threadVariant,
-            customImageData: cellViewModel.openGroupProfilePictureData,
+            displayPictureFilename: cellViewModel.displayPictureFilename,
             profile: cellViewModel.profile,
             additionalProfile: cellViewModel.additionalProfile
         )

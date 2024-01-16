@@ -44,11 +44,11 @@ class NotificationContentViewModel: SessionTableViewModel, NavigatableStateHolde
                             SessionCell.Info(
                                 id: previewType,
                                 title: previewType.name,
-                                rightAccessory: .radio(
-                                    isSelected: { (currentSelection == previewType) }
+                                trailingAccessory: .radio(
+                                    isSelected: (currentSelection == previewType)
                                 ),
                                 onTap: {
-                                    dependencies.storage.writeAsync { db in
+                                    dependencies[singleton: .storage].writeAsync(using: dependencies) { db in
                                         db[.preferencesNotificationPreviewType] = previewType
                                     }
                                     

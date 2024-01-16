@@ -13,8 +13,7 @@ public protocol ImageEditorPaletteViewDelegate: AnyObject {
 // We represent image editor colors using this (color, phase)
 // tuple so that we can consistently restore palette view
 // state.
-@objc
-public class ImageEditorColor: NSObject {
+public class ImageEditorColor {
     public let color: UIColor
 
     // Colors are chosen from a spectrum of colors.
@@ -113,8 +112,8 @@ private class PalettePreviewView: OWSLayerView {
         //
         // The size doesn't matter since this view is
         // mostly transparent and isn't hot.
-        autoSetDimensions(to: CGSize(width: PalettePreviewView.innerRadius * 4,
-                                     height: PalettePreviewView.innerRadius * 4))
+        set(.width, to: PalettePreviewView.innerRadius * 4)
+        set(.height, to: PalettePreviewView.innerRadius * 4)
     }
 
     @available(*, unavailable, message: "use other init() instead.")
@@ -129,8 +128,8 @@ private class PalettePreviewView: OWSLayerView {
         let outerRadius = innerRadius + circleMargin
         let rightEdge = CGPoint(x: bounds.width,
                                 y: bounds.height * 0.5)
-        let teardropTipCenter = rightEdge.minus(CGPoint(x: teardropTipRadius + shadowMargin, y: 0))
-        let circleCenter = teardropTipCenter.minus(CGPoint(x: teardropPointiness + innerRadius, y: 0))
+        let teardropTipCenter = rightEdge.subtracting(CGPoint(x: teardropTipRadius + shadowMargin, y: 0))
+        let circleCenter = teardropTipCenter.subtracting(CGPoint(x: teardropPointiness + innerRadius, y: 0))
 
         // The "teardrop" shape is bounded by 2 circles, joined by their tangents.
         //
@@ -142,7 +141,7 @@ private class PalettePreviewView: OWSLayerView {
         // defines the tangents and atan() that triangle to get the angle.
         //
         // 1. Find the length of the hypotenuse.
-        let circleCenterDistance = teardropTipCenter.minus(circleCenter).length
+        let circleCenterDistance = teardropTipCenter.subtracting(circleCenter).length
         // 2. Fine the length of the first side.
         let radiusDiff = outerRadius - teardropTipRadius
         // 2. Fine the length of the second side.
@@ -166,7 +165,7 @@ private class PalettePreviewView: OWSLayerView {
 
         let innerCircleSize = CGSize(width: innerRadius * 2,
                                 height: innerRadius * 2)
-        let circleFrame = CGRect(origin: circleCenter.minus(innerCircleSize.asPoint.times(0.5)),
+        let circleFrame = CGRect(origin: circleCenter.subtracting(innerCircleSize.asPoint.multiplying(by: 0.5)),
                                  size: innerCircleSize)
         circleLayer.path = UIBezierPath(ovalIn: circleFrame).cgPath
         circleLayer.frame = bounds
@@ -229,7 +228,10 @@ public class ImageEditorPaletteView: UIView {
         addSubview(imageView)
         // We use an invisible margin to expand the hot area of this control.
         let margin: CGFloat = 20
-        imageView.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets(top: margin, left: margin, bottom: margin, right: margin))
+        imageView.pin(.top, to: .top, of: self, withInset: margin)
+        imageView.pin(.leading, to: .leading, of: self, withInset: margin)
+        imageView.pin(.trailing, to: .trailing, of: self, withInset: -margin)
+        imageView.pin(.bottom, to: .bottom, of: self, withInset: -margin)
         imageView.themeBorderColor = .white
         imageView.layer.borderWidth = 1
 
@@ -240,30 +242,25 @@ public class ImageEditorPaletteView: UIView {
             strongSelf.updateState()
         }
         addSubview(imageWrapper)
-        imageWrapper.autoPin(toEdgesOf: imageView)
-        shadowView.autoPin(toEdgesOf: imageView)
+        imageWrapper.pin(to: imageView)
+        shadowView.pin(to: imageView)
 
         selectionView.themeBorderColor = .white
         selectionView.layer.borderWidth = 1
         selectionView.layer.cornerRadius = selectionSize / 2
-        selectionView.autoSetDimensions(to: CGSize(width: selectionSize, height: selectionSize))
+        selectionView.set(.width, to: selectionSize)
+        selectionView.set(.height, to: selectionSize)
         imageWrapper.addSubview(selectionView)
-        selectionView.autoHCenterInSuperview()
+        selectionView.center(.horizontal, in: imageWrapper)
 
         // There must be a better way to pin the selection view's location,
         // but I can't find it.
-        let selectionConstraint = NSLayoutConstraint(item: selectionView,
-                                                     attribute: .centerY, relatedBy: .equal, toItem: imageWrapper, attribute: .top, multiplier: 1, constant: 0)
-        selectionConstraint.autoInstall()
-        self.selectionConstraint = selectionConstraint
+        self.selectionConstraint = selectionView.center(.vertical, against: .top, of: imageWrapper)
 
         previewView.isHidden = true
         addSubview(previewView)
-        previewView.autoPinEdge(.trailing, to: .leading, of: imageView, withOffset: -24)
-        let previewConstraint = NSLayoutConstraint(item: previewView,
-                                                     attribute: .centerY, relatedBy: .equal, toItem: imageWrapper, attribute: .top, multiplier: 1, constant: 0)
-        previewConstraint.autoInstall()
-        self.previewConstraint = previewConstraint
+        previewView.pin(.trailing, to: .leading, of: imageView, withInset: -24)
+        self.previewConstraint = previewView.center(.vertical, against: .top, of: imageWrapper)
 
         isUserInteractionEnabled = true
         addGestureRecognizer(PaletteGestureRecognizer(target: self, action: #selector(didTouch)))
@@ -276,7 +273,7 @@ public class ImageEditorPaletteView: UIView {
     private let selectionSize: CGFloat = 20
 
     private func selectColor(atLocationY y: CGFloat) {
-        let palettePhase = y.inverseLerp(0, imageView.height(), shouldClamp: true)
+        let palettePhase = y.inverseLerp(0, imageView.bounds.height, shouldClamp: true)
         self.selectedValue = value(for: palettePhase)
 
         updateState()
@@ -339,7 +336,7 @@ public class ImageEditorPaletteView: UIView {
             owsFailDebug("Missing selectionConstraint.")
             return
         }
-        let selectionY = imageWrapper.height() * selectedValue.palettePhase
+        let selectionY = imageWrapper.bounds.height * selectedValue.palettePhase
         selectionConstraint.constant = selectionY
 
         guard let previewConstraint = previewConstraint else {

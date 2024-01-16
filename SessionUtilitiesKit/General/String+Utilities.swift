@@ -4,6 +4,8 @@ import Foundation
 import SignalCoreKit
 
 public extension String {
+    var bytes: [UInt8] { Array(self.utf8) }
+    
     var glyphCount: Int {
         let richText = NSAttributedString(string: self)
         let line = CTLineCreateWithAttributedString(richText)

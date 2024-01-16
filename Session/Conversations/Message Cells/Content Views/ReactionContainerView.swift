@@ -60,7 +60,7 @@ final class ReactionContainerView: UIView {
     lazy var collapseButton: UIView = {
         let arrow: UIImageView = UIImageView(
             image: UIImage(named: "ic_chevron_up")?
-                .resizedImage(to: ReactionContainerView.arrowSize)?
+                .resized(to: ReactionContainerView.arrowSize)?
                 .withRenderingMode(.alwaysTemplate)
         )
         arrow.themeTintColor = .textPrimary

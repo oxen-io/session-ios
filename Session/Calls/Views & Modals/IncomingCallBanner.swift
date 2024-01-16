@@ -9,6 +9,8 @@ import SessionUtilitiesKit
 final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     private static let swipeToOperateThreshold: CGFloat = 60
     private var previousY: CGFloat = 0
+    
+    private let dependencies: Dependencies
     let call: SessionCall
     
     // MARK: - UI Components
@@ -36,7 +38,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         let result = UIButton(type: .custom)
         result.setImage(
             UIImage(named: "AnswerCall")?
-                .resizedImage(to: CGSize(width: 24.8, height: 24.8))?
+                .resized(to: CGSize(width: 24.8, height: 24.8))?
                 .withRenderingMode(.alwaysTemplate),
             for: .normal
         )
@@ -54,7 +56,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         let result = UIButton(type: .custom)
         result.setImage(
             UIImage(named: "EndCall")?
-                .resizedImage(to: CGSize(width: 29.6, height: 11.2))?
+                .resized(to: CGSize(width: 29.6, height: 11.2))?
                 .withRenderingMode(.alwaysTemplate),
             for: .normal
         )
@@ -79,7 +81,8 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     
     public static var current: IncomingCallBanner?
     
-    init(for call: SessionCall) {
+    init(for call: SessionCall, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.call = call
         
         super.init(frame: CGRect.zero)
@@ -113,8 +116,10 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         profilePictureView.update(
             publicKey: call.sessionId,
             threadVariant: .contact,
-            customImageData: nil,
-            profile: Storage.shared.read { [sessionId = call.sessionId] db in Profile.fetchOrCreate(db, id: sessionId) },
+            displayPictureFilename: nil,
+            profile: dependencies[singleton: .storage].read { [sessionId = call.sessionId] db in
+                Profile.fetchOrCreate(db, id: sessionId)
+            },
             additionalProfile: nil
         )
         displayNameLabel.text = call.contactName
@@ -126,7 +131,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         self.addSubview(stackView)
         
         stackView.center(.vertical, in: self)
-        stackView.autoPinWidthToSuperview(withMargin: Values.mediumSpacing)
+        stackView.set(.width, to: .width, of: self, withOffset: Values.mediumSpacing)
     }
     
     private func setUpGestureRecognizers() {
@@ -184,21 +189,25 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     }
     
     @objc private func endCall() {
-        AppEnvironment.shared.callManager.endCall(call) { error in
+        dependencies[singleton: .callManager].endCall(call) { [weak self, dependencies] error in
             if let _ = error {
-                self.call.endSessionCall()
-                AppEnvironment.shared.callManager.reportCurrentCallEnded(reason: nil)
+                self?.call.endSessionCall()
+                dependencies[singleton: .callManager].reportCurrentCallEnded(reason: nil)
             }
             
-            self.dismiss()
+            self?.dismiss()
         }
     }
     
     public func showCallVC(answer: Bool) {
         dismiss()
-        guard let presentingVC = CurrentAppContext().frontmostViewController() else { preconditionFailure() } // FIXME: Handle more gracefully
         
-        let callVC = CallVC(for: self.call)
+        guard
+            dependencies.hasInitialised(singleton: .appContext),
+            let presentingVC: UIViewController = dependencies[singleton: .appContext].frontmostViewController
+        else { preconditionFailure() } // FIXME: Handle more gracefully
+        
+        let callVC = CallVC(for: self.call, using: dependencies)
         if let conversationVC = presentingVC as? ConversationVC {
             callVC.conversationVC = conversationVC
             conversationVC.inputAccessoryView?.isHidden = true
@@ -214,12 +223,16 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     
     public func show() {
         self.alpha = 0.0
-        let window = CurrentAppContext().mainWindow!
-        window.addSubview(self)
         
+        guard
+            dependencies.hasInitialised(singleton: .appContext),
+            let window: UIWindow = dependencies[singleton: .appContext].mainWindow
+        else { return }
+        
+        window.addSubview(self)
         let topMargin = window.safeAreaInsets.top - Values.smallSpacing
-        self.autoPinWidthToSuperview(withMargin: Values.smallSpacing)
-        self.autoPinEdge(toSuperviewEdge: .top, withInset: topMargin)
+        self.set(.width, to: .width, of: window, withOffset: Values.smallSpacing)
+        self.pin(.top, to: .top, of: window, withInset: topMargin)
         
         UIView.animate(withDuration: 0.5, delay: 0, options: [], animations: {
             self.alpha = 1.0
@@ -240,5 +253,4 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
             self.removeFromSuperview()
         })
     }
-
 }

@@ -8,6 +8,7 @@ import SessionUIKit
 import SignalUtilitiesKit
 import SignalCoreKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 public class MediaTileViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
     
@@ -39,7 +40,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
 
     init(viewModel: MediaGalleryViewModel) {
         self.viewModel = viewModel
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        Dependencies()[singleton: .storage].addObserver(viewModel.pagedDataObserver)
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -138,12 +139,12 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         )
 
         view.addSubview(self.collectionView)
-        collectionView.autoPin(toEdgesOf: view)
+        collectionView.pin(to: view)
         
         view.addSubview(self.footerBar)
-        footerBar.autoPinWidthToSuperview()
-        footerBar.autoSetDimension(.height, toSize: MediaTileViewController.footerBarHeight)
-        self.footerBarBottomConstraint = footerBar.autoPinEdge(toSuperviewEdge: .bottom, withInset: -MediaTileViewController.footerBarHeight)
+        footerBar.set(.width, to: .width, of: view)
+        footerBar.set(.height, to: MediaTileViewController.footerBarHeight)
+        footerBarBottomConstraint = footerBar.pin(.bottom, to: .bottom, of: view, withInset: -MediaTileViewController.footerBarHeight)
 
         self.updateSelectButton(updatedData: self.viewModel.galleryData, inBatchSelectMode: false)
         self.mediaTileViewLayout.invalidateLayout()
@@ -639,9 +640,10 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         isInBatchSelectMode = true
 
         // show toolbar
+        let view: UIView = self.view
         UIView.animate(withDuration: 0.1, delay: 0, options: .curveEaseInOut, animations: { [weak self] in
             self?.footerBarBottomConstraint?.isActive = false
-            self?.footerBarBottomConstraint = self?.footerBar.autoPinEdge(toSuperviewSafeArea: .bottom)
+            self?.footerBarBottomConstraint = self?.footerBar.pin(.bottom, to: .bottom, of: view.safeAreaLayoutGuide)
             self?.footerBar.superview?.layoutIfNeeded()
 
             // Ensure toolbar doesn't cover bottom row.
@@ -657,9 +659,10 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         isInBatchSelectMode = false
 
         // hide toolbar
+        let view: UIView = self.view
         UIView.animate(withDuration: 0.1, delay: 0, options: .curveEaseInOut, animations: { [weak self] in
             self?.footerBarBottomConstraint?.isActive = false
-            self?.footerBarBottomConstraint = self?.footerBar.autoPinEdge(toSuperviewEdge: .bottom, withInset: -MediaTileViewController.footerBarHeight)
+            self?.footerBarBottomConstraint = self?.footerBar.pin(.bottom, to: .bottom, of: view, withInset: -MediaTileViewController.footerBarHeight)
             self?.footerBar.superview?.layoutIfNeeded()
 
             // Undo "Ensure toolbar doesn't cover bottom row."
@@ -691,7 +694,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         }()
 
         let deleteAction = UIAlertAction(title: confirmationTitle, style: .destructive) { [weak self] _ in
-            Storage.shared.writeAsync { db in
+            Dependencies()[singleton: .storage].writeAsync { db in
                 let interactionIds: Set<Int64> = items
                     .map { $0.interactionId }
                     .asSet()
@@ -701,7 +704,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
                     .deleteAll(db)
                 
                 // Add the garbage collection job to delete orphaned attachment files
-                JobRunner.add(
+                Dependencies()[singleton: .jobRunner].add(
                     db,
                     job: Job(
                         variant: .garbageCollection,
@@ -709,7 +712,9 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
                         details: GarbageCollectionJob.Details(
                             typesToCollect: [.orphanedAttachmentFiles]
                         )
-                    )
+                    ),
+                    canStartJob: true,
+                    using: Dependencies()
                 )
                 
                 // Delete any interactions which had all of their attachments removed
@@ -829,7 +834,10 @@ private class MediaGalleryStaticHeader: UICollectionViewCell {
         label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.numberOfLines = 0
-        label.autoPinEdgesToSuperviewMargins(with: UIEdgeInsets(top: 0, leading: Values.largeSpacing, bottom: 0, trailing: Values.largeSpacing))
+        label.pin(.top, toMargin: .top, of: self)
+        label.pin(.leading, toMargin: .leading, of: self, withInset: Values.largeSpacing)
+        label.pin(.trailing, toMargin: .trailing, of: self, withInset: -Values.largeSpacing)
+        label.pin(.bottom, toMargin: .bottom, of: self)
     }
 
     @available(*, unavailable, message: "Unimplemented")

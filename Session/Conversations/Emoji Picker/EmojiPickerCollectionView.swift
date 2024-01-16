@@ -11,6 +11,7 @@ protocol EmojiPickerCollectionViewDelegate: AnyObject {
 }
 
 class EmojiPickerCollectionView: UICollectionView {
+    private let dependencies: Dependencies
     let layout: UICollectionViewFlowLayout
 
     weak var pickerDelegate: EmojiPickerCollectionViewDelegate?
@@ -47,7 +48,9 @@ class EmojiPickerCollectionView: UICollectionView {
     
     // MARK: - Initialization
 
-    init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
         layout = UICollectionViewFlowLayout()
         layout.itemSize = CGSize(width: Self.emojiWidth, height: Self.emojiWidth)
         layout.minimumInteritemSpacing = EmojiPickerCollectionView.minimumSpacing
@@ -75,7 +78,7 @@ class EmojiPickerCollectionView: UICollectionView {
         tapGestureRecognizer.delegate = self
         
         // Fetch the emoji data from the database
-        let maybeEmojiData: (recent: [EmojiWithSkinTones], allGrouped: [Emoji.Category: [EmojiWithSkinTones]])? = Storage.shared.read { db in
+        let maybeEmojiData: (recent: [EmojiWithSkinTones], allGrouped: [Emoji.Category: [EmojiWithSkinTones]])? = dependencies[singleton: .storage].read { db in
             // Some emoji have two different code points but identical appearances. Let's remove them!
             // If we normalize to a different emoji than the one currently in our array, we want to drop
             // the non-normalized variant if the normalized variant already exists. Otherwise, map to the
@@ -108,7 +111,7 @@ class EmojiPickerCollectionView: UICollectionView {
 
     // This is not an exact calculation, but is simple and works for our purposes.
     var numberOfColumns: Int {
-        Int((self.width()) / (EmojiPickerCollectionView.emojiWidth + EmojiPickerCollectionView.minimumSpacing))
+        Int((self.bounds.width) / (EmojiPickerCollectionView.emojiWidth + EmojiPickerCollectionView.minimumSpacing))
     }
 
     // At max, we show 3 rows of recent emoji
@@ -186,9 +189,9 @@ class EmojiPickerCollectionView: UICollectionView {
             guard let cell = cellForItem(at: indexPath) else { return }
 
             currentSkinTonePicker?.dismiss()
-            currentSkinTonePicker = EmojiSkinTonePicker.present(referenceView: cell, emoji: emoji) { [weak self] emoji in
+            currentSkinTonePicker = EmojiSkinTonePicker.present(referenceView: cell, emoji: emoji) { [weak self, dependencies] emoji in
                 if let emoji: EmojiWithSkinTones = emoji {
-                    Storage.shared.writeAsync { db in
+                    dependencies[singleton: .storage].writeAsync { db in
                         emoji.baseEmoji?.setPreferredSkinTones(
                             db,
                             preferredSkinTonePermutation: emoji.skinTones
@@ -293,7 +296,7 @@ extension EmojiPickerCollectionView: UICollectionViewDelegateFlowLayout {
 
         let measureCell = EmojiSectionHeader()
         measureCell.label.text = nameForSection(section)
-        return measureCell.sizeThatFits(CGSize(width: self.width(), height: .greatestFiniteMagnitude))
+        return measureCell.sizeThatFits(CGSize(width: self.bounds.width, height: .greatestFiniteMagnitude))
     }
 }
 
@@ -309,7 +312,7 @@ private class EmojiCell: UICollectionViewCell {
 
         emojiLabel.font = .boldSystemFont(ofSize: 32)
         contentView.addSubview(emojiLabel)
-        emojiLabel.autoPinEdgesToSuperviewEdges()
+        emojiLabel.pin(to: contentView)
 
         // For whatever reason, some emoji glyphs occasionally have different typographic widths on certain devices
         // e.g. 👩‍🦰: 36x38.19, 👱‍♀️: 40x38. (See: commit message for more info)
@@ -345,8 +348,8 @@ private class EmojiSectionHeader: UICollectionReusableView {
         label.font = .systemFont(ofSize: Values.smallFontSize)
         label.themeTextColor = .textPrimary
         addSubview(label)
-        label.autoPinEdgesToSuperviewMargins()
-        label.setCompressionResistanceHigh()
+        label.pin(to: self)
+        label.setCompressionResistance(to: .required)
     }
 
     required init?(coder: NSCoder) {

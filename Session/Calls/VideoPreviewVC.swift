@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import CoreMedia
 
 public protocol VideoPreviewDelegate: AnyObject {
     func cameraDidConfirmTurningOn()

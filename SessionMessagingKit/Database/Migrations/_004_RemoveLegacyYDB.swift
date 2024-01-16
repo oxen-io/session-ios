@@ -5,7 +5,7 @@ import GRDB
 import SessionUtilitiesKit
 import SessionSnodeKit
 
-/// This migration removes the legacy YapDatabase files
+/// This migration used to remove the legacy YapDatabase files (the old logic has been removed and is no longer supported so it now does nothing)
 enum _004_RemoveLegacyYDB: Migration {
     static let target: TargetMigrations.Identifier = .messagingKit
     static let identifier: String = "RemoveLegacyYDB" // stringlint:disable
@@ -14,8 +14,7 @@ enum _004_RemoveLegacyYDB: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
 
-    static func migrate(_ db: Database) throws {
-        try? SUKLegacy.deleteLegacyDatabaseFilesAndKey()
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

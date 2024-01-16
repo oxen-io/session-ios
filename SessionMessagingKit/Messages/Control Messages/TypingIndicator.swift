@@ -42,8 +42,8 @@ public final class TypingIndicator: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies) else { return false }
         return kind != nil
     }
 
@@ -81,7 +81,7 @@ public final class TypingIndicator: ControlMessage {
         return TypingIndicator(kind: kind)
     }
 
-    public override func toProto(_ db: Database) -> SNProtoContent? {
+    public override func toProto(_ db: Database, threadId: String) -> SNProtoContent? {
         guard let timestamp = sentTimestamp, let kind = kind else {
             SNLog("Couldn't construct typing indicator proto from: \(self).")
             return nil
@@ -90,6 +90,8 @@ public final class TypingIndicator: ControlMessage {
         let contentProto = SNProtoContent.builder()
         do {
             contentProto.setTypingMessage(try typingIndicatorProto.build())
+            // DisappearingMessagesConfiguration
+            setDisappearingMessagesConfigurationIfNeeded(db, on: contentProto, threadId: threadId)
             return try contentProto.build()
         } catch {
             SNLog("Couldn't construct typing indicator proto from: \(self).")

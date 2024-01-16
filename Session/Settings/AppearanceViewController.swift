@@ -6,6 +6,20 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class AppearanceViewController: BaseVC {
+    // MARK: - Initialization
+    
+    private let dependencies: Dependencies
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     // MARK: - Components
     
     private let scrollView: UIScrollView = {
@@ -75,14 +89,14 @@ final class AppearanceViewController: BaseVC {
         return result
     }()
     
-    private let primaryColorPreviewView: ThemePreviewView = {
-        let result: ThemePreviewView = ThemePreviewView()
+    private lazy var primaryColorPreviewView: ThemePreviewView = {
+        let result: ThemePreviewView = ThemePreviewView(using: dependencies)
         result.translatesAutoresizingMaskIntoConstraints = false
         
         return result
     }()
     
-    private let primaryColorScrollView: UIScrollView = {
+    private lazy var primaryColorScrollView: UIScrollView = {
         let result: UIScrollView = UIScrollView()
         result.translatesAutoresizingMaskIntoConstraints = false
         result.showsVerticalScrollIndicator = false
@@ -94,7 +108,7 @@ final class AppearanceViewController: BaseVC {
             trailing: Values.largeSpacing
         )
         
-        if CurrentAppContext().isRTL {
+        if Dependencies.isRTL {
             result.transform = CGAffineTransform.identity.scaledBy(x: -1, y: 1)
         }
         
@@ -268,8 +282,8 @@ final class AppearanceViewController: BaseVC {
         nightModeStackView.pin(.leading, to: .leading, of: contentView)
         nightModeStackView.set(.width, to: .width, of: contentView)
         
-        nightModeToggleLabel.setContentHuggingVerticalHigh()
-        nightModeToggleLabel.setCompressionResistanceVerticalHigh()
+        nightModeToggleLabel.setContentHugging(.vertical, to: .required)
+        nightModeToggleLabel.setCompressionResistance(.vertical, to: .required)
         nightModeToggleLabel.center(.vertical, in: nightModeToggleView)
         nightModeToggleLabel.pin(.leading, to: .leading, of: nightModeToggleView, withInset: Values.largeSpacing)
         

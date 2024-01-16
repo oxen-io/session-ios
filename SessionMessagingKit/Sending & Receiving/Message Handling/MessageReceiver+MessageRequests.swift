@@ -14,25 +14,25 @@ extension MessageReceiver {
         message: MessageRequestResponse,
         using dependencies: Dependencies
     ) throws {
-        let userPublicKey = getUserHexEncodedPublicKey(db, using: dependencies)
+        let userSessionId = getUserSessionId(db, using: dependencies)
         var blindedContactIds: [String] = []
         
         // Ignore messages which were sent from the current user
         guard
-            message.sender != userPublicKey,
+            message.sender != userSessionId.hexString,
             let senderId: String = message.sender
         else { throw MessageReceiverError.invalidMessage }
         
         // Update profile if needed (want to do this regardless of whether the message exists or
         // not to ensure the profile info gets sync between a users devices at every chance)
         if let profile = message.profile {
-            let messageSentTimestamp: TimeInterval = (TimeInterval(message.sentTimestamp ?? 0) / 1000)
+            let messageSentTimestamp: TimeInterval = TimeInterval(Double(message.sentTimestamp ?? 0) / 1000)
             
-            try ProfileManager.updateProfileIfNeeded(
+            try Profile.updateIfNeeded(
                 db,
                 publicKey: senderId,
                 name: profile.displayName,
-                avatarUpdate: {
+                displayPictureUpdate: {
                     guard
                         let profilePictureUrl: String = profile.profilePictureUrl,
                         let profileKey: Data = profile.profileKey
@@ -50,8 +50,14 @@ extension MessageReceiver {
         }
         
         // Prep the unblinded thread
-        let unblindedThread: SessionThread = try SessionThread
-            .fetchOrCreate(db, id: senderId, variant: .contact, shouldBeVisible: nil)
+        let unblindedThread: SessionThread = try SessionThread.fetchOrCreate(
+            db,
+            id: senderId,
+            variant: .contact,
+            shouldBeVisible: nil,
+            calledFromConfigHandling: false,
+            using: dependencies
+        )
         
         // Need to handle a `MessageRequestResponse` sent to a blinded thread (ie. check if the sender matches
         // the blinded ids of any threads)
@@ -76,20 +82,19 @@ extension MessageReceiver {
             // If the sessionId matches the blindedId then this thread needs to be converted to an
             // un-blinded thread
             guard
-                dependencies.crypto.verify(
+                dependencies[singleton: .crypto].verify(
                     .sessionId(
                         senderId,
                         matchesBlindedId: blindedIdLookup.blindedId,
-                        serverPublicKey: blindedIdLookup.openGroupPublicKey,
-                        using: dependencies
+                        serverPublicKey: blindedIdLookup.openGroupPublicKey
                     )
                 )
             else { return }
             
             // Update the lookup
-            _ = try blindedIdLookup
+            try blindedIdLookup
                 .with(sessionId: senderId)
-                .saved(db)
+                .upserted(db)
             
             // Add the `blindedId` to an array so we can remove them at the end of processing
             blindedContactIds.append(blindedIdLookup.blindedId)
@@ -108,7 +113,8 @@ extension MessageReceiver {
                     threadId: blindedIdLookup.blindedId,
                     threadVariant: .contact,
                     groupLeaveType: .forced,
-                    calledFromConfigHandling: false
+                    calledFromConfigHandling: false,
+                    using: dependencies
                 )
         }
         
@@ -116,7 +122,8 @@ extension MessageReceiver {
         try updateContactApprovalStatusIfNeeded(
             db,
             senderSessionId: senderId,
-            threadId: nil
+            threadId: nil,
+            using: dependencies
         )
         
         // If there were blinded contacts which have now been resolved to this contact then we should remove
@@ -129,8 +136,9 @@ extension MessageReceiver {
             
             try updateContactApprovalStatusIfNeeded(
                 db,
-                senderSessionId: userPublicKey,
-                threadId: unblindedThread.id
+                senderSessionId: userSessionId.hexString,
+                threadId: unblindedThread.id,
+                using: dependencies
             )
         }
         
@@ -154,12 +162,13 @@ extension MessageReceiver {
     internal static func updateContactApprovalStatusIfNeeded(
         _ db: Database,
         senderSessionId: String,
-        threadId: String?
+        threadId: String?,
+        using dependencies: Dependencies
     ) throws {
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         
         // If the sender of the message was the current user
-        if senderSessionId == userPublicKey {
+        if senderSessionId == userSessionId.hexString {
             // Retrieve the contact for the thread the message was sent to (excluding 'NoteToSelf'
             // threads) and if the contact isn't flagged as approved then do so
             guard
@@ -174,7 +183,7 @@ extension MessageReceiver {
             
             guard !contact.isApproved else { return }
             
-            try? contact.save(db)
+            try? contact.upsert(db)
             _ = try? Contact
                 .filter(id: threadId)
                 .updateAllAndConfig(db, Contact.Columns.isApproved.set(to: true))
@@ -186,7 +195,7 @@ extension MessageReceiver {
             
             guard !contact.didApproveMe else { return }
 
-            try? contact.save(db)
+            try? contact.upsert(db)
             _ = try? Contact
                 .filter(id: senderSessionId)
                 .updateAllAndConfig(db, Contact.Columns.didApproveMe.set(to: true))

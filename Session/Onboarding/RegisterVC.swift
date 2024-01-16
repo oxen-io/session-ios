@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import Sodium
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
@@ -149,7 +148,7 @@ final class RegisterVC : BaseVC {
         topSpacer.heightAnchor.constraint(equalTo: bottomSpacer.heightAnchor, multiplier: 1).isActive = true
         
         // Peform initial seed update
-        updateSeed()
+        try? updateSeed()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -168,8 +167,8 @@ final class RegisterVC : BaseVC {
     
     // MARK: Updating
     
-    private func updateSeed() {
-        seed = try! Randomness.generateRandomBytes(numberBytes: 16)
+    private func updateSeed(using dependencies: Dependencies = Dependencies()) throws {
+        seed = try dependencies[singleton: .crypto].tryGenerate(.randomBytes(16))
     }
     
     private func updateKeyPair() {
@@ -177,30 +176,30 @@ final class RegisterVC : BaseVC {
     }
     
     private func updatePublicKeyLabel() {
-        let hexEncodedPublicKey = x25519KeyPair.hexEncodedPublicKey
-        publicKeyLabel.accessibilityLabel = hexEncodedPublicKey
+        let sessionId: SessionId = SessionId(.standard, publicKey: x25519KeyPair.publicKey)
+        publicKeyLabel.accessibilityLabel = sessionId.hexString
         publicKeyLabel.accessibilityIdentifier = "Session ID"
         publicKeyLabel.isAccessibilityElement = true
-        let characterCount = hexEncodedPublicKey.count
+        let characterCount = sessionId.hexString.count
         var count = 0
         let limit = 32
         func animate() {
             let numberOfIndexesToShuffle = 32 - count
             let indexesToShuffle = (0..<characterCount).shuffled()[0..<numberOfIndexesToShuffle]
-            var mangledHexEncodedPublicKey = hexEncodedPublicKey
+            var mangledSessionId = sessionId.hexString
             for index in indexesToShuffle {
-                let startIndex = mangledHexEncodedPublicKey.index(mangledHexEncodedPublicKey.startIndex, offsetBy: index)
-                let endIndex = mangledHexEncodedPublicKey.index(after: startIndex)
-                mangledHexEncodedPublicKey.replaceSubrange(startIndex..<endIndex, with: "0123456789abcdef__".shuffled()[0..<1]) // stringlint:disable
+                let startIndex = mangledSessionId.index(mangledSessionId.startIndex, offsetBy: index)
+                let endIndex = mangledSessionId.index(after: startIndex)
+                mangledSessionId.replaceSubrange(startIndex..<endIndex, with: "0123456789abcdef__".shuffled()[0..<1]) // stringlint:disable
             }
             count += 1
             if count < limit {
-                publicKeyLabel.text = mangledHexEncodedPublicKey
+                publicKeyLabel.text = mangledSessionId
                 Timer.scheduledTimer(withTimeInterval: 0.032, repeats: false) { _ in
                     animate()
                 }
             } else {
-                publicKeyLabel.text = hexEncodedPublicKey
+                publicKeyLabel.text = sessionId.hexString
             }
         }
         animate()
@@ -211,7 +210,6 @@ final class RegisterVC : BaseVC {
     @objc private func register() {
         Onboarding.Flow.register
             .preregister(
-                with: seed,
                 ed25519KeyPair: ed25519KeyPair,
                 x25519KeyPair: x25519KeyPair
             )
@@ -221,7 +219,7 @@ final class RegisterVC : BaseVC {
     }
     
     @objc private func copyPublicKey() {
-        UIPasteboard.general.string = x25519KeyPair.hexEncodedPublicKey
+        UIPasteboard.general.string = SessionId(.standard, publicKey: x25519KeyPair.publicKey).hexString
         copyPublicKeyButton.isUserInteractionEnabled = false
         copyPublicKeyButton.accessibilityLabel = "Copy session id"
         copyPublicKeyButton.isAccessibilityElement = true

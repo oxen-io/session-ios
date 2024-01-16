@@ -6,7 +6,6 @@ import GRDB
 import SessionUtilitiesKit
 
 extension MessageSender {
-    
     // MARK: - Durable
     
     public static func send(
@@ -14,6 +13,7 @@ extension MessageSender {
         interaction: Interaction,
         threadId: String,
         threadVariant: SessionThread.Variant,
+        after blockingJob: Job? = nil,
         isSyncMessage: Bool = false,
         using dependencies: Dependencies
     ) throws {
@@ -27,6 +27,7 @@ extension MessageSender {
             threadId: threadId,
             interactionId: interactionId,
             to: try Message.Destination.from(db, threadId: threadId, threadVariant: threadVariant),
+            after: blockingJob,
             isSyncMessage: isSyncMessage,
             using: dependencies
         )
@@ -38,6 +39,7 @@ extension MessageSender {
         interactionId: Int64?,
         threadId: String,
         threadVariant: SessionThread.Variant,
+        after blockingJob: Job? = nil,
         isSyncMessage: Bool = false,
         using dependencies: Dependencies
     ) throws {
@@ -47,6 +49,7 @@ extension MessageSender {
             threadId: threadId,
             interactionId: interactionId,
             to: try Message.Destination.from(db, threadId: threadId, threadVariant: threadVariant),
+            after: blockingJob,
             isSyncMessage: isSyncMessage,
             using: dependencies
         )
@@ -58,6 +61,7 @@ extension MessageSender {
         threadId: String?,
         interactionId: Int64?,
         to destination: Message.Destination,
+        after blockingJob: Job? = nil,
         isSyncMessage: Bool = false,
         using dependencies: Dependencies
     ) {
@@ -71,12 +75,13 @@ extension MessageSender {
                 threadId: threadId,
                 interactionId: interactionId,
                 isAlreadySyncMessage: false,
+                after: blockingJob,
                 using: dependencies
             )
             return
         }
         
-        dependencies.jobRunner.add(
+        dependencies[singleton: .jobRunner].add(
             db,
             job: Job(
                 variant: .messageSend,
@@ -88,6 +93,7 @@ extension MessageSender {
                     isSyncMessage: isSyncMessage
                 )
             ),
+            dependantJob: blockingJob,
             canStartJob: true,
             using: dependencies
         )
@@ -95,18 +101,19 @@ extension MessageSender {
 
     // MARK: - Non-Durable
     
-    public static func preparedSendData(
+    public static func preparedSend(
         _ db: Database,
         interaction: Interaction,
+        fileIds: [String],
         threadId: String,
         threadVariant: SessionThread.Variant,
         using dependencies: Dependencies
-    ) throws -> PreparedSendData {
+    ) throws -> HTTP.PreparedRequest<Void> {
         // Only 'VisibleMessage' types can be sent via this method
         guard interaction.variant == .standardOutgoing else { throw MessageSenderError.invalidMessage }
         guard let interactionId: Int64 = interaction.id else { throw StorageError.objectNotSaved }
 
-        return try MessageSender.preparedSendData(
+        return try MessageSender.preparedSend(
             db,
             message: VisibleMessage.from(db, interaction: interaction),
             to: try Message.Destination.from(db, threadId: threadId, threadVariant: threadVariant),
@@ -114,82 +121,28 @@ extension MessageSender {
                 .from(db, threadId: threadId, threadVariant: threadVariant)
                 .defaultNamespace,
             interactionId: interactionId,
+            fileIds: fileIds,
             using: dependencies
         )
     }
     
-    public static func performUploadsIfNeeded(
-        preparedSendData: PreparedSendData,
-        using dependencies: Dependencies
-    ) -> AnyPublisher<PreparedSendData, Error> {
-        // We need an interactionId in order for a message to have uploads
-        guard let interactionId: Int64 = preparedSendData.interactionId else {
-            return Just(preparedSendData)
-                .setFailureType(to: Error.self)
-                .eraseToAnyPublisher()
-        }
+    // MARK: - Convenience
+    
+    internal static func getSpecifiedTTL(
+        _ db: Database,
+        threadId: String,
+        message: Message,
+        isSyncMessage: Bool
+    ) -> UInt64? {
+        guard
+            let disappearingMessagesConfiguration = try? DisappearingMessagesConfiguration.fetchOne(db, id: threadId),
+            disappearingMessagesConfiguration.isEnabled,
+            (
+                disappearingMessagesConfiguration.type == .disappearAfterSend ||
+                isSyncMessage
+            )
+        else { return nil }
         
-        let threadId: String = {
-            switch preparedSendData.destination {
-                case .contact(let publicKey): return publicKey
-                case .closedGroup(let groupPublicKey): return groupPublicKey
-                case .openGroup(let roomToken, let server, _, _, _):
-                    return OpenGroup.idFor(roomToken: roomToken, server: server)
-                
-                case .openGroupInbox(_, _, let blindedPublicKey): return blindedPublicKey
-            }
-        }()
-        
-        return dependencies.storage
-            .readPublisher { db -> (attachments: [Attachment], openGroup: OpenGroup?) in
-                let attachmentStateInfo: [Attachment.StateInfo] = (try? Attachment
-                    .stateInfo(interactionId: interactionId, state: .uploading)
-                    .fetchAll(db))
-                    .defaulting(to: [])
-                
-                // If there is no attachment data then just return early
-                guard !attachmentStateInfo.isEmpty else { return ([], nil) }
-                
-                // Otherwise fetch the open group (if there is one)
-                return (
-                    (try? Attachment
-                        .filter(ids: attachmentStateInfo.map { $0.attachmentId })
-                        .fetchAll(db))
-                        .defaulting(to: []),
-                    try? OpenGroup.fetchOne(db, id: threadId)
-                )
-            }
-            .flatMap { attachments, openGroup -> AnyPublisher<[String?], Error> in
-                guard !attachments.isEmpty else {
-                    return Just<[String?]>([])
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
-                }
-                
-                return Publishers
-                    .MergeMany(
-                        attachments
-                            .map { attachment -> AnyPublisher<String?, Error> in
-                                attachment
-                                    .upload(
-                                        to: (
-                                            openGroup.map { Attachment.Destination.openGroup($0) } ??
-                                            .fileServer
-                                        ),
-                                        using: dependencies
-                                    )
-                            }
-                    )
-                    .collect()
-                    .eraseToAnyPublisher()
-            }
-            .map { results -> PreparedSendData in
-                // Once the attachments are processed then update the PreparedSendData with
-                // the fileIds associated to the message
-                let fileIds: [String] = results.compactMap { result -> String? in result }
-                
-                return preparedSendData.with(fileIds: fileIds)
-            }
-            .eraseToAnyPublisher()
+        return UInt64(disappearingMessagesConfiguration.durationSeconds * 1000)
     }
 }

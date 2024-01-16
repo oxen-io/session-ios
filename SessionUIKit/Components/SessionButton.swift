@@ -22,6 +22,7 @@ public final class SessionButton: UIButton {
         public let title: String
         public let isEnabled: Bool
         public let accessibility: Accessibility?
+        public let minWidth: CGFloat
         public let onTap: () -> ()
         
         public init(
@@ -29,6 +30,7 @@ public final class SessionButton: UIButton {
             title: String,
             isEnabled: Bool,
             accessibility: Accessibility? = nil,
+            minWidth: CGFloat = 0,
             onTap: @escaping () -> ()
         ) {
             self.style = style
@@ -36,6 +38,7 @@ public final class SessionButton: UIButton {
             self.isEnabled = isEnabled
             self.accessibility = accessibility
             self.onTap = onTap
+            self.minWidth = minWidth
         }
         
         public static func == (lhs: SessionButton.Info, rhs: SessionButton.Info) -> Bool {
@@ -43,12 +46,19 @@ public final class SessionButton: UIButton {
                 lhs.style == rhs.style &&
                 lhs.title == rhs.title &&
                 lhs.isEnabled == rhs.isEnabled &&
-                lhs.accessibility == rhs.accessibility
+                lhs.accessibility == rhs.accessibility &&
+                lhs.minWidth == rhs.minWidth
             )
         }
     }
     
-    private let style: Style
+    public var style: Style {
+        didSet {
+            guard style != oldValue else { return }
+            
+            setup(style: style)
+        }
+    }
     
     public override var isEnabled: Bool {
         didSet {
@@ -199,11 +209,5 @@ public final class SessionButton: UIButton {
                 case .filled, .borderless, .destructiveBorderless: return nil
             }
         }()
-    }
-    
-    // MARK: - Functions
-    
-    public func setStyle(_ style: Style) {
-        setup(style: style)
     }
 }

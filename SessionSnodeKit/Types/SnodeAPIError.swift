@@ -12,9 +12,11 @@ public enum SnodeAPIError: LocalizedError {
     case noKeyPair
     case signingFailed
     case signatureVerificationFailed
+    case invalidAuthentication
     case invalidIP
     case emptySnodePool
     case responseFailedValidation
+    case unauthorised
     
     // ONS
     case decryptionFailed
@@ -30,9 +32,11 @@ public enum SnodeAPIError: LocalizedError {
             case .noKeyPair: return "Missing user key pair."
             case .signingFailed: return "Couldn't sign message."
             case .signatureVerificationFailed: return "Failed to verify the signature."
+            case .invalidAuthentication: return "Invalid authentication data provided."
             case .invalidIP: return "Invalid IP."
             case .emptySnodePool: return "Service Node pool is empty."
             case .responseFailedValidation: return "Response failed validation."
+            case .unauthorised: return "Unauthorized"
                 
             // ONS
             case .decryptionFailed: return "Couldn't decrypt ONS name."

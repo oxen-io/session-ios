@@ -61,22 +61,16 @@ public extension UIViewController {
         return viewController
     }
     
-    func createOWSBackButton() -> UIBarButtonItem {
-        return UIViewController.createOWSBackButton(target: self, selector: #selector(backButtonPressed))
-    }
-    
-    static func createOWSBackButton(target: Any?, selector: Selector) -> UIBarButtonItem {
+    static func createOWSBackButton(target: Any?, selector: Selector, using dependencies: Dependencies = Dependencies()) -> UIBarButtonItem {
         let backButton: UIButton = UIButton(type: .custom)
-        
-        let isRTL: Bool = CurrentAppContext().isRTL
 
         // Nudge closer to the left edge to match default back button item.
-        let extraLeftPadding: CGFloat = (isRTL ? 0 : -8)
+        let extraLeftPadding: CGFloat = (Dependencies.isRTL ? 0 : -8)
 
         // Give some extra hit area to the back button. This is a little smaller
         // than the default back button, but makes sense for our left aligned title
         // view in the MessagesViewController
-        let extraRightPadding: CGFloat = (isRTL ? -0 : 10)
+        let extraRightPadding: CGFloat = (Dependencies.isRTL ? -0 : 10)
 
         // Extra hit area above/below
         let extraHeightPadding: CGFloat = 8
@@ -95,7 +89,10 @@ public extension UIViewController {
         )
         backButton.themeTintColor = .textPrimary
         backButton.contentHorizontalAlignment = .left
-        backButton.imageEdgeInsets = UIEdgeInsets(top: 0, leading: extraLeftPadding, bottom: 0, trailing: 0)
+        backButton.imageEdgeInsets = (Dependencies.isRTL ?
+            UIEdgeInsets(top: 0, left: 0, bottom: 0, right: extraLeftPadding) :
+            UIEdgeInsets(top: 0, left: extraLeftPadding, bottom: 0, right: 0)
+        )
         backButton.frame = CGRect(
             x: 0,
             y: 0,
@@ -103,10 +100,10 @@ public extension UIViewController {
             height: ((backButton.image(for: .normal)?.size.height ?? 0) + extraHeightPadding)
         )
 
-        let backItem: UIBarButtonItem = UIBarButtonItem(
-            customView: backButton,
-            accessibilityIdentifier: "\(type(of: self)).back"
-        )
+        let backItem: UIBarButtonItem = UIBarButtonItem(customView: backButton)
+        backButton.accessibilityIdentifier = "\(type(of: self)).back"
+        backButton.accessibilityLabel = "\(type(of: self)).back"
+        backItem.isAccessibilityElement = true
         backItem.width = backButton.frame.width
 
         return backItem;

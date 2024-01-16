@@ -393,12 +393,12 @@
 "MESSAGE_REQUESTS_TITLE" = "Žádosti o zprávy";
 "MESSAGE_REQUESTS_EMPTY_TEXT" = "Žádné nevyřízené žádosti o zprávu";
 "MESSAGE_REQUESTS_CLEAR_ALL" = "Smazat vše";
-"MESSAGE_REQUESTS_CLEAR_ALL_CONFIRMATION_TITLE" = "Jste si jisti, že chcete vymazat všechny žádosti o zprávy?";
+"MESSAGE_REQUESTS_CLEAR_ALL_CONFIRMATION_TITLE" = "Jste si jisti, že chcete vymazat všechny žádosti o zprávy a pozvánky do skupin?";
 "MESSAGE_REQUESTS_CLEAR_ALL_CONFIRMATION_ACTON" = "Smazat";
 "MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON" = "Jste si jisti, že chcete odstranit tuto žádost o zprávu?";
 "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON" = "Opravdu chcete zablokovat tento kontakt?";
-"MESSAGE_REQUESTS_INFO" = "Odesláním zprávy tomuto uživateli automaticky přijmete jejich požadavek na zprávu a odhalíte jim své Session ID.";
-"MESSAGE_REQUESTS_ACCEPTED" = "Your message request has been accepted.";
+"MESSAGE_REQUESTS_INFO" = "Odesláním zprávy tomuto uživateli automaticky přijmete jejich žádost o zprávu a odhalíte jim své Session ID.";
+"MESSAGE_REQUESTS_ACCEPTED" = "Vaše žádost o zprávu byla přijata.";
 "MESSAGE_REQUESTS_NOTIFICATION" = "Máte novou žádost o zprávu";
 "TXT_HIDE_TITLE" = "Skrýt";
 "TXT_DELETE_ACCEPT" = "Přijmout";
@@ -548,7 +548,6 @@
 "modal_permission_library" = "knihovna";
 "DISAPPEARING_MESSAGES_OFF" = "Vypnuto";
 "DISAPPEARING_MESSAGES_SUBTITLE_OFF" = "Vypnuto";
-"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER" = "Zmizí po: %@";
 "COPY_GROUP_URL" = "Kopírovat adresu skupiny";
 "NEW_CONVERSATION_CONTACTS_SECTION_TITLE" = "Kontakty";
 "GROUP_ERROR_NO_MEMBER_SELECTION" = "Vyberte prosím alespoň jednoho člena skupiny";
@@ -574,7 +573,6 @@
 "DISAPPERING_MESSAGES_SAVE_TITLE" = "Nastavit";
 "DISAPPERING_MESSAGES_GROUP_WARNING" = "Toto nastavení se týká všech účastníků této konverzace.";
 "DISAPPERING_MESSAGES_GROUP_WARNING_ADMIN_ONLY" = "Toto nastavení se týká všech účastníků této konverzace. Toto nastavení mohou změnit pouze správci skupiny.";
-"DISAPPERING_MESSAGES_SUMMARY" = "Zmizí po: %@ - %@";
 "DISAPPERING_MESSAGES_INFO_ENABLE" = "%@ nastavil/a zprávy tak, aby zmizely %@ poté, co byly %@";
 "DISAPPERING_MESSAGES_INFO_UPDATE" = "%@ změnil/a zprávy tak, aby zmizely %@ poté, co byly %@";
 "DISAPPERING_MESSAGES_INFO_DISABLE" = "%@ vypnul/a mizející zprávy";
@@ -604,7 +602,7 @@
 "PRIVACY_SECTION_MESSAGE_REQUESTS" = "Žádosti o zprávy";
 
 /* PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_TITLE */
-"PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_TITLE" = "Požadavky na zprávy komunity";
+"PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_TITLE" = "Žádosti o zrávy z komunit";
 
 /* PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_DESCRIPTION */
 "PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_DESCRIPTION" = "Povolit požadavky na zprávy z konverzací komunity.";
@@ -813,3 +811,195 @@ The point that a message will disappear in a disappearing message update message
 
 /* The point that a message will disappear in a disappearing message update message for disappear after send */
 "DISAPPEARING_MESSAGE_STATE_SENT" = "odesláno";
+
+/* The current state for the legacy disappearing messages setting, the '%@' will be replaced by a short-form duration */
+"DISAPPERING_MESSAGES_SUMMARY_LEGACY" = "Zmizí po - %@";
+
+/* The current state for the disappear after read setting, the '%@' will be replaced by a short-form duration */
+"DISAPPERING_MESSAGES_SUMMARY_READ" = "Zmizí po přečtení - %@";
+
+/* The current state for the disappear after send setting, the '%@' will be replaced by a short-form duration */
+"DISAPPERING_MESSAGES_SUMMARY_SEND" = "Zmizí po odeslání - %@";
+
+/* The subtitle describing the current legacy disappearing messages setting, the '%@' will be replaced by a duration */
+"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_LEGACY" = "Zmizí po: %@";
+
+/* The subtitle describing the current disappear after read setting, the '%@' will be replaced by a duration */
+"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_READ" = "Zmizí po přečtení: %@";
+
+/* The subtitle describing the current disappear after send setting, the '%@' will be replaced by a duration */
+"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_SEND" = "Zmizí po odeslání: %@";
+
+/* An informational message displayed when the name of a group is changed, the '%@' will be the updated name. */
+"GROUP_MESSAGE_INFO_NAME_UPDATED_TO" = "Název skupiny je nyní %@.";
+
+/* An informational message displayed when the name of a group is changed. */
+"GROUP_MESSAGE_INFO_NAME_UPDATED" = "Název skupiny aktualizován.";
+
+/* An informational message displayed when the display picture of a group is changed. */
+"GROUP_MESSAGE_INFO_PICTURE_UPDATED" = "Obrázek skupiny aktualizován.";
+
+/* An informational message displayed when a single member joined the group, the '%@' will be the members name. */
+"GROUP_MESSAGE_INFO_MEMBER_ADDED" = "%@ se připojil/a ke skupině.";
+
+/* An informational message displayed when two members joined the group, the '%@' will be the names of both members. */
+"GROUP_MESSAGE_INFO_TWO_MEMBERS_ADDED" = "%@ a %@ se připojili ke skupině.";
+
+/* An informational message displayed when multiple members joined the group, the first '%@' will be the first members name and the second '%@' will be the number of additional members added. */
+"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_ADDED" = "%@ a %@ další se připojili ke skupině.";
+
+/* An informational message displayed when a single member was removed from the group, the '%@' will be the members. */
+"GROUP_MESSAGE_INFO_MEMBER_REMOVED" = "%@ byl/a odebrán/a ze skupiny.";
+
+/* An informational message displayed when two members were removed from the group, the '%@' will be the members names. */
+"GROUP_MESSAGE_INFO_TWO_MEMBERS_REMOVED" = "%@ a %@ byli odebráni ze skupiny.";
+
+/* An informational message displayed when multiple members were removed from the group, the first '%@' will be the first members name and the second '%@' will be the number of additional members removed. */
+"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_REMOVED" = "%@ a %@ další byli odebráni ze skupiny.";
+
+/* An informational message displayed when a member leaves the group. */
+"GROUP_MESSAGE_INFO_MEMBER_LEFT" = "%@ opustil/a skupinu.";
+
+/* An informational message displayed when a member of the group was promoted to admin, the '%@' will be the members name. */
+"GROUP_MESSAGE_INFO_MEMBER_PROMOTED" = "%@ byl/a povýšen/a na správce.";
+
+/* An informational message displayed when two members of the group were promoted to admin, the '%@' will be the members names. */
+"GROUP_MESSAGE_INFO_TWO_MEMBERS_PROMOTED" = "%@ a %@ byli povýšeni na správce.";
+
+/* An informational message displayed when multiple members of the group were promoted to admin, the first '%@' will be the first members name and the second '%@' will be the number of additional members promoted. */
+"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_PROMOTED" = "%@ a %@ další byli povýšeni na správce.";
+
+/* An informational message displayed the current user was removed from a group, the '%@' will be the name of the group. */
+"GROUP_MESSAGE_INFO_REMOVED" = "Byli jste odebráni %@.";
+
+/* Description of a warning prompt when deleting an invitation to join a group conversation. */
+"MESSAGE_REQUESTS_GROUP_DELETE_CONFIRMATION_ACTON" = "Jste si jisti, že chcete smazat tuto pozvánku do skupiny?";
+
+/* Description of a confirmation prompt when blocking an invitation to join a group conversation. The '%@' will be replaced with the name of the user that sent the invitation. */
+"MESSAGE_REQUESTS_GROUP_BLOCK_CONFIRMATION_ACTON" = "Jste si jisti, že chcete zablokovat %@? Zablokovaní uživatelé vám nemohou posílat žádosti o zprávy, pozvánky do skupin ani vám nemohou volat.";
+
+/* An informational message displayed when the user has been invited to join a group, the first '%@' will be the name of the user that sent the invitation and the second '%@' will be the name of the group. */
+"GROUP_MESSAGE_INFO_INVITED" = "%@ vás pozval(a) přidat se k %@.";
+
+/* Message within a conversation indicating the device was unable to delete a group conversation */
+"group_unable_to_delete" = "Nelze smazat skupinu, zkuste to prosím znovu.";
+
+/* Information displayed above the input when opening an invitation to join a group. */
+"GROUP_MESSAGE_REQUEST_INFO" = "Odesláním zprávy do této skupiny automaticky přijmete pozvánku do skupiny.";
+
+/* An error indicating we were unable to retrieve the required data for some reason. */
+"ERROR_UNABLE_TO_FIND_DATA" = "Došlo k problému při načítání požadovaných dat. Zkuste to prosím později.";
+
+/* A title for the list of group members. */
+"GROUP_MEMBERS" = "Členové skupiny";
+
+/* The status for a group member while their invite is being sent. */
+"GROUP_MEMBER_STATUS_SENDING" = "Odeslání pozvánky";
+
+/* The status for a group member while their invite is pending. */
+"GROUP_MEMBER_STATUS_SENT" = "Pozvánka odeslána";
+
+/* The status for a group member if their invitation failed to send. */
+"GROUP_MEMBER_STATUS_FAILED" = "Pozvánka se nezdařila";
+
+/* The status for a group admin while their invite is being sent. */
+"GROUP_ADMIN_STATUS_SENDING" = "Odesílání propagace správce";
+
+/* The status for a group admin while their invite is pending. */
+"GROUP_ADMIN_STATUS_SENT" = "Propagace správce odeslána";
+
+/* The status for a group admin if their invitation failed to send. */
+"GROUP_ADMIN_STATUS_FAILED" = "Propagace správce selhala";
+
+/* A title for the modal to edit the group display picture. */
+"EDIT_GROUP_DISPLAY_PICTURE" = "Nastavit zobrazovaný obrázek skupiny";
+
+/* Error message when trying to update the display picture. */
+"EDIT_DISPLAY_PICTURE_ERROR" = "Nelze aktualizovat zobrazovaný obrázek.";
+
+/* Error message when trying to remove the display picture. */
+"EDIT_DISPLAY_PICTURE_ERROR_REMOVE" = "Zobrazovaný obrázek nelze odstranit.";
+
+/* Placeholder text for editing the name of a group. */
+"EDIT_GROUP_NAME_PLACEHOLDER" = "Zadejte název skupiny";
+
+/* Error message when the edited name of a group is empty. */
+"EDIT_GROUP_NAME_ERROR_MISSING" = "Vyberte název skupiny.";
+
+/* Error message when the edited name of a group is too long. */
+"EDIT_GROUP_NAME_ERROR_LONG" = "Prosím vyberte kratší název skupiny.";
+
+/* Placeholder text for editing the description of a group. */
+"EDIT_GROUP_DESCRIPTION_PLACEHOLDER" = "Zadejte popis skupiny";
+
+/* Error message when the edited description of a group is too long. */
+"EDIT_GROUP_DESCRIPTION_ERROR_LONG" = "Prosím vyberte kratší popis skupiny.";
+
+/* Error message when the user attempts to remove an admin from a group. */
+"EDIT_GROUP_MEMBERS_ERROR_REMOVE_ADMIN" = "Správce nelze odebrat";
+
+/* A title for the button to send invites for members to join groups. */
+"GROUP_ACTION_INVITE" = "Pozvat";
+
+/* A title for the button to send invites to contacts to join groups. */
+"GROUP_ACTION_INVITE_CONTACTS" = "Pozvat kontakty";
+
+/* Text which appears when all of the users contacts are already part of the group they want to invite contacts to. */
+"GROUP_ACTION_INVITE_EMPTY_STATE" = "Nemáte žádné další kontakty.";
+
+/* A toast which indicates that a single invitation to join the group is being sent. */
+"GROUP_ACTION_INVITE_SENDING" = "Odeslání pozvánky";
+
+/* A toast which indicates that multiple invitations to join the group are being sent. */
+"GROUP_ACTION_INVITE_SENDING_MULTIPLE" = "Odeslání pozvánek";
+
+/* A toast which indicates that a single invitation to join a group failed to send, the first '%@' will be the name of the member that couldn't be invited and the second '%@' will be the name of the group. */
+"GROUP_ACTION_INVITE_FAILED_ONE" = "Nepodařilo se pozvat %@ do %@";
+
+/* A toast which indicates that two invitation to join a group failed to send, the first '%@' will be the name of the first member that couldn't be invited, the second '%@' will be the name of the second member that couldn't be invited, and the third '%@' will be the name of the group. */
+"GROUP_ACTION_INVITE_FAILED_TWO" = "Nepodařilo se pozvat %@ a %@ do %@";
+
+/* A toast which indicates multiple invitations to join a group failed to send, the first '%@' will be the name of the first member that couldn't be invited, the second '%@' will be the number of other members that couldn't be invited, and the third '%@' will be the name of the group. */
+"GROUP_ACTION_INVITE_FAILED_MULTIPLE" = "Nepodařilo se pozvat %@ a %@ další do %@";
+
+/* A title for the screen to select which group members should receive promotions to admin. */
+"GROUP_ACTION_PROMOTE_ADMINS" = "Povýšit správce";
+
+/* A title for the button to send promotions to members of a group. */
+"GROUP_ACTION_PROMOTE" = "Povýšit";
+
+/* Text which appears when all of the members of a group are already admins. */
+"GROUP_ACTION_PROMOTE_EMPTY_STATE" = "V této skupině již nejsou žádní další členové.";
+
+/* A toast which indicates that a single promotion to admin within a group is being sent. */
+"GROUP_ACTION_PROMOTE_SENDING" = "Odesílání propagace";
+
+/* A toast which indicates that multiple promotions to admin within a group are being sent. */
+"GROUP_ACTION_PROMOTE_SENDING_MULTIPLE" = "Odesílání propagací";
+
+/* A toast which indicates that a single promotion to admin within a group failed to send, the first '%@' will be the name of the member that couldn't be promoted and the second '%@' will be the name of the group. */
+"GROUP_ACTION_PROMOTE_FAILED_ONE" = "Selhalo povýšení %@ v %@";
+
+/* A toast which indicates that two promotions to admin within a group failed to send, the first '%@' will be the name of the first member that couldn't be promoted, the second '%@' will be the name of the second member that couldn't be promoted, and the third '%@' will be the name of the group. */
+"GROUP_ACTION_PROMOTE_FAILED_TWO" = "Selhalo povýšení %@ a %@ v %@";
+
+/* A toast which indicates multiple promotions to admin within a group failed to send, the first '%@' will be the name of the first member that couldn't be promoted, the second '%@' will be the number of other members that couldn't be promoted, and the third '%@' will be the name of the group. */
+"GROUP_ACTION_PROMOTE_FAILED_MULTIPLE" = "Selhalo povýšení %@ a %@ dalších v %@";
+
+/* A warning shown at the top of a conversation to indicate that the conversation is a legacy group conversation which will stop functioning correctly on a certain date, the '%@' will be replaced with the date it will stop working. */
+"LEGACY_GROUPS_DEPRECATED_BANNER" = "Skupiny byly přepracovány, pro využití tohoto upgrade vytvořte prosím novou skupinu. Funkčnost staré skupiny bude omezena od %@.";
+
+/* Title for the prompt which appears when editing the group name and description. */
+"EDIT_GROUP_INFO_TITLE" = "Upravit informace o skupině";
+
+/* Message for the prompt which appears when editing the group name and description. */
+"EDIT_GROUP_INFO_MESSAGE" = "Název a popis skupiny jsou viditelné pro všechny členy skupiny.";
+
+/* Title for the prompt which appears when editing a legacy group name. */
+"EDIT_LEGACY_GROUP_INFO_TITLE" = "Upravit název skupiny";
+
+/* Message for the prompt which appears when editing a legacy group name. */
+"EDIT_LEGACY_GROUP_INFO_MESSAGE" = "Název skupiny je viditelný pro všechny členy skupiny.";
+
+/* An informational message displayed when the user has been invited to join a group, the '%@' will be the name of the group. */
+"GROUP_MESSAGE_INFO_INVITED_FALLBACK" = "You were invited to join %@.";

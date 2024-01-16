@@ -142,7 +142,7 @@ public class ModalActivityIndicatorViewController: OWSViewController {
         }
         else {
             self.view.addSubview(spinner)
-            spinner.autoCenterInSuperview()
+            spinner.center(in: self.view)
         }
 
         if canCancel {

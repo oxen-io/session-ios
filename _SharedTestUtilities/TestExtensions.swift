@@ -7,3 +7,11 @@ public extension Collection {
         return (indices.contains(index) ? self[index] : nil)
     }
 }
+
+public extension Array {
+    func allCombinations() -> [[Element]] {
+        guard !isEmpty else { return [[]] }
+        
+        return Array(self[1...]).allCombinations().flatMap { [$0, ([self[0]] + $0)] }
+    }
+}

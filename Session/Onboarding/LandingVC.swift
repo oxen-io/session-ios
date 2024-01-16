@@ -2,8 +2,10 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 final class LandingVC: BaseVC {
+    private let dependencies: Dependencies
     
     // MARK: - Components
     
@@ -34,6 +36,18 @@ final class LandingVC: BaseVC {
     // MARK: - Settings
     
     private static let fakeChatViewHeight = isIPhone5OrSmaller ? CGFloat(234) : CGFloat(260)
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - Lifecycle
     
@@ -120,7 +134,7 @@ final class LandingVC: BaseVC {
     }
     
     @objc private func link() {
-        let linkVC = LinkDeviceVC()
+        let linkVC = LinkDeviceVC(using: dependencies)
         navigationController!.pushViewController(linkVC, animated: true)
     }
 }

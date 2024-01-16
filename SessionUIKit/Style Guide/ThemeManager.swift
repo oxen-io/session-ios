@@ -35,15 +35,16 @@ public enum ThemeManager {
     private static var _initialTheme: Theme?
     private static var _initialPrimaryColor: Theme.PrimaryColor?
     private static var _initialMatchSystemNightModeSetting: Bool?
+    internal static var dependencies: Dependencies = Dependencies()
     
     public static var currentTheme: Theme = {
-        (_initialTheme ?? Storage.shared[.theme].defaulting(to: Theme.classicDark))
+        (_initialTheme ?? dependencies[singleton: .storage, key: .theme].defaulting(to: Theme.classicDark))
     }() {
         didSet {
             // Only update if it was changed
             guard oldValue != currentTheme else { return }
             
-            Storage.shared.writeAsync { db in
+            dependencies[singleton: .storage].writeAsync { db in
                 db[.theme] = currentTheme
             }
             
@@ -61,13 +62,13 @@ public enum ThemeManager {
     }
     
     public static var primaryColor: Theme.PrimaryColor = {
-        (_initialPrimaryColor ?? Storage.shared[.themePrimaryColor].defaulting(to: Theme.PrimaryColor.green))
+        (_initialPrimaryColor ?? dependencies[singleton: .storage, key: .themePrimaryColor].defaulting(to: Theme.PrimaryColor.green))
     }() {
         didSet {
             // Only update if it was changed
             guard oldValue != primaryColor else { return }
             
-            Storage.shared.writeAsync { db in
+            dependencies[singleton: .storage].writeAsync { db in
                 db[.themePrimaryColor] = primaryColor
             }
             
@@ -76,13 +77,13 @@ public enum ThemeManager {
     }
     
     public static var matchSystemNightModeSetting: Bool = {
-        (_initialMatchSystemNightModeSetting ?? Storage.shared[.themeMatchSystemDayNightCycle])
+        (_initialMatchSystemNightModeSetting ?? dependencies[singleton: .storage, key: .themeMatchSystemDayNightCycle])
     }() {
         didSet {
             // Only update if it was changed
             guard oldValue != matchSystemNightModeSetting else { return }
             
-            Storage.shared.writeAsync { db in
+            dependencies[singleton: .storage].writeAsync { db in
                 db[.themeMatchSystemDayNightCycle] = matchSystemNightModeSetting
             }
             
@@ -134,9 +135,9 @@ public enum ThemeManager {
         }
     }
     
-    public static func applySavedTheme() {
-        ThemeManager.primaryColor = Storage.shared[.themePrimaryColor].defaulting(to: Theme.PrimaryColor.green)
-        ThemeManager.currentTheme = Storage.shared[.theme].defaulting(to: Theme.classicDark)
+    public static func applySavedTheme(using dependencies: Dependencies) {
+        ThemeManager.primaryColor = dependencies[singleton: .storage, key: .themePrimaryColor].defaulting(to: Theme.PrimaryColor.green)
+        ThemeManager.currentTheme = dependencies[singleton: .storage, key: .theme].defaulting(to: Theme.classicDark)
     }
     
     public static func applyNavigationStyling() {

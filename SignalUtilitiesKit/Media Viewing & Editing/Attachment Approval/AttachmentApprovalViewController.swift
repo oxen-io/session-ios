@@ -2,7 +2,7 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 //
 
-import Foundation
+import UIKit
 import AVFoundation
 import MediaPlayer
 import CoreServices
@@ -17,8 +17,7 @@ public protocol AttachmentApprovalViewControllerDelegate: AnyObject {
         didApproveAttachments attachments: [SignalAttachment],
         forThreadId threadId: String,
         threadVariant: SessionThread.Variant,
-        messageText: String?,
-        using dependencies: Dependencies
+        messageText: String?
     )
 
     func attachmentApprovalDidCancel(_ attachmentApproval: AttachmentApprovalViewController)
@@ -58,6 +57,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
 
     // MARK: - Properties
 
+    private let dependencies: Dependencies
     private let mode: Mode
     private let threadId: String
     private let threadVariant: SessionThread.Variant
@@ -127,13 +127,16 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
         notImplemented()
     }
 
-    required public init(
+    required public init?(
         mode: Mode,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        attachments: [SignalAttachment]
+        attachments: [SignalAttachment],
+        using dependencies: Dependencies
     ) {
-        assert(attachments.count > 0)
+        guard !attachments.isEmpty else { return nil }
+        
+        self.dependencies = dependencies
         self.mode = mode
         self.threadId = threadId
         self.threadVariant = threadVariant
@@ -155,7 +158,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(didBecomeActive),
-            name: .OWSApplicationDidBecomeActive,
+            name: .sessionDidBecomeActive,
             object: nil
         )
     }
@@ -168,14 +171,17 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
         threadId: String,
         threadVariant: SessionThread.Variant,
         attachments: [SignalAttachment],
-        approvalDelegate: AttachmentApprovalViewControllerDelegate
-    ) -> UINavigationController {
-        let vc = AttachmentApprovalViewController(
+        approvalDelegate: AttachmentApprovalViewControllerDelegate,
+        using dependencies: Dependencies
+    ) -> UINavigationController? {
+        guard let vc: AttachmentApprovalViewController = AttachmentApprovalViewController(
             mode: .modal,
             threadId: threadId,
             threadVariant: threadVariant,
-            attachments: attachments
-        )
+            attachments: attachments,
+            using: dependencies
+        ) else { return nil }
+        
         vc.approvalDelegate = approvalDelegate
         
         let navController = StyledNavigationController(rootViewController: vc)
@@ -272,7 +278,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
     // MARK: - Layout
     
     private func setupLayout() {
-        touchInterceptorView.autoPinEdgesToSuperviewEdges()
+        touchInterceptorView.pin(to: view)
     }
     
     // MARK: - Notifications
@@ -487,7 +493,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
         }
 
         Logger.debug("cache miss.")
-        let viewController = AttachmentPrepViewController(attachmentItem: item)
+        let viewController = AttachmentPrepViewController(attachmentItem: item, using: dependencies)
         viewController.prepDelegate = self
         cachedPages[item] = viewController
 
@@ -572,7 +578,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
         var dataUTI = kUTTypeImage as String
         let maybeDstData: Data? = {
             let isLossy: Bool = (
-                attachmentItem.attachment.mimeType.caseInsensitiveCompare(OWSMimeTypeImageJpeg) == .orderedSame
+                attachmentItem.attachment.mimeType.caseInsensitiveCompare(MimeTypeUtil.MimeType.imageJpeg) == .orderedSame
             )
             
             if isLossy {
@@ -589,7 +595,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
             owsFailDebug("Could not export for output.")
             return attachmentItem.attachment
         }
-        guard let dataSource = DataSourceValue.dataSource(with: dstData, utiType: dataUTI) else {
+        guard let dataSource = DataSourceValue(data: dstData, utiType: dataUTI) else {
             owsFailDebug("Could not prepare data source for output.")
             return attachmentItem.attachment
         }
@@ -597,7 +603,7 @@ public class AttachmentApprovalViewController: UIPageViewController, UIPageViewC
         // Rewrite the filename's extension to reflect the output file format.
         var filename: String? = attachmentItem.attachment.sourceFilename
         if let sourceFilename = attachmentItem.attachment.sourceFilename {
-            if let fileExtension: String = MIMETypeUtil.fileExtension(forUTIType: dataUTI) {
+            if let fileExtension: String = MimeTypeUtil.fileExtension(forUtiType: dataUTI) {
                 filename = (sourceFilename as NSString).deletingPathExtension.appendingFileExtension(fileExtension)
             }
         }
@@ -676,7 +682,7 @@ extension AttachmentApprovalViewController: AttachmentTextToolbarDelegate {
 
     func attachmentTextToolbarDidEndEditing(_ attachmentTextToolbar: AttachmentTextToolbar) {}
 
-    func attachmentTextToolbarDidTapSend(_ attachmentTextToolbar: AttachmentTextToolbar, using dependencies: Dependencies) {
+    func attachmentTextToolbarDidTapSend(_ attachmentTextToolbar: AttachmentTextToolbar) {
         // Toolbar flickers in and out if there are errors
         // and remains visible momentarily after share extension is dismissed.
         // It's easiest to just hide it at this point since we're done with it.
@@ -689,8 +695,7 @@ extension AttachmentApprovalViewController: AttachmentTextToolbarDelegate {
             didApproveAttachments: attachments,
             forThreadId: threadId,
             threadVariant: threadVariant,
-            messageText: attachmentTextToolbar.messageText,
-            using: dependencies
+            messageText: attachmentTextToolbar.messageText
         )
     }
 

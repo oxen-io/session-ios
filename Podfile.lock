@@ -1,10 +1,7 @@
 PODS:
-  - CocoaLumberjack (3.8.0):
-    - CocoaLumberjack/Core (= 3.8.0)
-  - CocoaLumberjack/Core (3.8.0)
-  - Curve25519Kit (2.1.0):
-    - CocoaLumberjack
-    - SignalCoreKit
+  - CocoaLumberjack (3.8.1):
+    - CocoaLumberjack/Core (= 3.8.1)
+  - CocoaLumberjack/Core (3.8.1)
   - DifferenceKit (1.3.0):
     - DifferenceKit/Core (= 1.3.0)
     - DifferenceKit/UIKitExtension (= 1.3.0)
@@ -30,14 +27,12 @@ PODS:
     - NVActivityIndicatorView/Base (= 5.1.1)
   - NVActivityIndicatorView/Base (5.1.1)
   - OpenSSL-Universal (1.1.1300)
-  - PureLayout (3.1.9)
   - Quick (7.3.0)
   - Reachability (3.2)
   - SAMKeychain (1.5.3)
   - SignalCoreKit (1.0.0):
     - CocoaLumberjack
     - OpenSSL-Universal
-  - Sodium (0.9.1)
   - SQLCipher (4.5.3):
     - SQLCipher/standard (= 4.5.3)
   - SQLCipher/common (4.5.3)
@@ -46,166 +41,77 @@ PODS:
   - SwiftProtobuf (1.5.0)
   - WebRTC-lib (114.0.0)
   - xcbeautify (0.17.0)
-  - YapDatabase/SQLCipher (3.1.1):
-    - YapDatabase/SQLCipher/Core (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions (= 3.1.1)
-  - YapDatabase/SQLCipher/Core (3.1.1):
-    - CocoaLumberjack
-    - SQLCipher (>= 3.4.0)
-  - YapDatabase/SQLCipher/Extensions (3.1.1):
-    - YapDatabase/SQLCipher/Core
-    - YapDatabase/SQLCipher/Extensions/ActionManager (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/AutoView (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/CloudCore (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/CloudKit (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/ConnectionPool (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/ConnectionProxy (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/CrossProcessNotification (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/FilteredView (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/FullTextSearch (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/Hooks (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/ManualView (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/Relationships (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/RTreeIndex (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/SearchResultsView (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/SecondaryIndex (= 3.1.1)
-    - YapDatabase/SQLCipher/Extensions/View (= 3.1.1)
-  - YapDatabase/SQLCipher/Extensions/ActionManager (3.1.1):
-    - YapDatabase/SQLCipher/Core
-    - YapDatabase/SQLCipher/Extensions/AutoView
-  - YapDatabase/SQLCipher/Extensions/AutoView (3.1.1):
-    - YapDatabase/SQLCipher/Core
-    - YapDatabase/SQLCipher/Extensions/View
-  - YapDatabase/SQLCipher/Extensions/CloudCore (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/CloudKit (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/ConnectionPool (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/ConnectionProxy (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/CrossProcessNotification (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/FilteredView (3.1.1):
-    - YapDatabase/SQLCipher/Core
-    - YapDatabase/SQLCipher/Extensions/View
-  - YapDatabase/SQLCipher/Extensions/FullTextSearch (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/Hooks (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/ManualView (3.1.1):
-    - YapDatabase/SQLCipher/Core
-    - YapDatabase/SQLCipher/Extensions/View
-  - YapDatabase/SQLCipher/Extensions/Relationships (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/RTreeIndex (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/SearchResultsView (3.1.1):
-    - YapDatabase/SQLCipher/Core
-    - YapDatabase/SQLCipher/Extensions/AutoView
-    - YapDatabase/SQLCipher/Extensions/FullTextSearch
-  - YapDatabase/SQLCipher/Extensions/SecondaryIndex (3.1.1):
-    - YapDatabase/SQLCipher/Core
-  - YapDatabase/SQLCipher/Extensions/View (3.1.1):
-    - YapDatabase/SQLCipher/Core
   - YYImage/Core (1.0.4)
   - YYImage/libwebp (1.0.4):
     - libwebp
     - YYImage/Core
 
 DEPENDENCIES:
-  - Curve25519Kit (from `https://github.com/oxen-io/session-ios-curve-25519-kit.git`, branch `session-version`)
   - DifferenceKit
   - GRDB.swift/SQLCipher
   - Nimble
   - NVActivityIndicatorView
-  - PureLayout (~> 3.1.8)
   - Quick
   - Reachability
   - SAMKeychain
   - SignalCoreKit (from `https://github.com/oxen-io/session-ios-core-kit`, branch `session-version`)
-  - Sodium (from `https://github.com/oxen-io/session-ios-swift-sodium.git`, branch `session-build`)
   - SQLCipher (~> 4.5.3)
   - SwiftProtobuf (~> 1.5.0)
   - WebRTC-lib
   - xcbeautify
-  - YapDatabase/SQLCipher (from `https://github.com/oxen-io/session-ios-yap-database.git`, branch `signal-release`)
   - YYImage/libwebp (from `https://github.com/signalapp/YYImage`)
 
 SPEC REPOS:
   https://github.com/CocoaPods/Specs.git:
-    - CocoaLumberjack
     - DifferenceKit
     - GRDB.swift
     - NVActivityIndicatorView
     - OpenSSL-Universal
-    - PureLayout
     - Reachability
     - SAMKeychain
     - SQLCipher
     - SwiftProtobuf
     - WebRTC-lib
   trunk:
+    - CocoaLumberjack
     - libwebp
     - Nimble
     - Quick
     - xcbeautify
 
 EXTERNAL SOURCES:
-  Curve25519Kit:
-    :branch: session-version
-    :git: https://github.com/oxen-io/session-ios-curve-25519-kit.git
   SignalCoreKit:
     :branch: session-version
     :git: https://github.com/oxen-io/session-ios-core-kit
-  Sodium:
-    :branch: session-build
-    :git: https://github.com/oxen-io/session-ios-swift-sodium.git
-  YapDatabase:
-    :branch: signal-release
-    :git: https://github.com/oxen-io/session-ios-yap-database.git
   YYImage:
     :git: https://github.com/signalapp/YYImage
 
 CHECKOUT OPTIONS:
-  Curve25519Kit:
-    :commit: ee1bc83e61d9d672105eed85a4b8fbaec3d376f5
-    :git: https://github.com/oxen-io/session-ios-curve-25519-kit.git
   SignalCoreKit:
     :commit: 4590c2737a2b5dc0ef4ace9f9019b581caccc1de
     :git: https://github.com/oxen-io/session-ios-core-kit
-  Sodium:
-    :commit: 4ecfe2ddfd75e7b396c57975b4163e5c8cf4d5cc
-    :git: https://github.com/oxen-io/session-ios-swift-sodium.git
-  YapDatabase:
-    :commit: d84069e25e12a16ab4422e5258127a04b70489ad
-    :git: https://github.com/oxen-io/session-ios-yap-database.git
   YYImage:
     :commit: 62a4cede20bcf31da73d18163408e46a92f171c6
     :git: https://github.com/signalapp/YYImage
 
 SPEC CHECKSUMS:
-  CocoaLumberjack: 78abfb691154e2a9df8ded4350d504ee19d90732
-  Curve25519Kit: e63f9859ede02438ae3defc5e1a87e09d1ec7ee6
+  CocoaLumberjack: 5c7e64cdb877770859bddec4d3d5a0d7c9299df9
   DifferenceKit: ab185c4d7f9cef8af3fcf593e5b387fb81e999ca
   GRDB.swift: fe420b1af49ec519c7e96e07887ee44f5dfa2b78
   libwebp: 1786c9f4ff8a279e4dac1e8f385004d5fc253009
   Nimble: f8a8219d16f176429b951e8f7e72df5c23ceddc0
   NVActivityIndicatorView: 1f6c5687f1171810aa27a3296814dc2d7dec3667
   OpenSSL-Universal: e7311447fd2419f57420c79524b641537387eff2
-  PureLayout: 5fb5e5429519627d60d079ccb1eaa7265ce7cf88
   Quick: d32871931c05547cb4e0bc9009d66a18b50d8558
   Reachability: 33e18b67625424e47b6cde6d202dce689ad7af96
   SAMKeychain: 483e1c9f32984d50ca961e26818a534283b4cd5c
   SignalCoreKit: 1fbd8732163ef76de16cd1107d1fa3684b607e5d
-  Sodium: a7d42cb46e789d2630fa552d35870b416ed055ae
   SQLCipher: 57fa9f863fa4a3ed9dd3c90ace52315db8c0fdca
   SwiftProtobuf: 241400280f912735c1e1b9fe675fdd2c6c4d42e2
   WebRTC-lib: d83df8976fa608b980f1d85796b3de66d60a1953
   xcbeautify: 6e2f57af5c3a86d490376d5758030a8dcc201c1b
-  YapDatabase: b418a4baa6906e8028748938f9159807fd039af4
   YYImage: f1ddd15ac032a58b78bbed1e012b50302d318331
 
-PODFILE CHECKSUM: dd814a5a92577bb2a94dac6a1cc482f193721cdf
+PODFILE CHECKSUM: 7d3ca2ae9cbbead1dcc5fa719a11b760177c2b4a
 
-COCOAPODS: 1.12.1
+COCOAPODS: 1.14.3

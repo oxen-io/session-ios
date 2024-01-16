@@ -6,6 +6,7 @@ import SignalUtilitiesKit
 import SignalCoreKit
 import SessionUIKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 public class StyledSearchController: UISearchController {
     public override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -75,10 +76,11 @@ extension ConversationSearchController: UISearchResultsUpdating {
         Logger.verbose("searchBar.text: \( searchController.searchBar.text ?? "<blank>")")
 
         guard
+            let dependencies: Dependencies = self.delegate?.conversationSearchControllerDependencies(),
             let searchText: String = searchController.searchBar.text?.stripped,
             searchText.count >= ConversationSearchController.minimumSearchTextLength
         else {
-            self.resultsBar.updateResults(results: nil)
+            self.resultsBar.updateResults(results: nil, visibleItemIds: nil)
             self.delegate?.conversationSearchController(self, didUpdateSearchResults: nil, searchText: nil)
             return
         }
@@ -86,7 +88,7 @@ extension ConversationSearchController: UISearchResultsUpdating {
         let threadId: String = self.threadId
         
         DispatchQueue.global(qos: .default).async { [weak self] in
-            let results: [Interaction.TimestampInfo]? = Storage.shared.read { db -> [Interaction.TimestampInfo] in
+            let results: [Interaction.TimestampInfo]? = dependencies[singleton: .storage].read { db -> [Interaction.TimestampInfo] in
                 self?.resultsBar.willStartSearching(readConnection: db)
                 
                 return try Interaction.idsForTermWithin(
@@ -105,7 +107,7 @@ extension ConversationSearchController: UISearchResultsUpdating {
                 guard let strongSelf = self else { return }
                 
                 self?.resultsBar.stopLoading()
-                self?.resultsBar.updateResults(results: results)
+                self?.resultsBar.updateResults(results: results, visibleItemIds: self?.delegate?.currentVisibleIds())
                 self?.delegate?.conversationSearchController(strongSelf, didUpdateSearchResults: results, searchText: searchText)
             }
         }
@@ -290,12 +292,18 @@ public final class SearchResultsBar: UIView {
         self.readConnection.mutate { $0 = readConnection }
     }
 
-    func updateResults(results: [Interaction.TimestampInfo]?) {
+    func updateResults(results: [Interaction.TimestampInfo]?, visibleItemIds: [Int64]?) {
         // We want to ignore search results that don't match the current searchId (this
         // will happen when searching large threads with short terms as the shorter terms
         // will take much longer to resolve than the longer terms)
         currentIndex = {
             guard let results: [Interaction.TimestampInfo] = results, !results.isEmpty else { return nil }
+            
+            // Check if there is a visible item which matches the results and if so use that index (use
+            // the `lastIndex` as we want to select the message closest to the top of the screen)
+            if let visibleItemIds: [Int64] = visibleItemIds, let targetIndex: Int = results.lastIndex(where: { visibleItemIds.contains($0.id) }) {
+                return targetIndex
+            }
             
             if let currentIndex: Int = currentIndex {
                 return max(0, min(currentIndex, results.count - 1))
@@ -366,6 +374,8 @@ public final class SearchResultsBar: UIView {
 // MARK: - ConversationSearchControllerDelegate
 
 public protocol ConversationSearchControllerDelegate: UISearchControllerDelegate {
+    func conversationSearchControllerDependencies() -> Dependencies
+    func currentVisibleIds() -> [Int64]
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Interaction.TimestampInfo]?, searchText: String?)
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didSelectInteractionInfo: Interaction.TimestampInfo)
 }

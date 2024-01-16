@@ -1,11 +1,7 @@
+import UIKit
 import SessionUIKit
 
-@objc(LKViewControllerUtilities)
-public final class ViewControllerUtilities: NSObject {
-
-    private override init() { }
-
-    @objc(setUpDefaultSessionStyleForVC:withTitle:customBackButton:)
+public final class ViewControllerUtilities {
     public static func setUpDefaultSessionStyle(for vc: UIViewController, title: String?, hasCustomBackButton: Bool) {
         // Customize title
         if let title = title {

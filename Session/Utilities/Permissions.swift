@@ -10,6 +10,7 @@ import SessionMessagingKit
 public enum Permissions {
     @discardableResult public static func requestCameraPermissionIfNeeded(
         presentingViewController: UIViewController? = nil,
+        using dependencies: Dependencies,
         onAuthorized: (() -> Void)? = nil
     ) -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -18,7 +19,10 @@ public enum Permissions {
                 return true
             
             case .denied, .restricted:
-                guard let presentingViewController: UIViewController = (presentingViewController ?? CurrentAppContext().frontmostViewController()) else { return false }
+                guard
+                    dependencies.hasInitialised(singleton: .appContext),
+                    let presentingViewController: UIViewController = (presentingViewController ?? dependencies[singleton: .appContext].frontmostViewController)
+                else { return false }
                 
                 let confirmationModal: ConfirmationModal = ConfirmationModal(
                     info: ConfirmationModal.Info(
@@ -52,12 +56,17 @@ public enum Permissions {
 
     public static func requestMicrophonePermissionIfNeeded(
         presentingViewController: UIViewController? = nil,
+        using dependencies: Dependencies,
         onNotGranted: (() -> Void)? = nil
     ) {
         switch AVAudioSession.sharedInstance().recordPermission {
             case .granted: break
             case .denied:
-                guard let presentingViewController: UIViewController = (presentingViewController ?? CurrentAppContext().frontmostViewController()) else { return }
+                guard
+                    dependencies.hasInitialised(singleton: .appContext),
+                    let presentingViewController: UIViewController = (presentingViewController ?? dependencies[singleton: .appContext].frontmostViewController)
+                else { return }
+                
                 onNotGranted?()
                 
                 let confirmationModal: ConfirmationModal = ConfirmationModal(
@@ -91,6 +100,7 @@ public enum Permissions {
 
     public static func requestLibraryPermissionIfNeeded(
         presentingViewController: UIViewController? = nil,
+        using dependencies: Dependencies,
         onAuthorized: @escaping () -> Void
     ) {
         let authorizationStatus: PHAuthorizationStatus
@@ -129,7 +139,10 @@ public enum Permissions {
         switch authorizationStatus {
             case .authorized, .limited: onAuthorized()
             case .denied, .restricted:
-                guard let presentingViewController: UIViewController = (presentingViewController ?? CurrentAppContext().frontmostViewController()) else { return }
+                guard
+                    dependencies.hasInitialised(singleton: .appContext),
+                    let presentingViewController: UIViewController = (presentingViewController ?? dependencies[singleton: .appContext].frontmostViewController)
+                else { return }
                 
                 let confirmationModal: ConfirmationModal = ConfirmationModal(
                     info: ConfirmationModal.Info(

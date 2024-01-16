@@ -5,7 +5,7 @@ import SessionUtilitiesKit
 import UIKit
 import SignalCoreKit
 
-@objc public extension UIApplication {
+public extension UIApplication {
 
     var frontmostViewControllerIgnoringAlerts: UIViewController? {
         return findFrontmostViewController(ignoringAlerts: true)
@@ -15,8 +15,14 @@ import SignalCoreKit
         return findFrontmostViewController(ignoringAlerts: false)
     }
 
-    internal func findFrontmostViewController(ignoringAlerts: Bool) -> UIViewController? {
-        guard let window: UIWindow = CurrentAppContext().mainWindow else { return nil }
+    internal func findFrontmostViewController(
+        ignoringAlerts: Bool,
+        using dependencies: Dependencies = Dependencies()
+    ) -> UIViewController? {
+        guard
+            dependencies.hasInitialised(singleton: .appContext),
+            let window: UIWindow = dependencies[singleton: .appContext].mainWindow
+        else { return nil }
         
         guard let viewController: UIViewController = window.rootViewController else {
             owsFailDebug("Missing root view controller.")

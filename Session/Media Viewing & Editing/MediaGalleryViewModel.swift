@@ -5,6 +5,7 @@ import GRDB
 import DifferenceKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 public class MediaGalleryViewModel {
     public typealias SectionModel = ArraySection<Section, Item>
@@ -399,7 +400,7 @@ public class MediaGalleryViewModel {
         
         // Note: It's possible we already have cached album data for this interaction
         // but to avoid displaying stale data we re-fetch from the database anyway
-        let maybeAlbumInfo: AlbumInfo? = Storage.shared.read { db -> AlbumInfo in
+        let maybeAlbumInfo: AlbumInfo? = Dependencies()[singleton: .storage].read { db -> AlbumInfo in
             let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
             let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
             let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()

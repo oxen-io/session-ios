@@ -26,7 +26,7 @@
 # request ever gets implemented: https://github.com/CocoaPods/CocoaPods/issues/8464
 
 # Need to set the path or we won't find cmake
-PATH=${PATH}:/usr/local/bin:/opt/homebrew/bin:/sbin/md5
+PATH=${PATH}:/usr/local/bin:/opt/local/bin:/opt/homebrew/bin:/sbin/md5
 
 exec 3>&1 # Save original stdout
 
@@ -189,15 +189,31 @@ for i in "${!TARGET_ARCHS[@]}"; do
     echo_message "Building ${TARGET_ARCHS[$i]} for $platform in $build"
 
     cd "${SRCROOT}/LibSession-Util"
-    ./utils/static-bundle.sh "$build" "" \
+    env -i PATH="$PATH" SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
+        ./utils/static-bundle.sh "$build" "" \
         -DCMAKE_TOOLCHAIN_FILE="${SRCROOT}/LibSession-Util/external/ios-cmake/ios.toolchain.cmake" \
         -DPLATFORM=$platform \
         -DDEPLOYMENT_TARGET=$IPHONEOS_DEPLOYMENT_TARGET \
         -DENABLE_BITCODE=$ENABLE_BITCODE
     
     if [ $? -ne 0 ]; then
-      LAST_OUTPUT=$(tail -n 4 "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | head -n 1)
-      echo_message "error: $LAST_OUTPUT"
+      ALL_ERROR_LINES=($(grep -n "error:" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | cut -d ":" -f 1))
+
+      for e in "${!ALL_ERROR_LINES[@]}"; do
+        error_line="${ALL_ERROR_LINES[$e]}"
+        error=$(sed "${error_line}q;d" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log")
+
+        # If it was a CMake Error then the actual error will be on the next line so we want to append that info
+        if [[ $error == *'CMake Error'* ]]; then
+            actual_error_line=$((error_line + 1))
+            error="${error}$(sed "${actual_error_line}q;d" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log")"
+        fi
+
+        # Exclude the 'ALL_ERROR_LINES' line and the 'grep' line
+        if [[ ! $error == *'grep -n "error'* ]] && [[ ! $error == *'grep -n error'* ]]; then
+            echo_message "error: $error"
+        fi
+      done
       exit 1
     fi
 done
@@ -240,21 +256,10 @@ cp -r "${SRCROOT}/LibSession-Util/include/session" "${TARGET_BUILD_DIR}/libSessi
 modmap="${TARGET_BUILD_DIR}/libSessionUtil/Headers/module.modulemap"
 echo "module SessionUtil {" >"$modmap"
 echo "  module capi {" >>"$modmap"
-for x in $(cd include && find session -name '*.h'); do
+for x in $(cd "${TARGET_BUILD_DIR}/libSessionUtil/Headers" && find session -name '*.h'); do
     echo "    header \"$x\"" >>"$modmap"
 done
 echo -e "    export *\n  }" >>"$modmap"
-if false; then
-    # If we include the cpp headers like this then Xcode will try to load them as C headers (which
-    # of course breaks) and doesn't provide any way to only load the ones you need (because this is
-    # Apple land, why would anything useful be available?).  So we include the headers in the
-    # archive but can't let xcode discover them because it will do it wrong.
-    echo -e "\n  module cppapi {" >>"$modmap"
-    for x in $(cd include && find session -name '*.hpp'); do
-        echo "    header \"$x\"" >>"$modmap"
-    done
-    echo -e "    export *\n  }" >>"$modmap"
-fi
 echo "}" >>"$modmap"
 
 # Output to XCode just so the output is good

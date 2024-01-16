@@ -11,6 +11,20 @@ public enum ProxiedContentRequestPriority {
     case low, high
 }
 
+// MARK: - Singleton
+
+public extension Singleton {
+    static let proxiedContentDownloader: SingletonConfig<ProxiedContentDownloader> = Dependencies.create(
+        identifier: "proxiedContentDownloader",
+        createInstance: { dependencies in
+            ProxiedContentDownloader(
+                downloadFolderName: "proxiedContent",   // stringlint:disable
+                using: dependencies
+            )
+        }
+    )
+}
+
 // MARK: -
 
 @objc
@@ -402,20 +416,18 @@ extension URLSessionTask {
 
 // MARK: -
 
-@objc
 open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
 
     // MARK: - Properties
 
-    @objc
-    public static let defaultDownloader = ProxiedContentDownloader(downloadFolderName: "proxiedContent")
-
+    private let dependencies: Dependencies
     private let downloadFolderName: String
 
     private var downloadFolderPath: String?
 
     // Force usage as a singleton
-    public required init(downloadFolderName: String) {
+    public required init(downloadFolderName: String, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.downloadFolderName = downloadFolderName
 
         super.init()
@@ -631,7 +643,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
             removeAssetRequestFromQueue(assetRequest: assetRequest)
             return
         }
-        guard CurrentAppContext().isMainAppAndActive || CurrentAppContext().isShareExtension else {
+        guard dependencies.hasInitialised(singleton: .appContext) && (dependencies[singleton: .appContext].isMainAppAndActive || dependencies[singleton: .appContext].isShareExtension) else {
             // If app is not active, fail the asset request.
             assetRequest.state = .failed
             assetRequestDidFail(assetRequest: assetRequest)
@@ -897,10 +909,12 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
     // MARK: Temp Directory
 
     public func ensureDownloadFolder() {
+        guard dependencies.hasInitialised(singleton: .appContext) else { return }
+        
         // We write assets to the temporary directory so that iOS can clean them up.
         // We try to eagerly clean up these assets when they are no longer in use.
 
-        let tempDirPath = OWSTemporaryDirectory()
+        let tempDirPath = dependencies[singleton: .appContext].temporaryDirectory
         let dirPath = (tempDirPath as NSString).appendingPathComponent(downloadFolderName)
         do {
             let fileManager = FileManager.default
@@ -919,7 +933,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
             }
 
             // Don't back up ProxiedContent downloads.
-            OWSFileSystem.protectFileOrFolder(atPath: dirPath)
+            try? FileSystem.protectFileOrFolder(at: dirPath, using: dependencies)
         } catch {
             downloadFolderPath = tempDirPath
         }

@@ -18,6 +18,7 @@ class JobRunnerSpec: QuickSpec {
             variant: .messageSend,
             behaviour: .runOnce,
             shouldBlock: false,
+            shouldBeUnique: false,
             shouldSkipLaunchBecomeActive: false,
             nextRunTimestamp: 0,
             threadId: nil,
@@ -30,45 +31,45 @@ class JobRunnerSpec: QuickSpec {
             variant: .attachmentUpload,
             behaviour: .runOnce,
             shouldBlock: false,
+            shouldBeUnique: false,
             shouldSkipLaunchBecomeActive: false,
             nextRunTimestamp: 0,
             threadId: nil,
             interactionId: nil,
             details: nil
         )
-        @TestState var mockStorage: Storage! = SynchronousStorage(
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies.dateNow = Date(timeIntervalSince1970: 0)
+            dependencies.forceSynchronous = true
+            dependencies.setMockableValue(JSONEncoder.OutputFormatting.sortedKeys)  // Deterministic ordering
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
             customWriter: try! DatabaseQueue(),
             migrationTargets: [
                 SNUtilitiesKit.self
             ],
+            using: dependencies,
             initialData: { db in
                 // Migrations add jobs which we don't want so delete them
                 try Job.deleteAll(db)
             }
         )
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
-            dateNow: Date(timeIntervalSince1970: 0),
-            forceSynchronous: true
+        @TestState(singleton: .jobRunner, in: dependencies) var jobRunner: JobRunnerType! = JobRunner(
+            isTestingJobRunner: true,
+            executors: [
+                .messageSend: TestJob.self,
+                .attachmentUpload: TestJob.self,
+                .messageReceive: TestJob.self
+            ],
+            using: dependencies
         )
-        @TestState var jobRunner: JobRunnerType! = {
-            let result = JobRunner(isTestingJobRunner: true, using: dependencies)
-            result.setExecutor(TestJob.self, for: .messageSend)
-            result.setExecutor(TestJob.self, for: .attachmentUpload)
-            result.setExecutor(TestJob.self, for: .messageReceive)
-            
-            // Need to assign this to ensure it's used by nested dependencies
-            dependencies.jobRunner = result
-            
-            return result
-        }()
         
         // MARK: - a JobRunner
         describe("a JobRunner") {
             afterEach {
                 /// We **must** set `fixedTime` to ensure we break any loops within the `TestJob` executor
                 dependencies.fixedTime = Int.max
-                jobRunner.stopAndClearPendingJobs()
+                jobRunner.stopAndClearPendingJobs(using: dependencies)
             }
             
             // MARK: -- when configuring
@@ -81,12 +82,12 @@ class JobRunnerSpec: QuickSpec {
                         variant: .getSnodePool,
                         behaviour: .runOnce,
                         shouldBlock: false,
+                        shouldBeUnique: false,
                         shouldSkipLaunchBecomeActive: false,
                         nextRunTimestamp: 0,
                         threadId: nil,
                         interactionId: nil,
-                        details: try? JSONEncoder()
-                            .with(outputFormatting: .sortedKeys)
+                        details: try? JSONEncoder(using: dependencies)
                             .encode(TestDetails(completeTime: 1))
                     )
                     jobRunner.appDidFinishLaunching(using: dependencies)
@@ -175,12 +176,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: true,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -231,12 +232,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         job2 = Job(
@@ -245,6 +246,7 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
@@ -278,7 +280,8 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageReceive,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: job1.details
+                                    detailsData: job1.details,
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         expect(jobRunner.jobInfoFor(jobs: [job2]))
@@ -287,7 +290,8 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageReceive,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: nil
+                                    detailsData: nil,
+                                    uniqueHashValue: nil
                                 )
                             ]))
                     }
@@ -300,12 +304,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         job2 = Job(
@@ -314,12 +318,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -348,9 +352,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageReceive,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(completeTime: 1))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(completeTime: 1)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         expect(Array(jobRunner.allJobInfo().keys).sorted()).to(equal([100, 101]))
@@ -364,12 +368,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         job2 = Job(
@@ -378,12 +382,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -412,9 +416,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageReceive,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(completeTime: 1))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(completeTime: 1)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         expect(Array(jobRunner.allJobInfo().keys).sorted()).to(equal([100, 101]))
@@ -450,9 +454,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .attachmentUpload,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(completeTime: 2))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(completeTime: 2)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         expect(Array(jobRunner.allJobInfo().keys).sorted()).to(equal([100, 101]))
@@ -479,9 +483,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .attachmentUpload,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(completeTime: 1))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(completeTime: 1)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                     }
@@ -494,12 +498,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .attachmentUpload,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: true,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try! JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try! JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -520,9 +524,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .attachmentUpload,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(completeTime: 1))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(completeTime: 1)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                     }
@@ -562,12 +566,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         job2 = Job(
@@ -576,12 +580,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageReceive,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 2))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -638,12 +642,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .attachmentUpload,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: true,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try! JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try! JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -751,12 +755,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: true,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -795,12 +799,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .recurringOnActive,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 2))
                         )
                         job2 = Job(
@@ -809,12 +813,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: true,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -876,12 +880,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .recurringOnActive,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         job2 = Job(
@@ -890,12 +894,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -935,12 +939,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: true,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try! JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try! JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -989,12 +993,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnceNextLaunch,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try! JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try! JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -1036,12 +1040,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -1065,12 +1069,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .recurringOnLaunch,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         
@@ -1094,12 +1098,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -1124,12 +1128,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .recurringOnLaunch,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -1154,12 +1158,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .runOnce,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -1185,12 +1189,12 @@ class JobRunnerSpec: QuickSpec {
                             variant: .messageSend,
                             behaviour: .recurringOnLaunch,
                             shouldBlock: false,
+                            shouldBeUnique: false,
                             shouldSkipLaunchBecomeActive: false,
                             nextRunTimestamp: 0,
                             threadId: nil,
                             interactionId: nil,
-                            details: try? JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            details: try? JSONEncoder(using: dependencies)
                                 .encode(TestDetails(completeTime: 1))
                         )
                         jobRunner.appDidFinishLaunching(using: dependencies)
@@ -1230,6 +1234,49 @@ class JobRunnerSpec: QuickSpec {
                         }
                         
                         expect(Array(jobRunner.jobInfoFor(state: .running).keys)).to(equal([100]))
+                    }
+                    
+                    // MARK: -------- does not add the job if it is unique and another already exists
+                    it("does not add the job if it is unique and another already exists") {
+                        job1 = Job(
+                            id: 100,
+                            failureCount: 0,
+                            variant: .messageSend,
+                            behaviour: .recurringOnLaunch,
+                            shouldBlock: false,
+                            shouldBeUnique: true,
+                            shouldSkipLaunchBecomeActive: false,
+                            nextRunTimestamp: 0,
+                            threadId: nil,
+                            interactionId: nil,
+                            details: try? JSONEncoder(using: dependencies)
+                                .encode(TestDetails(completeTime: 1))
+                        )
+                        job2 = Job(
+                            id: 101,
+                            failureCount: 0,
+                            variant: .messageSend,
+                            behaviour: .recurringOnLaunch,
+                            shouldBlock: false,
+                            shouldBeUnique: true,
+                            shouldSkipLaunchBecomeActive: false,
+                            nextRunTimestamp: 0,
+                            threadId: nil,
+                            interactionId: nil,
+                            details: try? JSONEncoder(using: dependencies)
+                                .encode(TestDetails(completeTime: 1))
+                        )
+                        
+                        var result1: Job?
+                        var result2: Job?
+                        
+                        mockStorage.write { db in
+                            result1 = jobRunner.add(db, job: job1, canStartJob: true, using: dependencies)
+                            result2 = jobRunner.add(db, job: job2, canStartJob: true, using: dependencies)
+                        }
+                        
+                        expect(result1).toNot(beNil())
+                        expect(result2).to(beNil())
                     }
                 }
                 
@@ -1366,7 +1413,7 @@ class JobRunnerSpec: QuickSpec {
                             .to(beEmpty())
                         
                         // Stop the queues so it doesn't run out of retry attempts
-                        jobRunner.stopAndClearPendingJobs(exceptForVariant: nil, onComplete: nil)
+                        jobRunner.stopAndClearPendingJobs(exceptForVariant: nil, using: dependencies, onComplete: nil)
                         
                         // Make sure the jobs still exist
                         expect(mockStorage.read { db in try Job.fetchCount(db) }).to(equal(2))
@@ -1471,8 +1518,7 @@ class JobRunnerSpec: QuickSpec {
                         expect {
                             mockStorage.read { db in try Job.select(.details).asRequest(of: Data.self).fetchOne(db) }
                         }.to(equal(
-                            try! JSONEncoder()
-                                .with(outputFormatting: .sortedKeys)
+                            try! JSONEncoder(using: dependencies)
                                 .encode(TestDetails(result: .deferred, completeTime: 3))
                         ))
                     }
@@ -1523,9 +1569,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageSend,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(result: .deferred, completeTime: 3))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(result: .deferred, completeTime: 3)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         dependencies.stepForwardInTime()
@@ -1541,9 +1587,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageSend,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(result: .deferred, completeTime: 5))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(result: .deferred, completeTime: 5)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         dependencies.stepForwardInTime()
@@ -1559,9 +1605,9 @@ class JobRunnerSpec: QuickSpec {
                                     variant: .messageSend,
                                     threadId: nil,
                                     interactionId: nil,
-                                    detailsData: try! JSONEncoder()
-                                        .with(outputFormatting: .sortedKeys)
-                                        .encode(TestDetails(result: .deferred, completeTime: 7))
+                                    detailsData: try! JSONEncoder(using: dependencies)
+                                        .encode(TestDetails(result: .deferred, completeTime: 7)),
+                                    uniqueHashValue: nil
                                 )
                             ]))
                         dependencies.stepForwardInTime()
@@ -1723,7 +1769,7 @@ fileprivate enum TestJob: JobExecutor {
                         stringValue: details.stringValue
                     )
                 )!
-            dependencies.storage.write { db in try _ = updatedJob.saved(db) }
+            dependencies[singleton: .storage].write { db in try updatedJob.upserted(db) }
             
             switch details.result {
                 case .success: success(job, true, dependencies)
@@ -1739,10 +1785,29 @@ fileprivate enum TestJob: JobExecutor {
             }
         }
         
-        dependencies.asyncExecutions.appendTo(details.completeTime) {
+        dependencies.async(at: details.completeTime) {
             queue.async(using: dependencies) {
                 completeJob()
             }
         }
+    }
+}
+
+// MARK: - Unit Test Convenience
+
+fileprivate extension JobRunner {
+    convenience init(
+        isTestingJobRunner: Bool = false,
+        variantsToExclude: [Job.Variant] = [],
+        executors: [Job.Variant: JobExecutor.Type],
+        using dependencies: Dependencies
+    ) {
+        self.init(
+            isTestingJobRunner: isTestingJobRunner,
+            variantsToExclude: variantsToExclude,
+            using: dependencies
+        )
+        
+        executors.forEach { variant, executor in self.setExecutor(executor, for: variant) }
     }
 }

@@ -14,15 +14,19 @@ public class Message: Codable {
     public var sender: String?
     public var openGroupServerMessageId: UInt64?
     public var serverHash: String?
-
     public var ttl: UInt64 { 14 * 24 * 60 * 60 * 1000 }
     public var isSelfSendValid: Bool { false }
     
     public var shouldBeRetryable: Bool { false }
+    public var processWithBlockedSender: Bool { false }
+    
+    // MARK: - Disappearing Messages
+    public var expiresInSeconds: TimeInterval?
+    public var expiresStartedAtMs: Double?
 
     // MARK: - Validation
     
-    public var isValid: Bool {
+    public func isValid(using dependencies: Dependencies) -> Bool {
         if let sentTimestamp = sentTimestamp { guard sentTimestamp > 0 else { return false } }
         if let receivedTimestamp = receivedTimestamp { guard receivedTimestamp > 0 else { return false } }
         return sender != nil && recipient != nil
@@ -38,7 +42,9 @@ public class Message: Codable {
         sender: String? = nil,
         groupPublicKey: String? = nil,
         openGroupServerMessageId: UInt64? = nil,
-        serverHash: String? = nil
+        serverHash: String? = nil,
+        expiresInSeconds: TimeInterval? = nil,
+        expiresStartedAtMs: Double? = nil
     ) {
         self.id = id
         self.sentTimestamp = sentTimestamp
@@ -47,6 +53,8 @@ public class Message: Codable {
         self.sender = sender
         self.openGroupServerMessageId = openGroupServerMessageId
         self.serverHash = serverHash
+        self.expiresInSeconds = expiresInSeconds
+        self.expiresStartedAtMs = expiresStartedAtMs
     }
 
     // MARK: - Proto Conversion
@@ -55,33 +63,105 @@ public class Message: Codable {
         preconditionFailure("fromProto(_:sender:) is abstract and must be overridden.")
     }
 
-    public func toProto(_ db: Database) -> SNProtoContent? {
+    public func toProto(_ db: Database, threadId: String) -> SNProtoContent? {
         preconditionFailure("toProto(_:) is abstract and must be overridden.")
+    }
+    
+    public func setDisappearingMessagesConfigurationIfNeeded(_ db: Database, on proto: SNProtoContent.SNProtoContentBuilder, threadId: String) {
+        guard let disappearingMessagesConfiguration = try? DisappearingMessagesConfiguration.fetchOne(db, id: threadId) else {
+            proto.setExpirationTimer(0)
+            return
+        }
+        
+        let expireTimer: UInt32 = disappearingMessagesConfiguration.isEnabled ? UInt32(disappearingMessagesConfiguration.durationSeconds) : 0
+        proto.setExpirationTimer(expireTimer)
+        proto.setLastDisappearingMessageChangeTimestamp(UInt64(disappearingMessagesConfiguration.lastChangeTimestampMs ?? 0))
+        
+        if disappearingMessagesConfiguration.isEnabled, let type = disappearingMessagesConfiguration.type {
+            proto.setExpirationType(type.toProto())
+        }
+    }
+    
+    public func attachDisappearingMessagesConfiguration(from proto: SNProtoContent) {
+        let expiresInSeconds: TimeInterval? = proto.hasExpirationTimer ? TimeInterval(proto.expirationTimer) : nil
+        let expiresStartedAtMs: Double? = {
+            if proto.expirationType == .deleteAfterSend, let timestamp = self.sentTimestamp {
+                return Double(timestamp)
+            }
+            return nil
+        }()
+        
+        self.expiresInSeconds = expiresInSeconds
+        self.expiresStartedAtMs = expiresStartedAtMs
     }
 }
 
 // MARK: - Message Parsing/Processing
 
-public typealias ProcessedMessage = (
-    threadId: String,
-    threadVariant: SessionThread.Variant,
-    proto: SNProtoContent,
-    messageInfo: MessageReceiveJob.Details.MessageInfo
-)
+public protocol NotProtoConvertible {}
+
+public enum ProcessedMessage {
+    case standard(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        proto: SNProtoContent,
+        messageInfo: MessageReceiveJob.Details.MessageInfo
+    )
+    case config(
+        publicKey: String,
+        namespace: SnodeAPI.Namespace,
+        serverHash: String,
+        serverTimestampMs: Int64,
+        data: Data
+    )
+    
+    var threadId: String {
+        switch self {
+            case .standard(let threadId, _, _, _): return threadId
+            case .config(let publicKey, _, _, _, _): return publicKey
+        }
+    }
+    
+    var namespace: SnodeAPI.Namespace {
+        switch self {
+            case .standard(_, let threadVariant, _, _):
+                switch threadVariant {
+                    case .group: return .groupMessages
+                    case .legacyGroup: return .legacyClosedGroup
+                    case .contact, .community: return .default
+                }
+                
+            case .config(_, let namespace, _, _, _): return namespace
+        }
+    }
+    
+    var isConfigMessage: Bool {
+        switch self {
+            case .standard: return false
+            case .config: return true
+        }
+    }
+}
 
 public extension Message {
-    enum Variant: String, Codable {
+    enum Variant: String, Codable, CaseIterable {
         case readReceipt
         case typingIndicator
         case closedGroupControlMessage
         case dataExtractionNotification
         case expirationTimerUpdate
-        case configurationMessage
         case unsendRequest
         case messageRequestResponse
         case visibleMessage
         case callMessage
-        case sharedConfigMessage
+        case groupUpdateInvite
+        case groupUpdatePromote
+        case groupUpdateInfoChange
+        case groupUpdateMemberChange
+        case groupUpdateMemberLeft
+        case groupUpdateInviteResponse
+        case groupUpdateDeleteMemberContent
+        case libSessionMessage
         
         init?(from type: Message) {
             switch type {
@@ -90,12 +170,18 @@ public extension Message {
                 case is ClosedGroupControlMessage: self = .closedGroupControlMessage
                 case is DataExtractionNotification: self = .dataExtractionNotification
                 case is ExpirationTimerUpdate: self = .expirationTimerUpdate
-                case is ConfigurationMessage: self = .configurationMessage
                 case is UnsendRequest: self = .unsendRequest
                 case is MessageRequestResponse: self = .messageRequestResponse
                 case is VisibleMessage: self = .visibleMessage
                 case is CallMessage: self = .callMessage
-                case is SharedConfigMessage: self = .sharedConfigMessage
+                case is GroupUpdateInviteMessage: self = .groupUpdateInvite
+                case is GroupUpdatePromoteMessage: self = .groupUpdatePromote
+                case is GroupUpdateInfoChangeMessage: self = .groupUpdateInfoChange
+                case is GroupUpdateMemberChangeMessage: self = .groupUpdateMemberChange
+                case is GroupUpdateMemberLeftMessage: self = .groupUpdateMemberLeft
+                case is GroupUpdateInviteResponseMessage: self = .groupUpdateInviteResponse
+                case is GroupUpdateDeleteMemberContentMessage: self = .groupUpdateDeleteMemberContent
+                case is LibSessionMessage: self = .libSessionMessage
                 default: return nil
             }
         }
@@ -107,13 +193,47 @@ public extension Message {
                 case .closedGroupControlMessage: return ClosedGroupControlMessage.self
                 case .dataExtractionNotification: return DataExtractionNotification.self
                 case .expirationTimerUpdate: return ExpirationTimerUpdate.self
-                case .configurationMessage: return ConfigurationMessage.self
                 case .unsendRequest: return UnsendRequest.self
                 case .messageRequestResponse: return MessageRequestResponse.self
                 case .visibleMessage: return VisibleMessage.self
                 case .callMessage: return CallMessage.self
-                case .sharedConfigMessage: return SharedConfigMessage.self
+                case .groupUpdateInvite: return GroupUpdateInviteMessage.self
+                case .groupUpdatePromote: return GroupUpdatePromoteMessage.self
+                case .groupUpdateInfoChange: return GroupUpdateInfoChangeMessage.self
+                case .groupUpdateMemberChange: return GroupUpdateMemberChangeMessage.self
+                case .groupUpdateMemberLeft: return GroupUpdateMemberLeftMessage.self
+                case .groupUpdateInviteResponse: return GroupUpdateInviteResponseMessage.self
+                case .groupUpdateDeleteMemberContent: return GroupUpdateDeleteMemberContentMessage.self
+                case .libSessionMessage: return LibSessionMessage.self
             }
+        }
+        
+        /// This value ensures the variants can be ordered to ensure the correct types are processed and aren't parsed as the wrong type
+        /// due to the structures being close enough matches
+        var protoPriority: Int {
+            switch self {
+                case .readReceipt: return 0
+                case .typingIndicator: return 1
+                case .closedGroupControlMessage: return 2
+                case .dataExtractionNotification: return 10
+                case .expirationTimerUpdate: return 11
+                case .unsendRequest: return 12
+                case .messageRequestResponse: return 13
+                case .visibleMessage: return 14
+                case .callMessage: return 15
+                case .groupUpdateInvite: return 3
+                case .groupUpdatePromote: return 4
+                case .groupUpdateInfoChange: return 5
+                case .groupUpdateMemberChange: return 6
+                case .groupUpdateMemberLeft: return 7
+                case .groupUpdateInviteResponse: return 8
+                case .groupUpdateDeleteMemberContent: return 9
+                case .libSessionMessage: return 16
+            }
+        }
+        
+        var isProtoConvetible: Bool {
+            return !(self.messageType is NotProtoConvertible.Type)
         }
 
         func decode<CodingKeys: CodingKey>(from container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> Message {
@@ -128,44 +248,55 @@ public extension Message {
                     return try container.decode(DataExtractionNotification.self, forKey: key)
                     
                 case .expirationTimerUpdate: return try container.decode(ExpirationTimerUpdate.self, forKey: key)
-                case .configurationMessage: return try container.decode(ConfigurationMessage.self, forKey: key)
+                
                 case .unsendRequest: return try container.decode(UnsendRequest.self, forKey: key)
                 case .messageRequestResponse: return try container.decode(MessageRequestResponse.self, forKey: key)
                 case .visibleMessage: return try container.decode(VisibleMessage.self, forKey: key)
                 case .callMessage: return try container.decode(CallMessage.self, forKey: key)
-                case .sharedConfigMessage: return try container.decode(SharedConfigMessage.self, forKey: key)
+                    
+                case .groupUpdateInvite: return try container.decode(GroupUpdateInviteMessage.self, forKey: key)
+                case .groupUpdatePromote: return try container.decode(GroupUpdatePromoteMessage.self, forKey: key)
+                
+                case .groupUpdateInfoChange:
+                    return try container.decode(GroupUpdateInfoChangeMessage.self, forKey: key)
+                                                                                
+                case .groupUpdateMemberChange:
+                    return try container.decode(GroupUpdateMemberChangeMessage.self, forKey: key)
+                
+                case .groupUpdateMemberLeft:
+                    return try container.decode(GroupUpdateMemberLeftMessage.self, forKey: key)
+                
+                case .groupUpdateInviteResponse:
+                    return try container.decode(GroupUpdateInviteResponseMessage.self, forKey: key)
+                
+                case .groupUpdateDeleteMemberContent:
+                    return try container.decode(GroupUpdateDeleteMemberContentMessage.self, forKey: key)
+                    
+                case .libSessionMessage: return try container.decode(LibSessionMessage.self, forKey: key)
             }
         }
     }
     
-    static func createMessageFrom(_ proto: SNProtoContent, sender: String) -> Message? {
-        // Note: This array is ordered intentionally to ensure the correct types are processed
-        // and aren't parsed as the wrong type
-        let prioritisedVariants: [Variant] = [
-            .readReceipt,
-            .typingIndicator,
-            .closedGroupControlMessage,
-            .dataExtractionNotification,
-            .expirationTimerUpdate,
-            .configurationMessage,
-            .unsendRequest,
-            .messageRequestResponse,
-            .visibleMessage,
-            .callMessage,
-            .sharedConfigMessage
-        ]
-        
-        return prioritisedVariants
+    static func createMessageFrom(_ proto: SNProtoContent, sender: String) throws -> Message {
+        let decodedMessage: Message? = Variant
+            .allCases
+            .sorted { lhs, rhs -> Bool in lhs.protoPriority < rhs.protoPriority }
+            .filter { variant -> Bool in variant.isProtoConvetible }
             .reduce(nil) { prev, variant in
                 guard prev == nil else { return prev }
                 
                 return variant.messageType.fromProto(proto, sender: sender)
             }
+        
+        return try decodedMessage ?? { throw MessageReceiverError.unknownMessage }()
     }
     
     static func requiresExistingConversation(message: Message, threadVariant: SessionThread.Variant) -> Bool {
         switch threadVariant {
-            case .contact, .community: return false
+            /// Process every message sent to these conversation types (the `MessageReceiver` will determine whether a message should
+            /// result in a conversation appearing if it's not already visible after processing the message - this just controls whether the messages
+            /// should be processed)
+            case .contact, .group, .community: return false
                 
             case .legacyGroup:
                 switch message {
@@ -177,9 +308,6 @@ public extension Message {
                         
                     default: return true
                 }
-                
-            case .group:
-                return false
         }
     }
     
@@ -187,7 +315,6 @@ public extension Message {
         switch message {
             case is VisibleMessage: return true
             case is ExpirationTimerUpdate: return true
-            case is ConfigurationMessage: return true
             case is UnsendRequest: return true
             
             case let controlMessage as ClosedGroupControlMessage:
@@ -221,7 +348,7 @@ public extension Message {
                 return (maybeSyncTarget ?? publicKey)
                 
             case .closedGroup(let groupPublicKey): return groupPublicKey
-            case .openGroup(let roomToken, let server, _, _, _):
+            case .openGroup(let roomToken, let server, _, _):
                 return OpenGroup.idFor(roomToken: roomToken, server: server)
             
             case .openGroupInbox(_, _, let blindedPublicKey): return blindedPublicKey
@@ -231,19 +358,20 @@ public extension Message {
     static func processRawReceivedMessage(
         _ db: Database,
         rawMessage: SnodeReceivedMessage,
-        using dependencies: Dependencies = Dependencies()
-    ) throws -> ProcessedMessage? {
-        guard let envelope = SNProtoEnvelope.from(rawMessage) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
+        publicKey: String,
+        using dependencies: Dependencies
+    ) throws -> ProcessedMessage {
         do {
-            let processedMessage: ProcessedMessage? = try processRawReceivedMessage(
+            let processedMessage: ProcessedMessage = try processRawReceivedMessage(
                 db,
-                envelope: envelope,
-                serverExpirationTimestamp: (TimeInterval(rawMessage.info.expirationDateMs) / 1000),
-                serverHash: rawMessage.info.hash,
-                handleClosedGroupKeyUpdateMessages: true,
+                data: rawMessage.data,
+                from: .swarm(
+                    publicKey: publicKey,
+                    namespace: rawMessage.namespace,
+                    serverHash: rawMessage.info.hash,
+                    serverTimestampMs: rawMessage.timestampMs,
+                    serverExpirationTimestamp: TimeInterval(Double(rawMessage.info.expirationDateMs) / 1000)
+                ),
                 using: dependencies
             )
             
@@ -254,7 +382,7 @@ public extension Message {
                 // want to fail if it already exsits because we don't want to dedupe messages
                 // in this namespace)
                 if rawMessage.namespace.shouldFetchSinceLastHash {
-                    _ = try rawMessage.info.saved(db)
+                    try rawMessage.info.upserted(db)
                 }
                 
                 return processedMessage
@@ -288,46 +416,28 @@ public extension Message {
         }
     }
     
-    static func processRawReceivedMessage(
-        _ db: Database,
-        serializedData: Data,
-        serverHash: String?,
-        using dependencies: Dependencies = Dependencies()
-    ) throws -> ProcessedMessage? {
-        guard let envelope = try? SNProtoEnvelope.parseData(serializedData) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
-        return try processRawReceivedMessage(
-            db,
-            envelope: envelope,
-            serverExpirationTimestamp: (
-                (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
-                ControlMessageProcessRecord.defaultExpirationSeconds
-            ),
-            serverHash: serverHash,
-            handleClosedGroupKeyUpdateMessages: true,
-            using: dependencies
-        )
-    }
-    
     /// This method behaves slightly differently from the other `processRawReceivedMessage` methods as it doesn't
     /// insert the "message info" for deduping (we want the poller to re-process the message) and also avoids handling any
     /// closed group key update messages (the `NotificationServiceExtension` does this itself)
     static func processRawReceivedMessageAsNotification(
         _ db: Database,
-        envelope: SNProtoEnvelope,
-        using dependencies: Dependencies = Dependencies()
+        data: Data,
+        metadata: PushNotificationAPI.NotificationMetadata,
+        using dependencies: Dependencies
     ) throws -> ProcessedMessage? {
         let processedMessage: ProcessedMessage? = try processRawReceivedMessage(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: (
-                (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
-                ControlMessageProcessRecord.defaultExpirationSeconds
+            data: data,
+            from: .swarm(
+                publicKey: metadata.accountId,
+                namespace: metadata.namespace,
+                serverHash: metadata.hash,
+                serverTimestampMs: metadata.createdTimestampMs,
+                serverExpirationTimestamp: (
+                    TimeInterval(Double(SnodeAPI.currentOffsetTimestampMs(using: dependencies)) / 1000) +
+                    ControlMessageProcessRecord.defaultExpirationSeconds
+                )
             ),
-            serverHash: nil,
-            handleClosedGroupKeyUpdateMessages: false,
             using: dependencies
         )
         
@@ -345,24 +455,15 @@ public extension Message {
         // Need a sender in order to process the message
         guard let sender: String = message.sender, let timestamp = message.posted else { return nil }
         
-        // Note: The `posted` value is in seconds but all messages in the database use milliseconds for timestamps
-        let envelopeBuilder = SNProtoEnvelope.builder(type: .sessionMessage, timestamp: UInt64(floor(timestamp * 1000)))
-        envelopeBuilder.setContent(data)
-        envelopeBuilder.setSource(sender)
-        
-        guard let envelope = try? envelopeBuilder.build() else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
         return try processRawReceivedMessage(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: nil,
-            serverHash: nil,
-            openGroupId: openGroupId,
-            openGroupMessageServerId: message.id,
-            openGroupServerPublicKey: openGroupServerPublicKey,
-            handleClosedGroupKeyUpdateMessages: false,
+            data: data,
+            from: .community(
+                openGroupId: openGroupId,
+                sender: sender,
+                timestamp: timestamp,
+                messageServerId: message.id
+            ),
             using: dependencies
         )
     }
@@ -372,30 +473,18 @@ public extension Message {
         openGroupServerPublicKey: String,
         message: OpenGroupAPI.DirectMessage,
         data: Data,
-        isOutgoing: Bool? = nil,
-        otherBlindedPublicKey: String? = nil,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws -> ProcessedMessage? {
-        // Note: The `posted` value is in seconds but all messages in the database use milliseconds for timestamps
-        let envelopeBuilder = SNProtoEnvelope.builder(type: .sessionMessage, timestamp: UInt64(floor(message.posted * 1000)))
-        envelopeBuilder.setContent(data)
-        envelopeBuilder.setSource(message.sender)
-        
-        guard let envelope = try? envelopeBuilder.build() else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
         return try processRawReceivedMessage(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: nil,
-            serverHash: nil,
-            openGroupId: nil,   // Explicitly null since it shouldn't be handled as an open group message
-            openGroupMessageServerId: message.id,
-            openGroupServerPublicKey: openGroupServerPublicKey,
-            isOutgoing: isOutgoing,
-            otherBlindedPublicKey: otherBlindedPublicKey,
-            handleClosedGroupKeyUpdateMessages: false,
+            data: data,
+            from: .openGroupInbox(
+                timestamp: message.posted,
+                messageServerId: message.id,
+                serverPublicKey: openGroupServerPublicKey,
+                senderId: message.sender,
+                recipientId: message.recipient
+            ),
             using: dependencies
         )
     }
@@ -405,21 +494,21 @@ public extension Message {
         openGroupId: String,
         message: OpenGroupAPI.Message,
         associatedPendingChanges: [OpenGroupAPI.PendingChange],
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) -> [Reaction] {
-        var results: [Reaction] = []
-        guard let reactions = message.reactions else { return results }
-        let userPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
-        let blinded15UserPublicKey: String? = SessionThread
-            .getUserHexEncodedBlindedKey(
+        guard let reactions: [String: OpenGroupAPI.Message.Reaction] = message.reactions else { return [] }
+        
+        let currentUserSessionId: SessionId = getUserSessionId(db, using: dependencies)
+        let blinded15SessionId: SessionId? = SessionThread
+            .getCurrentUserBlindedSessionId(
                 db,
                 threadId: openGroupId,
                 threadVariant: .community,
                 blindingPrefix: .blinded15,
                 using: dependencies
             )
-        let blinded25UserPublicKey: String? = SessionThread
-            .getUserHexEncodedBlindedKey(
+        let blinded25SessionId: SessionId? = SessionThread
+            .getCurrentUserBlindedSessionId(
                 db,
                 threadId: openGroupId,
                 threadVariant: .community,
@@ -427,18 +516,23 @@ public extension Message {
                 using: dependencies
             )
         
-        for (encodedEmoji, rawReaction) in reactions {
-            if let decodedEmoji = encodedEmoji.removingPercentEncoding,
-               rawReaction.count > 0,
-               let reactors = rawReaction.reactors
-            {
+        return reactions
+            .reduce(into: []) { result, next in
+                guard
+                    let decodedEmoji: String = next.key.removingPercentEncoding,
+                    next.value.count > 0,
+                    let reactors: [String] = next.value.reactors
+                else { return }
+                
                 // Decide whether we need to ignore all reactions
-                let pendingChangeRemoveAllReaction: Bool = associatedPendingChanges.contains { pendingChange in
-                    if case .reaction(_, let emoji, let action) = pendingChange.metadata {
-                        return emoji == decodedEmoji && action == .removeAll
+                let pendingChangeRemoveAllReaction: Bool = associatedPendingChanges
+                    .contains { pendingChange in
+                        if case .reaction(_, let emoji, let action) = pendingChange.metadata {
+                            return emoji == decodedEmoji && action == .removeAll
+                        }
+                        
+                        return false
                     }
-                    return false
-                }
                 
                 // Decide whether we need to add an extra reaction from current user
                 let pendingChangeSelfReaction: Bool? = {
@@ -464,28 +558,44 @@ public extension Message {
                     return action == .add
                 }()
                 let shouldAddSelfReaction: Bool = (
-                    pendingChangeSelfReaction ??
-                    ((rawReaction.you || reactors.contains(userPublicKey)) && !pendingChangeRemoveAllReaction)
+                    pendingChangeSelfReaction ?? (
+                        (next.value.you || reactors.contains(currentUserSessionId.hexString)) &&
+                        !pendingChangeRemoveAllReaction
+                    )
                 )
                 
-                let count: Int64 = rawReaction.you ? rawReaction.count - 1 : rawReaction.count
-                
+                let count: Int64 = (next.value.you ? next.value.count - 1 : next.value.count)
                 let timestampMs: Int64 = SnodeAPI.currentOffsetTimestampMs()
                 let maxLength: Int = shouldAddSelfReaction ? 4 : 5
                 let desiredReactorIds: [String] = reactors
                     .filter { id -> Bool in
-                        id != blinded15UserPublicKey &&
-                        id != blinded25UserPublicKey &&
-                        id != userPublicKey
+                        id != blinded15SessionId?.hexString &&
+                        id != blinded25SessionId?.hexString &&
+                        id != currentUserSessionId.hexString
                     } // Remove current user for now, will add back if needed
                     .prefix(maxLength)
-                    .map{ $0 }
-
-                results = results
-                    .appending( // Add the first reaction (with the count)
-                        pendingChangeRemoveAllReaction ?
-                        nil :
-                        desiredReactorIds.first
+                    .map { $0 }
+                
+                // Add the first reaction (with the count)
+                if !pendingChangeRemoveAllReaction, let firstReactor: String = desiredReactorIds.first {
+                    result.append(
+                        Reaction(
+                            interactionId: message.id,
+                            serverHash: nil,
+                            timestampMs: timestampMs,
+                            authorId: firstReactor,
+                            emoji: decodedEmoji,
+                            count: count,
+                            sortId: next.value.index
+                        )
+                    )
+                }
+                
+                // Add all other reactions
+                if desiredReactorIds.count > 1 && !pendingChangeRemoveAllReaction {
+                    result.append(
+                        contentsOf: desiredReactorIds
+                            .suffix(from: 1)
                             .map { reactor in
                                 Reaction(
                                     interactionId: message.id,
@@ -493,130 +603,82 @@ public extension Message {
                                     timestampMs: timestampMs,
                                     authorId: reactor,
                                     emoji: decodedEmoji,
-                                    count: count,
-                                    sortId: rawReaction.index
+                                    count: 0,   // Only want this on the first reaction
+                                    sortId: next.value.index
                                 )
                             }
                     )
-                    .appending( // Add all other reactions
-                        contentsOf: desiredReactorIds.count <= 1 || pendingChangeRemoveAllReaction ?
-                            [] :
-                            desiredReactorIds
-                                .suffix(from: 1)
-                                .map { reactor in
-                                    Reaction(
-                                        interactionId: message.id,
-                                        serverHash: nil,
-                                        timestampMs: timestampMs,
-                                        authorId: reactor,
-                                        emoji: decodedEmoji,
-                                        count: 0,   // Only want this on the first reaction
-                                        sortId: rawReaction.index
-                                    )
-                                }
+                }
+                
+                // Add the current user reaction (if applicable and not already included)
+                if shouldAddSelfReaction {
+                    result.append(
+                        Reaction(
+                            interactionId: message.id,
+                            serverHash: nil,
+                            timestampMs: timestampMs,
+                            authorId: currentUserSessionId.hexString,
+                            emoji: decodedEmoji,
+                            count: 1,
+                            sortId: next.value.index
+                        )
                     )
-                    .appending( // Add the current user reaction (if applicable and not already included)
-                        !shouldAddSelfReaction ?
-                            nil :
-                            Reaction(
-                                interactionId: message.id,
-                                serverHash: nil,
-                                timestampMs: timestampMs,
-                                authorId: userPublicKey,
-                                emoji: decodedEmoji,
-                                count: 1,
-                                sortId: rawReaction.index
-                            )
-                    )
+                }
             }
-        }
-        return results
     }
     
     private static func processRawReceivedMessage(
         _ db: Database,
-        envelope: SNProtoEnvelope,
-        serverExpirationTimestamp: TimeInterval?,
-        serverHash: String?,
-        openGroupId: String? = nil,
-        openGroupMessageServerId: Int64? = nil,
-        openGroupServerPublicKey: String? = nil,
-        isOutgoing: Bool? = nil,
-        otherBlindedPublicKey: String? = nil,
-        handleClosedGroupKeyUpdateMessages: Bool,
+        data: Data,
+        from origin: Message.Origin,
         using dependencies: Dependencies
-    ) throws -> ProcessedMessage? {
-        let (message, proto, threadId, threadVariant) = try MessageReceiver.parse(
+    ) throws -> ProcessedMessage {
+        let processedMessage: ProcessedMessage = try MessageReceiver.parse(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: serverExpirationTimestamp,
-            openGroupId: openGroupId,
-            openGroupMessageServerId: openGroupMessageServerId,
-            openGroupServerPublicKey: openGroupServerPublicKey,
-            isOutgoing: isOutgoing,
-            otherBlindedPublicKey: otherBlindedPublicKey,
+            data: data,
+            origin: origin,
             using: dependencies
         )
-        message.serverHash = serverHash
         
-        // Ignore invalid messages and hashes for messages we have previously handled
-        guard let variant: Message.Variant = Message.Variant(from: message) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
-        /// **Note:** We want to immediately handle any `ClosedGroupControlMessage` with the kind `encryptionKeyPair` as
-        /// we need the keyPair in storage in order to be able to parse and messages which were signed with the new key (also no need to add
-        /// these as jobs as they will be fully handled in here)
-        if handleClosedGroupKeyUpdateMessages {
-            switch message {
-                case let closedGroupControlMessage as ClosedGroupControlMessage:
-                    switch closedGroupControlMessage.kind {
-                        case .encryptionKeyPair:
-                            try MessageReceiver.handleClosedGroupControlMessage(
-                                db,
-                                threadId: threadId,
-                                threadVariant: threadVariant,
-                                message: closedGroupControlMessage,
-                                using: dependencies
-                            )
-                            return nil
-                            
-                        default: break
-                    }
+        switch processedMessage {
+            case .standard(let threadId, let threadVariant, _, let messageInfo):
+                /// **Note:** We want to immediately handle any `ClosedGroupControlMessage` with the kind `encryptionKeyPair` as
+                /// we need the keyPair in storage in order to be able to parse and messages which were signed with the new key (also no need to add
+                /// these as jobs as they will be fully handled in here)
+                if
+                    let controlMessage = messageInfo.message as? ClosedGroupControlMessage,
+                    case .encryptionKeyPair = controlMessage.kind
+                {
+                    try MessageReceiver.handleLegacyClosedGroupControlMessage(
+                        db,
+                        threadId: threadId,
+                        threadVariant: threadVariant,
+                        message: controlMessage,
+                        using: dependencies
+                    )
+                }
                 
-                default: break
-            }
+                // Prevent ControlMessages from being handled multiple times if not supported
+                do {
+                    try ControlMessageProcessRecord(
+                        threadId: threadId,
+                        message: messageInfo.message,
+                        serverExpirationTimestamp: origin.serverExpirationTimestamp
+                    )?.insert(db)
+                }
+                catch {
+                    // We want to custom handle this
+                    if case DatabaseError.SQLITE_CONSTRAINT_UNIQUE = error {
+                        throw MessageReceiverError.duplicateControlMessage
+                    }
+                    
+                    throw error
+                }
+                
+            default: break
         }
         
-        // Prevent ControlMessages from being handled multiple times if not supported
-        do {
-            try ControlMessageProcessRecord(
-                threadId: threadId,
-                message: message,
-                serverExpirationTimestamp: serverExpirationTimestamp
-            )?.insert(db)
-        }
-        catch {
-            // We want to custom handle this 
-            if case DatabaseError.SQLITE_CONSTRAINT_UNIQUE = error {
-                throw MessageReceiverError.duplicateControlMessage
-            }
-            
-            throw error
-        }
-        
-        return (
-            threadId,
-            threadVariant,
-            proto,
-            try MessageReceiveJob.Details.MessageInfo(
-                message: message,
-                variant: variant,
-                threadVariant: threadVariant,
-                serverExpirationTimestamp: serverExpirationTimestamp,
-                proto: proto
-            )
-        )
+        return processedMessage
     }
 }
 

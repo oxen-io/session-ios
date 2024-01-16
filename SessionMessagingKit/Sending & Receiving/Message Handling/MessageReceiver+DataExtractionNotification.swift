@@ -10,7 +10,8 @@ extension MessageReceiver {
         _ db: Database,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        message: DataExtractionNotification
+        message: DataExtractionNotification,
+        using dependencies: Dependencies
     ) throws {
         guard
             threadVariant == .contact,
@@ -33,13 +34,16 @@ extension MessageReceiver {
                 }
             }(),
             timestampMs: timestampMs,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: LibSession.timestampAlreadyRead(
                 threadId: threadId,
                 threadVariant: threadVariant,
                 timestampMs: (timestampMs * 1000),
-                userPublicKey: getUserHexEncodedPublicKey(db),
-                openGroup: nil
-            )
+                userSessionId: getUserSessionId(db, using: dependencies),
+                openGroup: nil,
+                using: dependencies
+            ),
+            expiresInSeconds: message.expiresInSeconds,
+            expiresStartedAtMs: message.expiresStartedAtMs
         ).inserted(db)
     }
 }

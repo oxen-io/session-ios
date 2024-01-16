@@ -7,6 +7,7 @@ import Nimble
 import SessionUIKit
 import SessionSnodeKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 @testable import Session
 
@@ -14,7 +15,10 @@ class ThreadSettingsViewModelSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var mockStorage: Storage! = SynchronousStorage(
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies[singleton: .scheduler] = .immediate
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
             customWriter: try! DatabaseQueue(),
             migrationTargets: [
                 SNUtilitiesKit.self,
@@ -22,6 +26,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 SNMessagingKit.self,
                 SNUIKit.self
             ],
+            using: dependencies,
             initialData: { db in
                 try Identity(
                     variant: .x25519PublicKey,
@@ -33,17 +38,10 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 try Profile(id: "TestId", name: "TestUser").insert(db)
             }
         )
-        @TestState var mockGeneralCache: MockGeneralCache! = MockGeneralCache(
+        @TestState(cache: .general, in: dependencies) var mockGeneralCache: MockGeneralCache! = MockGeneralCache(
             initialSetup: { cache in
-                cache.when { $0.encodedPublicKey }.thenReturn("05\(TestConstants.publicKey)")
+                cache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: TestConstants.publicKey))
             }
-        )
-        @TestState var mockCaches: MockCaches! = MockCaches()
-            .setting(cache: .general, to: mockGeneralCache)
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
-            caches: mockCaches,
-            scheduler: .immediate
         )
         @TestState var threadVariant: SessionThread.Variant! = .contact
         @TestState var didTriggerSearchCallbackTriggered: Bool! = false
@@ -55,7 +53,6 @@ class ThreadSettingsViewModelSpec: QuickSpec {
             },
             using: dependencies
         )
-        
         @TestState var disposables: [AnyCancellable]! = [
             viewModel.tableDataPublisher
                 .receive(on: ImmediateScheduler.shared)

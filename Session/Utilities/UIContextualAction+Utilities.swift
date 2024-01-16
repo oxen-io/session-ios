@@ -1,6 +1,7 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import GRDB
 import SessionMessagingKit
 import SessionUIKit
 import SessionUtilitiesKit
@@ -48,7 +49,8 @@ public extension UIContextualAction {
         indexPath: IndexPath,
         tableView: UITableView,
         threadViewModel: SessionThreadViewModel,
-        viewController: UIViewController?
+        viewController: UIViewController?,
+        using dependencies: Dependencies = Dependencies()
     ) -> [UIContextualAction]? {
         guard !actions.isEmpty else { return nil }
         
@@ -128,7 +130,9 @@ public extension UIContextualAction {
                         ) { _, _, completionHandler  in
                             switch threadViewModel.threadId {
                                 case SessionThreadViewModel.messageRequestsSectionId:
-                                    Storage.shared.write { db in db[.hasHiddenMessageRequests] = true }
+                                    dependencies[singleton: .storage].write { db in
+                                        db[.hasHiddenMessageRequests] = true
+                                    }
                                     completionHandler(true)
                                     
                                 default:
@@ -159,7 +163,7 @@ public extension UIContextualAction {
                                             cancelStyle: .alert_text,
                                             dismissOnConfirm: true,
                                             onConfirm: { _ in
-                                                Storage.shared.writeAsync { db in
+                                                dependencies[singleton: .storage].writeAsync { db in
                                                     try SessionThread.deleteOrLeave(
                                                         db,
                                                         threadId: threadViewModel.threadId,
@@ -207,13 +211,14 @@ public extension UIContextualAction {
                             
                             // Delay the change to give the cell "unswipe" animation some time to complete
                             DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + unswipeAnimationDelay) {
-                                Storage.shared.writeAsync { db in
+                                dependencies[singleton: .storage].writeAsync { db in
                                     try SessionThread
                                         .filter(id: threadViewModel.threadId)
                                         .updateAllAndConfig(
                                             db,
                                             SessionThread.Columns.pinnedPriority
-                                                .set(to: (threadViewModel.threadPinnedPriority == 0 ? 1 : 0))
+                                                .set(to: (threadViewModel.threadPinnedPriority == 0 ? 1 : 0)),
+                                            using: dependencies
                                         )
                                 }
                             }
@@ -247,7 +252,7 @@ public extension UIContextualAction {
                             
                             // Delay the change to give the cell "unswipe" animation some time to complete
                             DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + unswipeAnimationDelay) {
-                                Storage.shared.writeAsync { db in
+                                dependencies[singleton: .storage].writeAsync { db in
                                     let currentValue: TimeInterval? = try SessionThread
                                         .filter(id: threadViewModel.threadId)
                                         .select(.mutedUntilTimestamp)
@@ -297,6 +302,31 @@ public extension UIContextualAction {
                                 (!threadIsMessageRequest ? nil : Contact.Columns.didApproveMe.set(to: true)),
                                 (!threadIsMessageRequest ? nil : Contact.Columns.isApproved.set(to: false))
                             ].compactMap { $0 }
+                            let profileInfo: (id: String, profile: Profile?)? = dependencies[singleton: .storage].read(using: dependencies) { db in
+                                switch threadViewModel.threadVariant {
+                                    case .contact:
+                                        return (
+                                            threadViewModel.threadId,
+                                            try Profile.fetchOne(db, id: threadViewModel.threadId)
+                                        )
+                                        
+                                    case .group:
+                                        let firstAdmin: GroupMember? = try GroupMember
+                                            .filter(GroupMember.Columns.groupId == threadViewModel.threadId)
+                                            .filter(GroupMember.Columns.role == GroupMember.Role.admin)
+                                            .fetchOne(db)
+                                        
+                                        return try firstAdmin
+                                            .map { admin in
+                                                (
+                                                    admin.profileId,
+                                                    try Profile.fetchOne(db, id: admin.profileId)
+                                                )
+                                            }
+                                        
+                                    default: return nil
+                                }
+                            }
                             
                             let performBlock: (UIViewController?) -> () = { viewController in
                                 (tableView.cellForRow(at: indexPath) as? SwipeActionOptimisticCell)?
@@ -308,22 +338,35 @@ public extension UIContextualAction {
                                 
                                 // Delay the change to give the cell "unswipe" animation some time to complete
                                 DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + unswipeAnimationDelay) {
-                                    Storage.shared
+                                    dependencies[singleton: .storage]
                                         .writePublisher { db in
                                             // Create the contact if it doesn't exist
-                                            try Contact
-                                                .fetchOrCreate(db, id: threadViewModel.threadId)
-                                                .save(db)
-                                            try Contact
-                                                .filter(id: threadViewModel.threadId)
-                                                .updateAllAndConfig(db, contactChanges)
+                                            switch (threadViewModel.threadVariant, profileInfo?.id) {
+                                                case (.contact, _):
+                                                    try Contact
+                                                        .fetchOrCreate(db, id: threadViewModel.threadId)
+                                                        .upsert(db)
+                                                    try Contact
+                                                        .filter(id: threadViewModel.threadId)
+                                                        .updateAllAndConfig(db, contactChanges, using: dependencies)
+                                                    
+                                                case (.group, .some(let contactId)):
+                                                    try Contact
+                                                        .fetchOrCreate(db, id: contactId)
+                                                        .upsert(db)
+                                                    try Contact
+                                                        .filter(id: contactId)
+                                                        .updateAllAndConfig(db, contactChanges, using: dependencies)
+                                                    
+                                                default: break
+                                            }
                                             
                                             // Blocked message requests should be deleted
                                             if threadIsMessageRequest {
                                                 try SessionThread.deleteOrLeave(
                                                     db,
                                                     threadId: threadViewModel.threadId,
-                                                    threadVariant: .contact,
+                                                    threadVariant: threadViewModel.threadVariant,
                                                     groupLeaveType: .silent,
                                                     calledFromConfigHandling: false
                                                 )
@@ -337,9 +380,27 @@ public extension UIContextualAction {
                             switch threadIsMessageRequest {
                                 case false: performBlock(nil)
                                 case true:
+                                    let bodyText: String = {
+                                        switch threadViewModel.threadVariant {
+                                            case .group:
+                                                return String(
+                                                    format: "MESSAGE_REQUESTS_GROUP_BLOCK_CONFIRMATION_ACTON".localized(),
+                                                    (
+                                                        profileInfo?.profile?.displayName(for: threadViewModel.threadVariant) ??
+                                                        Profile.truncated(
+                                                            id: (profileInfo?.id ?? threadViewModel.threadId),
+                                                            threadVariant: threadViewModel.threadVariant
+                                                        )
+                                                    )
+                                                )
+                                                
+                                            default: return "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON".localized()
+                                        }
+                                    }()
                                     let confirmationModal: ConfirmationModal = ConfirmationModal(
                                         info: ConfirmationModal.Info(
-                                            title: "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON".localized(),
+                                            title: "BLOCK_LIST_BLOCK_BUTTON".localized(),
+                                            body: .text(bodyText),
                                             confirmTitle: "BLOCK_LIST_BLOCK_BUTTON".localized(),
                                             confirmAccessibility: Accessibility(
                                                 identifier: "Block"
@@ -412,7 +473,7 @@ public extension UIContextualAction {
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
                                     onConfirm: { _ in
-                                        Storage.shared.writeAsync { db in
+                                        dependencies[singleton: .storage].writeAsync { db in
                                             try SessionThread.deleteOrLeave(
                                                 db,
                                                 threadId: threadViewModel.threadId,
@@ -461,9 +522,17 @@ public extension UIContextualAction {
                             }()
                             let confirmationModalExplanation: NSAttributedString = {
                                 guard !isMessageRequest else {
-                                    return NSAttributedString(
-                                        string: "MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON".localized()
-                                    )
+                                    switch threadViewModel.threadVariant {
+                                        case .group:
+                                            return NSAttributedString(
+                                                string: "MESSAGE_REQUESTS_GROUP_DELETE_CONFIRMATION_ACTON".localized()
+                                            )
+                                            
+                                        default:
+                                            return NSAttributedString(
+                                                string: "MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON".localized()
+                                            )
+                                    }
                                 }
                                 guard threadViewModel.currentUserIsClosedGroupAdmin == false else {
                                     return NSAttributedString(
@@ -510,7 +579,7 @@ public extension UIContextualAction {
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
                                     onConfirm: { _ in
-                                        Storage.shared.writeAsync { db in
+                                        dependencies[singleton: .storage].writeAsync { db in
                                             try SessionThread.deleteOrLeave(
                                                 db,
                                                 threadId: threadViewModel.threadId,

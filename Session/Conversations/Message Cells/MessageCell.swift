@@ -11,6 +11,7 @@ public enum SwipeState {
 }
 
 public class MessageCell: UITableViewCell {
+    var dependencies: Dependencies?
     var viewModel: MessageViewModel?
     weak var delegate: MessageCellDelegate?
     open var contextSnapshotView: UIView? { return nil }
@@ -45,12 +46,20 @@ public class MessageCell: UITableViewCell {
 
     // MARK: - Updating
     
+    public override func prepareForReuse() {
+        super.prepareForReuse()
+        
+        self.dependencies = nil
+        self.viewModel = nil
+    }
+    
     func update(
         with cellViewModel: MessageViewModel,
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
         preconditionFailure("Must be overridden by subclasses.")
     }
@@ -72,10 +81,10 @@ public class MessageCell: UITableViewCell {
             case .standardOutgoing, .standardIncoming, .standardIncomingDeleted:
                 return VisibleMessageCell.self
                 
-            case .infoClosedGroupCreated, .infoClosedGroupUpdated,
-                .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving,
+            case .infoLegacyGroupCreated, .infoLegacyGroupUpdated, .infoLegacyGroupCurrentUserLeft,
+                .infoGroupCurrentUserLeaving, .infoGroupCurrentUserErrorLeaving,
                 .infoDisappearingMessagesUpdate, .infoScreenshotNotification, .infoMediaSavedNotification,
-                .infoMessageRequestAccepted:
+                .infoMessageRequestAccepted, .infoGroupInfoInvited, .infoGroupInfoUpdated, .infoGroupMembersUpdated:
                 return InfoMessageCell.self
                 
             case .infoCall:
@@ -88,18 +97,12 @@ public class MessageCell: UITableViewCell {
 
 protocol MessageCellDelegate: ReactionDelegate {
     func handleItemLongPressed(_ cellViewModel: MessageViewModel)
-    func handleItemTapped(_ cellViewModel: MessageViewModel, gestureRecognizer: UITapGestureRecognizer, using dependencies: Dependencies)
+    func handleItemTapped(_ cellViewModel: MessageViewModel, cell: UITableViewCell, cellLocation: CGPoint, using dependencies: Dependencies)
     func handleItemDoubleTapped(_ cellViewModel: MessageViewModel)
     func handleItemSwiped(_ cellViewModel: MessageViewModel, state: SwipeState)
     func openUrl(_ urlString: String)
-    func handleReplyButtonTapped(for cellViewModel: MessageViewModel, using dependencies: Dependencies)
+    func handleReplyButtonTapped(for cellViewModel: MessageViewModel)
     func startThread(with sessionId: String, openGroupServer: String?, openGroupPublicKey: String?)
     func showReactionList(_ cellViewModel: MessageViewModel, selectedReaction: EmojiWithSkinTones?)
     func needsLayout(for cellViewModel: MessageViewModel, expandingReactions: Bool)
-}
-
-extension MessageCellDelegate {
-    func handleItemTapped(_ cellViewModel: MessageViewModel, gestureRecognizer: UITapGestureRecognizer) {
-        handleItemTapped(cellViewModel, gestureRecognizer: gestureRecognizer, using: Dependencies())
-    }
 }

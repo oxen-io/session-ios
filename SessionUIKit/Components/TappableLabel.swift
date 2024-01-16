@@ -12,7 +12,7 @@ public protocol TappableLabelDelegate: AnyObject {
 }
 
 public class TappableLabel: UILabel {
-    private var links: [String: NSRange] = [:]
+    public private(set) var links: [String: NSRange] = [:]
     private lazy var highlightedMentionBackgroundView: HighlightMentionBackgroundView = HighlightMentionBackgroundView(targetLabel: self)
     private(set) var layoutManager = NSLayoutManager()
     private(set) var textContainer = NSTextContainer(size: CGSize.zero)
@@ -125,9 +125,13 @@ public class TappableLabel: UILabel {
             return
         }
         
+        handleTouch(at: locationOfTouch)
+    }
+    
+    public func handleTouch(at point: CGPoint) {
         textContainer.size = bounds.size
         
-        let indexOfCharacter = layoutManager.glyphIndex(for: locationOfTouch, in: textContainer)
+        let indexOfCharacter = layoutManager.glyphIndex(for: point, in: textContainer)
         for (urlString, range) in links where NSLocationInRange(indexOfCharacter, range) {
             delegate?.tapableLabel(self, didTapUrl: urlString, atRange: range)
             return

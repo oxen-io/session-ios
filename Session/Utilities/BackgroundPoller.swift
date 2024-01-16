@@ -20,7 +20,7 @@ public final class BackgroundPoller {
                 [pollForMessages(using: dependencies)]
                     .appending(contentsOf: pollForClosedGroupMessages(using: dependencies))
                     .appending(
-                        contentsOf: Storage.shared
+                        contentsOf: dependencies[singleton: .storage]
                             .read { db in
                                 /// The default room promise creates an OpenGroup with an empty `roomToken` value, we
                                 /// don't want to start a poller for this as the user hasn't actually joined a room
@@ -73,21 +73,16 @@ public final class BackgroundPoller {
     private static func pollForMessages(
         using dependencies: Dependencies
     ) -> AnyPublisher<Void, Error> {
-        let userPublicKey: String = getUserHexEncodedPublicKey()
-
-        return SnodeAPI.getSwarm(for: userPublicKey)
-            .tryFlatMapWithRandomSnode { snode -> AnyPublisher<[Message], Error> in
-                CurrentUserPoller.poll(
-                    namespaces: CurrentUserPoller.namespaces,
-                    from: snode,
-                    for: userPublicKey,
-                    calledFromBackgroundPoller: true,
-                    isBackgroundPollValid: { BackgroundPoller.isValid },
-                    using: dependencies
-                )
-            }
-            .map { _ in () }
-            .eraseToAnyPublisher()
+        return dependencies[singleton: .currentUserPoller].poll(
+            namespaces: CurrentUserPoller.namespaces,
+            for: getUserSessionId(using: dependencies).hexString,
+            calledFromBackgroundPoller: true,
+            isBackgroundPollValid: { BackgroundPoller.isValid },
+            drainBehaviour: .alwaysRandom,
+            using: dependencies
+        )
+        .map { _ in () }
+        .eraseToAnyPublisher()
     }
     
     private static func pollForClosedGroupMessages(
@@ -95,36 +90,29 @@ public final class BackgroundPoller {
     ) -> [AnyPublisher<Void, Error>] {
         // Fetch all closed groups (excluding any don't contain the current user as a
         // GroupMemeber as the user is no longer a member of those)
-        return Storage.shared
-            .read { db in
+        return dependencies[singleton: .storage]
+            .read { [dependencies] db in
                 try ClosedGroup
                     .select(.threadId)
                     .joining(
                         required: ClosedGroup.members
-                            .filter(GroupMember.Columns.profileId == getUserHexEncodedPublicKey(db))
+                            .filter(GroupMember.Columns.profileId == getUserSessionId(db, using: dependencies).hexString)
                     )
                     .asRequest(of: String.self)
                     .fetchAll(db)
             }
             .defaulting(to: [])
-            .map { groupPublicKey in
-                SnodeAPI.getSwarm(for: groupPublicKey)
-                    .tryFlatMap { swarm -> AnyPublisher<[Message], Error> in
-                        guard let snode: Snode = swarm.randomElement() else {
-                            throw OnionRequestAPIError.insufficientSnodes
-                        }
-                        
-                        return ClosedGroupPoller.poll(
-                            namespaces: ClosedGroupPoller.namespaces,
-                            from: snode,
-                            for: groupPublicKey,
-                            calledFromBackgroundPoller: true,
-                            isBackgroundPollValid: { BackgroundPoller.isValid },
-                            using: dependencies
-                        )
-                    }
-                    .map { _ in () }
-                    .eraseToAnyPublisher()
+            .map { groupId in
+                dependencies[singleton: .groupsPoller].poll(
+                    namespaces: GroupPoller.namespaces,
+                    for: groupId,
+                    calledFromBackgroundPoller: true,
+                    isBackgroundPollValid: { BackgroundPoller.isValid },
+                    drainBehaviour: .alwaysRandom,
+                    using: dependencies
+                )
+                .map { _ in () }
+                .eraseToAnyPublisher()
             }
     }
 }

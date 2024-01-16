@@ -461,6 +461,18 @@ public extension UIContextualAction {
     }
 }
 
+public extension UIPageControl {
+    var themeCurrentPageIndicatorTintColor: ThemeValue? {
+        set { ThemeManager.set(self, keyPath: \.currentPageIndicatorTintColor, to: newValue) }
+        get { return nil }
+    }
+    
+    var themePageIndicatorTintColor: ThemeValue? {
+        set { ThemeManager.set(self, keyPath: \.pageIndicatorTintColor, to: newValue) }
+        get { return nil }
+    }
+}
+
 public extension GradientView {
     var themeBackgroundGradient: [ThemeValue]? {
         set {

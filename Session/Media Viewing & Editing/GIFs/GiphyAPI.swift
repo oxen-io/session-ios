@@ -7,6 +7,22 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 import SignalCoreKit
 
+// MARK: - Singleton
+
+public extension Singleton {
+    static let giphyDownloader: SingletonConfig<ProxiedContentDownloader> = Dependencies.create(
+        identifier: "giphyDownloader",
+        createInstance: { dependencies in
+            ProxiedContentDownloader(
+                downloadFolderName: "GIFs", // stringlint:disable
+                using: dependencies
+            )
+        }
+    )
+}
+
+// MARK: - GiphyFormat
+
 // There's no UTI type for webp!
 enum GiphyFormat {
     case gif, mp4, jpg

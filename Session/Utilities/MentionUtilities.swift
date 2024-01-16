@@ -4,22 +4,23 @@ import Foundation
 import GRDB
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 public enum MentionUtilities {
     public static func highlightMentionsNoAttributes(
         in string: String,
         threadVariant: SessionThread.Variant,
-        currentUserPublicKey: String,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?
+        currentUserSessionId: String,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?
     ) -> String {
         /// **Note:** We are returning the string here so the 'textColor' and 'primaryColor' values are irrelevant
         return highlightMentions(
             in: string,
             threadVariant: threadVariant,
-            currentUserPublicKey: currentUserPublicKey,
-            currentUserBlinded15PublicKey: currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: currentUserBlinded25PublicKey,
+            currentUserSessionId: currentUserSessionId,
+            currentUserBlinded15SessionId: currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: currentUserBlinded25SessionId,
             isOutgoingMessage: false,
             textColor: .black,
             theme: .classicDark,
@@ -31,9 +32,9 @@ public enum MentionUtilities {
     public static func highlightMentions(
         in string: String,
         threadVariant: SessionThread.Variant,
-        currentUserPublicKey: String?,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?,
+        currentUserSessionId: String?,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?,
         isOutgoingMessage: Bool,
         textColor: UIColor,
         theme: Theme,
@@ -49,10 +50,10 @@ public enum MentionUtilities {
         var string = string
         var lastMatchEnd: Int = 0
         var mentions: [(range: NSRange, isCurrentUser: Bool)] = []
-        let currentUserPublicKeys: Set<String> = [
-            currentUserPublicKey,
-            currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey
+        let currentUserSessionIds: Set<String> = [
+            currentUserSessionId,
+            currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId
         ]
         .compactMap { $0 }
         .asSet()
@@ -64,12 +65,12 @@ public enum MentionUtilities {
         ) {
             guard let range: Range = Range(match.range, in: string) else { break }
             
-            let publicKey: String = String(string[range].dropFirst()) // Drop the @
-            let isCurrentUser: Bool = currentUserPublicKeys.contains(publicKey)
+            let sessionId: String = String(string[range].dropFirst()) // Drop the @
+            let isCurrentUser: Bool = currentUserSessionIds.contains(sessionId)
             
             guard let targetString: String = {
                 guard !isCurrentUser else { return "MEDIA_GALLERY_SENDER_NAME_YOU".localized() }
-                guard let displayName: String = Profile.displayNameNoFallback(id: publicKey, threadVariant: threadVariant) else {
+                guard let displayName: String = Profile.displayNameNoFallback(id: sessionId, threadVariant: threadVariant) else {
                     lastMatchEnd = (match.range.location + match.range.length)
                     return nil
                 }

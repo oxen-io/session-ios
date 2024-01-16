@@ -122,7 +122,7 @@ final class SeedModal: Modal {
         mnemonicLabel.pin(to: mnemonicLabelContainer, withInset: isIPhone6OrSmaller ? 4 : Values.smallSpacing)
         
         // Mark seed as viewed
-        Storage.shared.writeAsync { db in db[.hasViewedSeed] = true }
+        Dependencies()[singleton: .storage].writeAsync { db in db[.hasViewedSeed] = true }
     }
     
     // MARK: - Interaction

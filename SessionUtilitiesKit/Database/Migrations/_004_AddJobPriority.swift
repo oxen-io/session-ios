@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import YapDatabase
 
 enum _004_AddJobPriority: Migration {
     static let target: TargetMigrations.Identifier = .utilitiesKit
@@ -12,7 +11,7 @@ enum _004_AddJobPriority: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Job.self]
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Add `priority` to the job table
         try db.alter(table: Job.self) { t in
             t.add(.priority, .integer).defaults(to: 0)
@@ -39,6 +38,6 @@ enum _004_AddJobPriority: Migration {
                 )
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

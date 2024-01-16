@@ -221,7 +221,6 @@ final class RestoreVC: BaseVC {
         
         Onboarding.Flow.recover
             .preregister(
-                with: seed,
                 ed25519KeyPair: keyPairs.ed25519KeyPair,
                 x25519KeyPair: keyPairs.x25519KeyPair
             )

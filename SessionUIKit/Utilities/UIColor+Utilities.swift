@@ -1,9 +1,17 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit.UIColor
-import SessionUtilitiesKit
 
 public extension UIColor {
+    private func clamp(_ value: CGFloat, _ minValue: CGFloat, _ maxValue: CGFloat) -> CGFloat {
+        return max(minValue, min(maxValue, value))
+    }
+    
+    private func clamp01(_ value: CGFloat) -> CGFloat { return clamp(value, 0, 1) }
+    private func lerp(_ left: CGFloat, _ right: CGFloat, _ alpha: CGFloat) -> CGFloat {
+        return ((left * (1 - alpha)) + (right * alpha))
+    }
+    
     func toImage() -> UIImage {
         let bounds: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)
         let renderer: UIGraphicsImageRenderer = UIGraphicsImageRenderer(bounds: bounds)
@@ -27,13 +35,13 @@ public extension UIColor {
         var a1: CGFloat = 0
         self.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
         
-        let finalAlpha: CGFloat = CGFloatClamp01(alpha)
+        let finalAlpha: CGFloat = clamp01(alpha)
         
         return UIColor(
-            red: CGFloatLerp(r0, r1, finalAlpha),
-            green: CGFloatLerp(g0, g1, finalAlpha),
-            blue: CGFloatLerp(b0, b1, finalAlpha),
-            alpha: CGFloatLerp(a0, a1, finalAlpha)
+            red: lerp(r0, r1, finalAlpha),
+            green: lerp(g0, g1, finalAlpha),
+            blue: lerp(b0, b1, finalAlpha),
+            alpha: lerp(a0, a1, finalAlpha)
         )
     }
     

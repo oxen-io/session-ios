@@ -29,7 +29,6 @@ public class ImageEditorView: UIView {
     //       if we wanted more color continuity.
     private var currentColor = ImageEditorColor.defaultColor()
 
-    @objc
     public required init(model: ImageEditorModel, delegate: ImageEditorViewDelegate) {
         self.model = model
         self.delegate = delegate
@@ -55,7 +54,7 @@ public class ImageEditorView: UIView {
     public func configureSubviews() -> Bool {
         canvasView.configureSubviews()
         self.addSubview(canvasView)
-        canvasView.autoPinEdgesToSuperviewEdges()
+        canvasView.pin(to: self)
 
         self.isUserInteractionEnabled = true
 
@@ -255,13 +254,12 @@ public class ImageEditorView: UIView {
                                                                         viewBounds: viewBounds,
                                                                         model: self.model,
                                                                         transform: self.model.currentTransform())
-            let gestureDeltaImageUnit = gestureNowImageUnit.minus(gestureStartImageUnit)
-            let unitCenter = CGPointClamp01(textItem.unitCenter.plus(gestureDeltaImageUnit))
+            let gestureDeltaImageUnit = gestureNowImageUnit.subtracting(gestureStartImageUnit)
+            let unitCenter = textItem.unitCenter.adding(gestureDeltaImageUnit).clamp01()
 
             // NOTE: We use max(1, ...) to avoid divide-by-zero.
-            let newScaling = CGFloatClamp(textItem.scaling * gestureRecognizer.pinchStateLast.distance / max(1.0, gestureRecognizer.pinchStateStart.distance),
-                                          ImageEditorTextItem.kMinScaling,
-                                          ImageEditorTextItem.kMaxScaling)
+                let newScaling = (textItem.scaling * gestureRecognizer.pinchStateLast.distance / max(1.0, gestureRecognizer.pinchStateStart.distance))
+                    .clamp(ImageEditorTextItem.kMinScaling, ImageEditorTextItem.kMaxScaling)
 
             let newRotationRadians = textItem.rotationRadians + gestureRecognizer.pinchStateLast.angleRadians - gestureRecognizer.pinchStateStart.angleRadians
 
@@ -298,7 +296,10 @@ public class ImageEditorView: UIView {
     private func textLayer(forLocation locationInView: CGPoint) -> EditorTextLayer? {
         let viewBounds = self.canvasView.gestureReferenceView.bounds
         let affineTransform = self.model.currentTransform().affineTransform(viewSize: viewBounds.size)
-        let locationInCanvas = locationInView.minus(viewBounds.center).applyingInverse(affineTransform).plus(viewBounds.center)
+        let locationInCanvas = locationInView
+            .subtracting(viewBounds.center)
+            .applying(affineTransform.inverted())
+            .adding(viewBounds.center)
         return canvasView.textLayer(forLocation: locationInCanvas)
     }
 
@@ -350,8 +351,8 @@ public class ImageEditorView: UIView {
                                                                         viewBounds: viewBounds,
                                                                         model: self.model,
                                                                         transform: self.model.currentTransform())
-            let gestureDeltaImageUnit = gestureNowImageUnit.minus(gestureStartImageUnit)
-            let unitCenter = CGPointClamp01(movingTextStartUnitCenter.plus(gestureDeltaImageUnit))
+            let gestureDeltaImageUnit = gestureNowImageUnit.subtracting(gestureStartImageUnit)
+            let unitCenter = movingTextStartUnitCenter.adding(gestureDeltaImageUnit).clamp01()
             let newItem = textItem.copy(unitCenter: unitCenter)
 
             if movingTextHasMoved {

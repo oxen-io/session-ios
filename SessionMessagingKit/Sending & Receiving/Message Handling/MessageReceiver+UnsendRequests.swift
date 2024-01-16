@@ -10,11 +10,13 @@ extension MessageReceiver {
         _ db: Database,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        message: UnsendRequest
+        message: UnsendRequest,
+        using dependencies: Dependencies = Dependencies()
     ) throws {
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
-        
-        guard message.sender == message.author || userPublicKey == message.sender else { return }
+        guard
+            message.sender == message.author ||
+            getUserSessionId(db, using: dependencies).hexString == message.sender
+        else { return }
         guard let author: String = message.author, let timestampMs: UInt64 = message.timestamp else { return }
         
         let maybeInteraction: Interaction? = try Interaction
@@ -35,7 +37,8 @@ extension MessageReceiver {
                 threadId: interaction.threadId,
                 threadVariant: threadVariant,
                 includingOlder: false,
-                trySendReadReceipt: false
+                trySendReadReceipt: false,
+                using: dependencies
             )
             
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: interaction.notificationIdentifiers)
@@ -43,12 +46,22 @@ extension MessageReceiver {
         }
         
         if author == message.sender, let serverHash: String = interaction.serverHash {
-            SnodeAPI
-                .deleteMessages(
-                    publicKey: author,
-                    serverHashes: [serverHash]
-                )
-                .subscribe(on: DispatchQueue.global(qos: .background))
+            dependencies[singleton: .storage]
+                .readPublisher(using: dependencies) { db in
+                    try SnodeAPI
+                        .preparedDeleteMessages(
+                            serverHashes: [serverHash],
+                            requireSuccessfulDeletion: false,
+                            authMethod: try Authentication.with(
+                                db,
+                                sessionIdHexString: author,
+                                using: dependencies
+                            ),
+                            using: dependencies
+                        )
+                }
+                .flatMap { $0.send(using: dependencies) }
+                .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
                 .sinkUntilComplete()
         }
          
@@ -57,9 +70,9 @@ extension MessageReceiver {
                 _ = try interaction.delete(db)
                 
             case (_, true):
-                _ = try interaction
+                try interaction
                     .markingAsDeleted()
-                    .saved(db)
+                    .upserted(db)
                 
                 _ = try interaction.attachments
                     .deleteAll(db)

@@ -56,7 +56,7 @@ extension ContextMenuVC {
             themeBackgroundColor = .clear
             
             iconImageView.image = action.icon?
-                .resizedImage(to: CGSize(width: ActionView.iconSize, height: ActionView.iconSize))?
+                .resized(to: CGSize(width: ActionView.iconSize, height: ActionView.iconSize))?
                 .withRenderingMode(.alwaysTemplate)
             titleLabel.text = action.title
             

@@ -13,6 +13,7 @@ public enum OnionRequestAPIError: LocalizedError {
     case snodePublicKeySetMissing
     case unsupportedSnodeVersion(String)
     case invalidRequestInfo
+    case pathEncryptionFailed
 
     public var errorDescription: String? {
         switch self {
@@ -33,6 +34,7 @@ public enum OnionRequestAPIError: LocalizedError {
             case .snodePublicKeySetMissing: return "Missing Service Node public key set."
             case .unsupportedSnodeVersion(let version): return "Unsupported Service Node version: \(version)."
             case .invalidRequestInfo: return "Invalid Request Info"
+            case .pathEncryptionFailed: return "Path Encryption Failed"
         }
     }
 }

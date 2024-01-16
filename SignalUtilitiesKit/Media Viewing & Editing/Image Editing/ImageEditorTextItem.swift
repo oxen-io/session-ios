@@ -4,16 +4,10 @@
 
 import UIKit
 
-@objc
 public class ImageEditorTextItem: ImageEditorItem {
 
-    @objc
     public let text: String
-
-    @objc
     public let color: ImageEditorColor
-
-    @objc
     public let font: UIFont
 
     // In order to render the text at a consistent size
@@ -26,14 +20,10 @@ public class ImageEditorTextItem: ImageEditorItem {
     // We use the image's rendering width as the reference value,
     // since we want to be consistent with regard to the image's
     // content.
-    @objc
     public let fontReferenceImageWidth: CGFloat
-
-    @objc
     public let unitCenter: ImageEditorSample
 
     // Leave some margins against the edge of the image.
-    @objc
     public static let kDefaultUnitWidth: CGFloat = 0.9
 
     // The max width of the text as a fraction of the image width.
@@ -43,22 +33,16 @@ public class ImageEditorTextItem: ImageEditorItem {
     // NOTE: When you scale the text with with a pinch gesture, that
     // affects _scaling_, not the _unit width_, since we don't want
     // to change how the text wraps when scaling.
-    @objc
     public let unitWidth: CGFloat
 
     // 0 = no rotation.
     // CGFloat.pi * 0.5 = rotation 90 degrees clockwise.
-    @objc
     public let rotationRadians: CGFloat
 
-    @objc
     public static let kMaxScaling: CGFloat = 4.0
-    @objc
     public static let kMinScaling: CGFloat = 0.5
-    @objc
     public let scaling: CGFloat
 
-    @objc
     public init(text: String,
                 color: ImageEditorColor,
                 font: UIFont,
@@ -100,7 +84,6 @@ public class ImageEditorTextItem: ImageEditorItem {
         super.init(itemId: itemId, itemType: .text)
     }
 
-    @objc
     public class func empty(withColor color: ImageEditorColor,
                             unitWidth: CGFloat,
                             fontReferenceImageWidth: CGFloat,
@@ -117,7 +100,6 @@ public class ImageEditorTextItem: ImageEditorItem {
                                    scaling: scaling)
     }
 
-    @objc
     public func copy(withText newText: String, color newColor: ImageEditorColor) -> ImageEditorTextItem {
         return ImageEditorTextItem(itemId: itemId,
                                    text: newText,
@@ -130,7 +112,6 @@ public class ImageEditorTextItem: ImageEditorItem {
                                    scaling: scaling)
     }
 
-    @objc
     public func copy(unitCenter: CGPoint) -> ImageEditorTextItem {
         return ImageEditorTextItem(itemId: itemId,
                                    text: text,
@@ -143,7 +124,6 @@ public class ImageEditorTextItem: ImageEditorItem {
                                    scaling: scaling)
     }
 
-    @objc
     public func copy(scaling: CGFloat,
                      rotationRadians: CGFloat) -> ImageEditorTextItem {
         return ImageEditorTextItem(itemId: itemId,
@@ -157,7 +137,6 @@ public class ImageEditorTextItem: ImageEditorItem {
                                    scaling: scaling)
     }
 
-    @objc
     public func copy(unitWidth: CGFloat) -> ImageEditorTextItem {
         return ImageEditorTextItem(itemId: itemId,
                                    text: text,
@@ -170,7 +149,6 @@ public class ImageEditorTextItem: ImageEditorItem {
                                    scaling: scaling)
     }
 
-    @objc
     public func copy(font: UIFont) -> ImageEditorTextItem {
         return ImageEditorTextItem(itemId: itemId,
                                    text: text,

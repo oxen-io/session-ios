@@ -7,6 +7,7 @@ import CoreServices
 import SignalUtilitiesKit
 import SignalCoreKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 protocol PhotoLibraryDelegate: AnyObject {
     func photoLibraryDidChange(_ photoLibrary: PhotoLibrary)
@@ -138,7 +139,7 @@ class PhotoCollectionContents {
         _ = imageManager.requestImage(for: asset, targetSize: thumbnailSize, contentMode: .aspectFill, options: nil, resultHandler: resultHandler)
     }
 
-    private func requestImageDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: DataSource, dataUTI: String), Error> {
+    private func requestImageDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: (any DataSource), dataUTI: String), Error> {
         return Deferred {
             Future { [weak self] resolver in
                 
@@ -157,7 +158,7 @@ class PhotoCollectionContents {
                         return
                     }
                     
-                    guard let dataSource = DataSourceValue.dataSource(with: imageData, utiType: dataUTI) else {
+                    guard let dataSource = DataSourceValue(data: imageData, utiType: dataUTI) else {
                         resolver(Result.failure(PhotoLibraryError.assertionError(description: "dataSource was unexpectedly nil")))
                         return
                     }
@@ -169,7 +170,7 @@ class PhotoCollectionContents {
         .eraseToAnyPublisher()
     }
 
-    private func requestVideoDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: DataSource, dataUTI: String), Error> {
+    private func requestVideoDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: (any DataSource), dataUTI: String), Error> {
         return Deferred {
             Future { [weak self] resolver in
                 
@@ -186,7 +187,7 @@ class PhotoCollectionContents {
                     exportSession.outputFileType = AVFileType.mp4
                     exportSession.metadataItemFilter = AVMetadataItemFilter.forSharing()
                     
-                    let exportPath = OWSFileSystem.temporaryFilePath(withFileExtension: "mp4")
+                    let exportPath = FileSystem.temporaryFilePath(fileExtension: "mp4")
                     let exportURL = URL(fileURLWithPath: exportPath)
                     exportSession.outputURL = exportURL
                     
@@ -194,7 +195,7 @@ class PhotoCollectionContents {
                     exportSession.exportAsynchronously {
                         Logger.debug("Completed video export")
                         
-                        guard let dataSource = DataSourcePath.dataSource(with: exportURL, shouldDeleteOnDeallocation: true) else {
+                        guard let dataSource = DataSourcePath(fileUrl: exportURL, shouldDeleteOnDeinit: true) else {
                             resolver(Result.failure(PhotoLibraryError.assertionError(description: "Failed to build data source for exported video URL")))
                             return
                         }

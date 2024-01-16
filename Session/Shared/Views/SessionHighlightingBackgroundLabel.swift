@@ -22,8 +22,8 @@ public class SessionHighlightingBackgroundLabel: UIView {
         result.translatesAutoresizingMaskIntoConstraints = false
         result.font = .boldSystemFont(ofSize: Values.smallFontSize)
         result.themeTextColor = .textPrimary
-        result.setContentHuggingHigh()
-        result.setCompressionResistanceHigh()
+        result.setContentHugging(to: .required)
+        result.setCompressionResistance(to: .required)
         
         return result
     }()

@@ -2,12 +2,16 @@
 
 import Foundation
 import CallKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 extension SessionCallManager {
-    public func startCall(_ call: SessionCall, completion: ((Error?) -> Void)?) {
-        guard case .offer = call.mode else { return }
-        guard !call.hasConnected else { return }
+    public func startCall(_ call: CurrentCallProtocol?, completion: ((Error?) -> Void)?) {
+        guard
+            let call: SessionCall = call as? SessionCall,
+            case .offer = call.mode,
+            !call.hasConnected
+        else { return }
         
         reportOutgoingCall(call)
         
@@ -28,9 +32,9 @@ extension SessionCallManager {
         }
     }
     
-    public func answerCall(_ call: SessionCall, completion: ((Error?) -> Void)?) {
-        if callController != nil {
-            let answerCallAction = CXAnswerCallAction(call: call.callId)
+    public func answerCall(_ call: CurrentCallProtocol?, completion: ((Error?) -> Void)?) {
+        if callController != nil, let callId: UUID = call?.callId {
+            let answerCallAction = CXAnswerCallAction(call: callId)
             let transaction = CXTransaction()
             transaction.addAction(answerCallAction)
 
@@ -42,9 +46,9 @@ extension SessionCallManager {
         }
     }
     
-    public func endCall(_ call: SessionCall, completion: ((Error?) -> Void)?) {
-        if callController != nil {
-            let endCallAction = CXEndCallAction(call: call.callId)
+    public func endCall(_ call: CurrentCallProtocol?, completion: ((Error?) -> Void)?) {
+        if callController != nil, let callId: UUID = call?.callId {
+            let endCallAction = CXEndCallAction(call: callId)
             let transaction = CXTransaction()
             transaction.addAction(endCallAction)
 

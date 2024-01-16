@@ -20,7 +20,7 @@ class RemoteVideoView: TargetView {
         super.renderFrame(frame)
         guard let frame = frame else { return }
         if UIDevice.current.isIPad {
-            DispatchMainThreadSafe {
+            Threading.dispatchMainThreadSafe {
 #if targetEnvironment(simulator)
                 self.contentMode = .scaleAspectFit
 #else

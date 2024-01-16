@@ -11,6 +11,7 @@ class GifPickerCell: UICollectionViewCell {
 
     // MARK: Properties
 
+    var dependencies: Dependencies?
     var imageInfo: GiphyImageInfo? {
         didSet {
             AssertIsOnMainThread()
@@ -58,6 +59,7 @@ class GifPickerCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
 
+        dependencies = nil
         imageInfo = nil
         isCellVisible = false
         stillAsset = nil
@@ -135,25 +137,30 @@ class GifPickerCell: UICollectionViewCell {
         if stillAsset != nil || animatedAsset != nil {
             clearStillAssetRequest()
         } else if stillAssetRequest == nil {
-            stillAssetRequest = GiphyDownloader.giphyDownloader.requestAsset(assetDescription: stillRendition,
-                                                                             priority: .high,
-                                                                             success: { [weak self] assetRequest, asset in
-                                                                                guard let strongSelf = self else { return }
-                                                                                if assetRequest != nil && assetRequest != strongSelf.stillAssetRequest {
-                                                                                    owsFailDebug("Obsolete request callback.")
-                                                                                    return
-                                                                                }
-                                                                                strongSelf.clearStillAssetRequest()
-                                                                                strongSelf.stillAsset = asset
-                                                                                strongSelf.ensureViewState()
+            stillAssetRequest = dependencies?[singleton: .giphyDownloader].requestAsset(
+                assetDescription: stillRendition,
+                priority: .high,
+                success: { [weak self] assetRequest, asset in
+                    guard let strongSelf = self else { return }
+                    
+                    if assetRequest != nil && assetRequest != strongSelf.stillAssetRequest {
+                        owsFailDebug("Obsolete request callback.")
+                        return
+                    }
+                    
+                    strongSelf.clearStillAssetRequest()
+                    strongSelf.stillAsset = asset
+                    strongSelf.ensureViewState()
                 },
-                                                                             failure: { [weak self] assetRequest in
-                                                                                guard let strongSelf = self else { return }
-                                                                                if assetRequest != strongSelf.stillAssetRequest {
-                                                                                    owsFailDebug("Obsolete request callback.")
-                                                                                    return
-                                                                                }
-                                                                                strongSelf.clearStillAssetRequest()
+                failure: { [weak self] assetRequest in
+                    guard let strongSelf = self else { return }
+                    
+                    if assetRequest != strongSelf.stillAssetRequest {
+                        owsFailDebug("Obsolete request callback.")
+                        return
+                    }
+                    
+                    strongSelf.clearStillAssetRequest()
             })
         }
 
@@ -161,26 +168,31 @@ class GifPickerCell: UICollectionViewCell {
         if animatedAsset != nil {
             clearAnimatedAssetRequest()
         } else if animatedAssetRequest == nil {
-            animatedAssetRequest = GiphyDownloader.giphyDownloader.requestAsset(assetDescription: animatedRendition,
-                                                                                priority: .low,
-                                                                                success: { [weak self] assetRequest, asset in
-                                                                                    guard let strongSelf = self else { return }
-                                                                                    if assetRequest != nil && assetRequest != strongSelf.animatedAssetRequest {
-                                                                                        owsFailDebug("Obsolete request callback.")
-                                                                                        return
-                                                                                    }
-                                                                                    // If we have the animated asset, we don't need the still asset.
-                                                                                    strongSelf.clearAssetRequests()
-                                                                                    strongSelf.animatedAsset = asset
-                                                                                    strongSelf.ensureViewState()
+            animatedAssetRequest = dependencies?[singleton: .giphyDownloader].requestAsset(
+                assetDescription: animatedRendition,
+                priority: .low,
+                success: { [weak self] assetRequest, asset in
+                    guard let strongSelf = self else { return }
+                    
+                    if assetRequest != nil && assetRequest != strongSelf.animatedAssetRequest {
+                        owsFailDebug("Obsolete request callback.")
+                        return
+                    }
+                    
+                    // If we have the animated asset, we don't need the still asset.
+                    strongSelf.clearAssetRequests()
+                    strongSelf.animatedAsset = asset
+                    strongSelf.ensureViewState()
                 },
-                                                                                failure: { [weak self] assetRequest in
-                                                                                    guard let strongSelf = self else { return }
-                                                                                    if assetRequest != strongSelf.animatedAssetRequest {
-                                                                                        owsFailDebug("Obsolete request callback.")
-                                                                                        return
-                                                                                    }
-                                                                                    strongSelf.clearAnimatedAssetRequest()
+                failure: { [weak self] assetRequest in
+                    guard let strongSelf = self else { return }
+                    
+                    if assetRequest != strongSelf.animatedAssetRequest {
+                        owsFailDebug("Obsolete request callback.")
+                        return
+                    }
+                    
+                    strongSelf.clearAnimatedAssetRequest()
             })
         }
     }
@@ -195,7 +207,7 @@ class GifPickerCell: UICollectionViewCell {
             clearViewState()
             return
         }
-        guard NSData.ows_isValidImage(atPath: asset.filePath, mimeType: OWSMimeTypeImageGif) else {
+        guard Data.isValidImage(at: asset.filePath, mimeType: MimeTypeUtil.MimeType.imageGif) else {
             owsFailDebug("invalid asset.")
             clearViewState()
             return
@@ -209,7 +221,7 @@ class GifPickerCell: UICollectionViewCell {
             let imageView = YYAnimatedImageView()
             self.imageView = imageView
             self.contentView.addSubview(imageView)
-            imageView.ows_autoPinToSuperviewEdges()
+            imageView.pin(to: contentView)
         }
         guard let imageView = imageView else {
             owsFailDebug("missing imageview.")
@@ -224,15 +236,15 @@ class GifPickerCell: UICollectionViewCell {
             let activityIndicator = UIActivityIndicatorView(style: .medium)
             self.activityIndicator = activityIndicator
             addSubview(activityIndicator)
-            activityIndicator.autoCenterInSuperview()
+            activityIndicator.center(in: self)
             activityIndicator.startAnimating()
 
             // Render activityIndicator on a white tile to ensure it's visible on
             // when overlayed on a variety of potential gifs.
             activityIndicator.themeBackgroundColor = .white
             activityIndicator.alpha = 0.3
-            activityIndicator.autoSetDimension(.width, toSize: 30)
-            activityIndicator.autoSetDimension(.height, toSize: 30)
+            activityIndicator.set(.width, to: 30)
+            activityIndicator.set(.height, to: 30)
             activityIndicator.themeShadowColor = .black
             activityIndicator.layer.cornerRadius = 3
             activityIndicator.layer.shadowOffset = CGSize(width: 1, height: 1)
@@ -250,10 +262,14 @@ class GifPickerCell: UICollectionViewCell {
             return Fail(error: GiphyError.assertionError(description: "renditionForSending was unexpectedly nil"))
                 .eraseToAnyPublisher()
         }
+        guard let dependencies: Dependencies = self.dependencies else {
+            return Fail(error: GiphyError.assertionError(description: "dependencies was unexpectedly nil"))
+                .eraseToAnyPublisher()
+        }
 
         // We don't retain a handle on the asset request, since there will only ever
         // be one selected asset, and we never want to cancel it.
-        return GiphyDownloader.giphyDownloader
+        return dependencies[singleton: .giphyDownloader]
             .requestAsset(
                 assetDescription: renditionForSending,
                 priority: .high

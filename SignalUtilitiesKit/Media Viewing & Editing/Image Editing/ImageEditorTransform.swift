@@ -97,7 +97,10 @@ public class ImageEditorTransform: NSObject {
         // (in this case the center of the content).
         //
         // NOTE: CGAffineTransform transforms are composed in reverse order.
-        let transform = CGAffineTransform.identity.translate(translation).rotated(by: rotationRadians).scaledBy(x: scaling, y: scaling)
+        let transform = CGAffineTransform.identity
+            .translatedBy(x: translation.x, y: translation.y)
+            .rotated(by: rotationRadians)
+            .scaledBy(x: scaling, y: scaling)
         return transform
     }
 
@@ -160,7 +163,10 @@ public class ImageEditorTransform: NSObject {
             viewBounds.bottomLeft,
             viewBounds.bottomRight
             ] {
-                let naiveViewCornerInCanvas = viewCorner.minus(viewBounds.center).applyingInverse(naiveAffineTransform).plus(viewBounds.center)
+            let naiveViewCornerInCanvas = viewCorner
+                .subtracting(viewBounds.center)
+                .applying(naiveAffineTransform.inverted())
+                .adding(viewBounds.center)
                 if isFirstCorner {
                     naiveViewportMinCanvas = naiveViewCornerInCanvas
                     naiveViewportMaxCanvas = naiveViewCornerInCanvas
@@ -170,7 +176,7 @@ public class ImageEditorTransform: NSObject {
                     naiveViewportMaxCanvas = naiveViewportMaxCanvas.max(naiveViewCornerInCanvas)
                 }
         }
-        let naiveViewportSizeCanvas: CGPoint = naiveViewportMaxCanvas.minus(naiveViewportMinCanvas)
+        let naiveViewportSizeCanvas: CGPoint = naiveViewportMaxCanvas.subtracting(naiveViewportMinCanvas)
 
         // Normalize translation, Step 2:
         //
@@ -183,7 +189,10 @@ public class ImageEditorTransform: NSObject {
         // The min/max translation can now by computed by diffing
         // the size of the bounding box of the naive viewport and
         // the size of the image on canvas.
-        let maxTranslationCanvas = naiveImageSizeCanvas.minus(naiveViewportSizeCanvas).times(0.5).max(.zero)
+        let maxTranslationCanvas = naiveImageSizeCanvas
+            .subtracting(naiveViewportSizeCanvas)
+            .multiplying(by: 0.5)
+            .max(.zero)
 
         // Normalize translation, Step 4:
         //
@@ -200,9 +209,9 @@ public class ImageEditorTransform: NSObject {
         // into unit view coordinates using the "naive" (no translation)
         // transform.
         let translationInView = self.unitTranslation.fromUnitCoordinates(viewBounds: viewBounds)
-        let translationInCanvas = translationInView.applyingInverse(naiveAffineTransform)
+        let translationInCanvas = translationInView.applying(naiveAffineTransform.inverted())
         // Clamp the translation to +/- maxTranslationCanvasUnit.
-        let clampedTranslationInCanvas = translationInCanvas.min(maxTranslationCanvas).max(maxTranslationCanvas.inverse())
+        let clampedTranslationInCanvas = translationInCanvas.min(maxTranslationCanvas).max(maxTranslationCanvas.inverted())
         let clampedTranslationInView = clampedTranslationInCanvas.applying(naiveAffineTransform)
         let unitTranslation = clampedTranslationInView.toUnitCoordinates(viewBounds: viewBounds, shouldClamp: false)
 

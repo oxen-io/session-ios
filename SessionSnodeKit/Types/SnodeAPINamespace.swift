@@ -3,22 +3,51 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtil
+import SessionUtilitiesKit
 
 public extension SnodeAPI {
-    enum Namespace: Int, Codable, Hashable {
+    enum Namespace: Int, Codable, Hashable, CustomStringConvertible {
+        /// Messages sent to one-to-one conversations are stored in this namespace
         case `default` = 0
         
+        /// `USER_PROFILE` config messages
         case configUserProfile = 2
-        case configContacts = 3
-        case configConvoInfoVolatile = 4
-        case configUserGroups = 5
-        case configClosedGroupInfo = 11
         
+        /// `CONTACTS` config messages
+        case configContacts = 3
+        
+        /// `CONVO_INFO_VOLATILE` config messages
+        case configConvoInfoVolatile = 4
+        
+        /// `USER_GROUPS` config messages
+        case configUserGroups = 5
+        
+        /// Messages sent to an updated closed group are stored in this namespace
+        case groupMessages = 11
+        
+        /// `GROUP_KEYS` config messages (encryption/decryption keys for messages within a specific group)
+        case configGroupKeys = 12
+        
+        /// `GROUP_INFO` config messages (general info about a specific group)
+        case configGroupInfo = 13
+        
+        /// `GROUP_MEMBERS` config messages (member information for a specific group)
+        case configGroupMembers = 14
+        
+        /// Messages sent to an updated closed group which should be able to be retrieved by revoked members are stored in this namespace
+        case revokedRetrievableGroupMessages = -11
+        
+        /// Messages sent to legacy group conversations are stored in this namespace
         case legacyClosedGroup = -10
         
+        /// This is used when we somehow receive a message from an unknown namespace (shouldn't really be possible)
+        case unknown = -9999989
+        
+        /// This is a convenience namespace used to represent all other namespaces for specific API calls
         case all = -9999990
         
-        // MARK: Variables
+        // MARK: - Variables
         
         var requiresReadAuthentication: Bool {
             switch self {
@@ -47,11 +76,14 @@ public extension SnodeAPI {
         /// re-processing of a previously processed message
         public var shouldDedupeMessages: Bool {
             switch self {
-                case .`default`, .legacyClosedGroup: return true
+                case .`default`, .legacyClosedGroup, .groupMessages,
+                    .revokedRetrievableGroupMessages:
+                    return true
                     
                 case .configUserProfile, .configContacts,
                     .configConvoInfoVolatile, .configUserGroups,
-                    .configClosedGroupInfo, .all:
+                    .configGroupInfo, .configGroupMembers, .configGroupKeys,
+                    .unknown, .all:
                     return false
             }
         }
@@ -61,6 +93,47 @@ public extension SnodeAPI {
                 case .`default`: return ""
                 case .all: return "all"
                 default: return "\(self.rawValue)"
+            }
+        }
+        
+        public var isConfigNamespace: Bool {
+            switch self {
+                case .configUserProfile, .configContacts, .configConvoInfoVolatile, .configUserGroups,
+                    .configGroupInfo, .configGroupMembers, .configGroupKeys:
+                    return true
+                    
+                case .`default`, .legacyClosedGroup, .groupMessages, .revokedRetrievableGroupMessages,
+                    .unknown, .all:
+                    return false
+            }
+        }
+        
+        /// This value defines the order that the messages should be processed in, by processing messages in a specific order
+        /// we can prevent certain edge-cases where data/logic between different messages types could be dependant on each
+        /// other (eg. there could be `configConvoInfoVolatile` data related to a new conversation which hasn't been created
+        /// yet because it's associated `contacts`/`userGroups` message hasn't been processed; or a `groupMessages`
+        /// which was encrypted with a key included in the `configGroupKeys` within the same poll)
+        public var processingOrder: Int {
+            switch self {
+                case .configUserProfile, .configContacts, .configGroupKeys: return 0
+                case .configUserGroups, .configGroupInfo, .configGroupMembers: return 1
+                case .configConvoInfoVolatile: return 2
+                    
+                case .`default`, .legacyClosedGroup, .groupMessages, .revokedRetrievableGroupMessages,
+                    .unknown, .all:
+                    return 3
+            }
+        }
+        
+        /// Flag which indicates whether messages from this namespace should be handled synchronously as part of the polling process
+        /// or whether they can be scheduled to be handled asynchronously
+        public var shouldHandleSynchronously: Bool {
+            switch self {
+                case .configGroupKeys: return true
+                case .`default`, .legacyClosedGroup, .groupMessages, .configUserProfile, .configContacts,
+                    .configConvoInfoVolatile, .configUserGroups, .configGroupInfo, .configGroupMembers,
+                    .revokedRetrievableGroupMessages, .unknown, .all:
+                    return false
             }
         }
         
@@ -83,11 +156,12 @@ public extension SnodeAPI {
         ///
         var batchRequestSizePriority: Int64 {
             switch self {
-                case .`default`, .legacyClosedGroup: return 10
+                case .`default`, .legacyClosedGroup, .groupMessages: return 10
                     
                 case .configUserProfile, .configContacts,
                     .configConvoInfoVolatile, .configUserGroups,
-                    .configClosedGroupInfo, .all:
+                    .configGroupInfo, .configGroupMembers, .configGroupKeys,
+                    .revokedRetrievableGroupMessages, .unknown, .all:
                     return 1
             }
         }
@@ -109,6 +183,47 @@ public extension SnodeAPI {
                 .reduce(into: [:]) { result, next in
                     result[next.namespace] = -next.maxSize
                 }
+        }
+        
+        // MARK: - CustomStringConvertible
+        
+        public var description: String {
+            switch self {
+                case .`default`: return "default"
+                case .configUserProfile: return "configUserProfile"
+                case .configContacts: return "configContacts"
+                case .configConvoInfoVolatile: return "configConvoInfoVolatile"
+                case .configUserGroups: return "configUserGroups"
+                case .groupMessages: return "groupMessages"
+                case .configGroupInfo: return "configGroupInfo"
+                case .configGroupMembers: return "configGroupMembers"
+                case .configGroupKeys: return "configGroupKeys"
+                case .revokedRetrievableGroupMessages: return "revokedRetrievableGroupMessages"
+                case .legacyClosedGroup: return "legacyClosedGroup"
+                
+                case .unknown: return "unknown"
+                case .all: return "all"
+            }
+        }
+    }
+}
+
+// MARK: - LibSession extension
+
+public extension SnodeAPI.Namespace {
+    var cNamespace: SessionUtil.NAMESPACE {
+        get throws {
+            switch self {
+                case .configContacts: return NAMESPACE_CONTACTS
+                case .configConvoInfoVolatile: return NAMESPACE_CONVO_INFO_VOLATILE
+                case .configUserGroups: return NAMESPACE_USER_GROUPS
+                case .configUserProfile: return NAMESPACE_USER_PROFILE
+                    
+                case .configGroupInfo: return NAMESPACE_GROUP_INFO
+                case .configGroupMembers: return NAMESPACE_GROUP_MEMBERS
+                case .configGroupKeys: return NAMESPACE_GROUP_KEYS
+                default: throw CryptoError.failedToGenerateOutput
+            }
         }
     }
 }

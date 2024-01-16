@@ -7,6 +7,7 @@ import DifferenceKit
 import SessionUIKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 
 protocol SessionViewModelAccessible {
     var viewModelType: AnyObject.Type { get }
@@ -31,6 +32,8 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
     
     // MARK: - Components
     
+    private lazy var titleView: SessionTableViewTitleView = SessionTableViewTitleView()
+    
     private lazy var tableView: UITableView = {
         let result: UITableView = UITableView()
         result.translatesAutoresizingMaskIntoConstraints = false
@@ -41,6 +44,7 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
         result.register(view: SessionCell.self)
         result.register(view: FullConversationCell.self)
         result.registerHeaderFooterView(view: SessionHeaderView.self)
+        result.registerHeaderFooterView(view: SessionFooterView.self)
         result.dataSource = self
         result.delegate = self
         
@@ -125,11 +129,8 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        ViewControllerUtilities.setUpDefaultSessionStyle(
-            for: self,
-            title: viewModel.title,
-            hasCustomBackButton: false
-        )
+        navigationItem.titleView = titleView
+        titleView.update(title: self.viewModel.title, subtitle: self.viewModel.subtitle)
         
         view.themeBackgroundColor = .backgroundPrimary
         view.addSubview(tableView)
@@ -214,7 +215,7 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
                 receiveCompletion: { [weak self] result in
                     switch result {
                         case .failure(let error):
-                            let title: String = (self?.viewModel.title ?? "unknown")
+                            let title: String = (self?.viewModel.title ?? "unknown")    // stringlint:disable
                             
                             // If we got an error then try to restart the stream once, otherwise log the error
                             guard self?.dataStreamJustFailed == false else {
@@ -392,8 +393,9 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
             .sink { [weak self] buttonInfo in
                 if let buttonInfo: SessionButton.Info = buttonInfo {
                     self?.footerButton.setTitle(buttonInfo.title, for: .normal)
-                    self?.footerButton.setStyle(buttonInfo.style)
+                    self?.footerButton.style = buttonInfo.style
                     self?.footerButton.isEnabled = buttonInfo.isEnabled
+                    self?.footerButton.set(.width, greaterThanOrEqualTo: buttonInfo.minWidth)
                     self?.footerButton.accessibilityIdentifier = buttonInfo.accessibility?.identifier
                     self?.footerButton.accessibilityLabel = buttonInfo.accessibility?.label
                 }
@@ -458,7 +460,7 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
             case (let cell as FullConversationCell, let threadInfo as SessionCell.Info<SessionThreadViewModel>):
                 cell.accessibilityIdentifier = info.accessibility?.identifier
                 cell.isAccessibilityElement = (info.accessibility != nil)
-                cell.update(with: threadInfo.id)
+                cell.update(with: threadInfo.id, using: viewModel.dependencies)
                 
             default:
                 SNLog("[SessionTableViewController] Got invalid combination of cellType: \(viewModel.cellType) and tableData: \(SessionCell.Info<TableItem>.self)")
@@ -478,10 +480,29 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
         return result
     }
     
+    func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
+        let section: SectionModel = viewModel.tableData[section]
+        
+        if let footerString = section.model.footer {
+            let result: SessionFooterView = tableView.dequeueHeaderFooterView(type: SessionFooterView.self)
+            result.update(title: footerString)
+            
+            return result
+        }
+        
+        return UIView()
+    }
+    
     // MARK: - UITableViewDelegate
     
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
         return viewModel.tableData[section].model.style.height
+    }
+    
+    func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat {
+        let section: SectionModel = viewModel.tableData[section]
+        
+        return (section.model.footer == nil ? 0 : UITableView.automaticDimension)
     }
     
     func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -544,12 +565,12 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
                 return nil
             }
             
-            switch (info.leftAccessory, info.rightAccessory) {
-                case (_, .highlightingBackgroundLabel(_, _)):
-                    return (!cell.rightAccessoryView.isHidden ? cell.rightAccessoryView : cell)
+            switch (info.leadingAccessory, info.trailingAccessory) {
+                case (_, is SessionCell.AccessoryConfig.HighlightingBackgroundLabel):
+                    return (!cell.trailingAccessoryView.isHidden ? cell.trailingAccessoryView : cell)
                     
-                case (.highlightingBackgroundLabel(_, _), _):
-                    return (!cell.leftAccessoryView.isHidden ? cell.leftAccessoryView : cell)
+                case (is SessionCell.AccessoryConfig.HighlightingBackgroundLabel, _):
+                    return (!cell.leadingAccessoryView.isHidden ? cell.leadingAccessoryView : cell)
                 
                 default:
                     return cell
@@ -558,9 +579,9 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
         let maybeOldSelection: (Int, SessionCell.Info<TableItem>)? = section.elements
             .enumerated()
             .first(where: { index, info in
-                switch (info.leftAccessory, info.rightAccessory) {
-                    case (_, .radio(_, let isSelected, _, _)): return isSelected()
-                    case (.radio(_, let isSelected, _, _), _): return isSelected()
+                switch (info.leadingAccessory, info.trailingAccessory) {
+                    case (_, let accessory as SessionCell.AccessoryConfig.Radio): return accessory.liveIsSelected()
+                    case (let accessory as SessionCell.AccessoryConfig.Radio, _): return accessory.liveIsSelected()
                     default: return false
                 }
             })

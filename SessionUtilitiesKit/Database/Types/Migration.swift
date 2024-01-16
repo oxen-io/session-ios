@@ -18,7 +18,7 @@ public protocol Migration {
     /// correctly within migration tests
     static var createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] { get }
     
-    static func migrate(_ db: Database) throws
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws
 }
 
 public extension Migration {
@@ -26,7 +26,8 @@ public extension Migration {
     
     static func loggedMigrate(
         _ storage: Storage?,
-        targetIdentifier: TargetMigrations.Identifier
+        targetIdentifier: TargetMigrations.Identifier,
+        using dependencies: Dependencies
     ) -> ((_ db: Database) throws -> ()) {
         return { (db: Database) in
             SNLogNotTests("[Migration Info] Starting \(targetIdentifier.key(with: self))")
@@ -34,7 +35,7 @@ public extension Migration {
             storage?.internalCurrentlyRunningMigration.mutate { $0 = (targetIdentifier, self) }
             defer { storage?.internalCurrentlyRunningMigration.mutate { $0 = nil } }
             
-            try migrate(db)
+            try migrate(db, using: dependencies)
             SNLogNotTests("[Migration Info] Completed \(targetIdentifier.key(with: self))")
         }
     }

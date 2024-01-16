@@ -3,10 +3,25 @@
 import Foundation
 
 public extension JSONEncoder {
+    convenience init(using dependencies: Dependencies = Dependencies()) {
+        self.init()
+        self.userInfo = [ Dependencies.userInfoKey: dependencies ]
+        self.outputFormatting = dependencies.mockableValue(self.outputFormatting)
+    }
+    
     func with(outputFormatting: JSONEncoder.OutputFormatting) -> JSONEncoder {
         let result: JSONEncoder = self
         result.outputFormatting = outputFormatting
         
         return result
+    }
+}
+
+public extension Encoder {
+    var dependencies: Dependencies {
+        (
+            (self.userInfo[Dependencies.userInfoKey] as? Dependencies) ??
+            Dependencies()
+        )
     }
 }

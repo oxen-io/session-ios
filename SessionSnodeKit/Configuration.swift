@@ -28,8 +28,8 @@ public enum SNSnodeKit: MigratableTarget { // Just to make the external API nice
         )
     }
 
-    public static func configure() {
+    public static func configure(using dependencies: Dependencies) {
         // Configure the job executors
-        JobRunner.setExecutor(GetSnodePoolJob.self, for: .getSnodePool)
+        dependencies[singleton: .jobRunner].setExecutor(GetSnodePoolJob.self, for: .getSnodePool)
     }
 }

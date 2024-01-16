@@ -23,7 +23,7 @@ public enum SyncPushTokensJob: JobExecutor {
         using dependencies: Dependencies = Dependencies()
     ) {
         // Don't run when inactive or not in main app or if the user doesn't exist yet
-        guard (UserDefaults.sharedLokiProject?[.isMainAppActive]).defaulting(to: false) else {
+        guard dependencies[defaults: .appGroup, key: .isMainAppActive] else {
             return deferred(job, dependencies) // Don't need to do anything if it's not the main app
         }
         guard Identity.userCompletedRequiredOnboarding() else {
@@ -32,12 +32,12 @@ public enum SyncPushTokensJob: JobExecutor {
         }
         
         // Determine if the device has 'Fast Mode' (APNS) enabled
-        let isUsingFullAPNs: Bool = UserDefaults.standard[.isUsingFullAPNs]
+        let isUsingFullAPNs: Bool = dependencies[defaults: .standard, key: .isUsingFullAPNs]
         
         // If the job is running and 'Fast Mode' is disabled then we should try to unregister the existing
         // token
         guard isUsingFullAPNs else {
-            Just(dependencies.storage[.lastRecordedPushToken])
+            Just(dependencies[singleton: .storage, key: .lastRecordedPushToken])
                 .setFailureType(to: Error.self)
                 .flatMap { lastRecordedPushToken -> AnyPublisher<Void, Error> in
                     // Tell the device to unregister for remote notifications (essentially try to invalidate
@@ -46,14 +46,15 @@ public enum SyncPushTokensJob: JobExecutor {
                     DispatchQueue.main.sync { UIApplication.shared.unregisterForRemoteNotifications() }
                     
                     // Clear the old token
-                    dependencies.storage.write(using: dependencies) { db in
+                    dependencies[singleton: .storage].write(using: dependencies) { db in
                         db[.lastRecordedPushToken] = nil
                     }
                     
                     // Unregister from our server
                     if let existingToken: String = lastRecordedPushToken {
                         SNLog("[SyncPushTokensJob] Unregister using last recorded push token: \(redact(existingToken))")
-                        return PushNotificationAPI.unsubscribe(token: Data(hex: existingToken))
+                        return PushNotificationAPI
+                            .unsubscribeAll(token: Data(hex: existingToken), using: dependencies)
                             .map { _ in () }
                             .eraseToAnyPublisher()
                     }
@@ -83,16 +84,15 @@ public enum SyncPushTokensJob: JobExecutor {
         /// **Note:** Apple's documentation states that we should re-register for notifications on every launch:
         /// https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/HandlingRemoteNotifications.html#//apple_ref/doc/uid/TP40008194-CH6-SW1
         Logger.info("Re-registering for remote notifications.")
-        PushRegistrationManager.shared.requestPushTokens()
+        PushRegistrationManager.shared.requestPushTokens(using: dependencies)
             .flatMap { (pushToken: String, voipToken: String) -> AnyPublisher<Void, Error> in
                 /// For our `subscribe` endpoint we only want to call it if:
-                /// • It's been longer than `SyncPushTokensJob.maxFrequency` since the last subscription;
+                /// • It's been longer than `SyncPushTokensJob.maxFrequency` since the last successful subscription;
                 /// • The token has changed; or
                 /// • We want to force an update
-                let timeSinceLastSubscription: TimeInterval = dependencies.dateNow
+                let timeSinceLastSuccessfulUpload: TimeInterval = dependencies.dateNow
                     .timeIntervalSince(
-                        dependencies.standardUserDefaults[.lastPushNotificationSync]
-                            .defaulting(to: Date.distantPast)
+                        Date(timeIntervalSince1970: dependencies[defaults: .standard, key: .lastDeviceTokenUpload])
                     )
                 let uploadOnlyIfStale: Bool? = {
                     guard
@@ -104,8 +104,8 @@ public enum SyncPushTokensJob: JobExecutor {
                 }()
                 
                 guard
-                    timeSinceLastSubscription >= SyncPushTokensJob.maxFrequency ||
-                    dependencies.storage[.lastRecordedPushToken] != pushToken ||
+                    timeSinceLastSuccessfulUpload >= SyncPushTokensJob.maxFrequency ||
+                    dependencies[singleton: .storage, key: .lastRecordedPushToken] != pushToken ||
                     uploadOnlyIfStale == false
                 else {
                     SNLog("[SyncPushTokensJob] OS subscription completed, skipping server subscription due to frequency")
@@ -115,7 +115,7 @@ public enum SyncPushTokensJob: JobExecutor {
                 }
                 
                 return PushNotificationAPI
-                    .subscribe(
+                    .subscribeAll(
                         token: Data(hex: pushToken),
                         isForcedUpdate: true,
                         using: dependencies
@@ -130,9 +130,8 @@ public enum SyncPushTokensJob: JobExecutor {
                                 case .finished:
                                     Logger.warn("Recording push tokens locally. pushToken: \(redact(pushToken)), voipToken: \(redact(voipToken))")
                                     SNLog("[SyncPushTokensJob] Completed")
-                                    dependencies.standardUserDefaults[.lastPushNotificationSync] = dependencies.dateNow
 
-                                    dependencies.storage.write(using: dependencies) { db in
+                                    dependencies[singleton: .storage].write(using: dependencies) { db in
                                         db[.lastRecordedPushToken] = pushToken
                                         db[.lastRecordedVoipToken] = voipToken
                                     }

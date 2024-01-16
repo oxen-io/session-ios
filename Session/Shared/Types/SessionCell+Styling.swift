@@ -62,6 +62,7 @@ public extension SessionCell {
     
     struct StyleInfo: Equatable, Hashable {
         let tintColor: ThemeValue
+        let subtitleTintColor: ThemeValue
         let alignment: SessionCell.Alignment
         let allowedSeparators: Separators
         let customPadding: Padding?
@@ -69,12 +70,14 @@ public extension SessionCell {
         
         public init(
             tintColor: ThemeValue = .textPrimary,
+            subtitleTintColor: ThemeValue? = nil,
             alignment: SessionCell.Alignment = .leading,
             allowedSeparators: Separators = [.top, .bottom],
             customPadding: Padding? = nil,
             backgroundStyle: SessionCell.BackgroundStyle = .rounded
         ) {
             self.tintColor = tintColor
+            self.subtitleTintColor = (subtitleTintColor ?? tintColor)
             self.alignment = alignment
             self.allowedSeparators = allowedSeparators
             self.customPadding = customPadding
@@ -121,6 +124,7 @@ public extension SessionCell {
         case rounded
         case edgeToEdge
         case noBackground
+        case noBackgroundEdgeToEdge
     }
     
     struct Separators: OptionSet, Equatable, Hashable {

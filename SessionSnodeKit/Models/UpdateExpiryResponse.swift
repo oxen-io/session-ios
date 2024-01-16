@@ -1,10 +1,15 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import Sodium
 import SessionUtilitiesKit
 
 public class UpdateExpiryResponse: SnodeRecursiveResponse<UpdateExpiryResponse.SwarmItem> {}
+
+public struct UpdateExpiryResponseResult {
+    public let changed: [String: UInt64]
+    public let unchanged: [String: UInt64]
+    public let didError: Bool
+}
 
 // MARK: - SwarmItem
 
@@ -38,24 +43,24 @@ public extension UpdateExpiryResponse {
 
 extension UpdateExpiryResponse: ValidatableResponse {
     typealias ValidationData = [String]
-    typealias ValidationResponse = [(hash: String, expiry: UInt64)]
+    typealias ValidationResponse = UpdateExpiryResponseResult
     
     /// All responses in the swarm must be valid
     internal static var requiredSuccessfulResponses: Int { -1 }
     
     internal func validResultMap(
-        sodium: Sodium,
-        userX25519PublicKey: String,
-        validationData: [String]
-    ) throws -> [String: [(hash: String, expiry: UInt64)]] {
-        let validationMap: [String: [(hash: String, expiry: UInt64)]] = try swarm.reduce(into: [:]) { result, next in
+        publicKey: String,
+        validationData: [String],
+        using dependencies: Dependencies
+    ) throws -> [String: UpdateExpiryResponseResult] {
+        let validationMap: [String: UpdateExpiryResponseResult] = try swarm.reduce(into: [:]) { result, next in
             guard
                 !next.value.failed,
                 let appliedExpiry: UInt64 = next.value.expiry,
                 let signatureBase64: String = next.value.signatureBase64,
                 let encodedSignature: Data = Data(base64Encoded: signatureBase64)
             else {
-                result[next.key] = []
+                result[next.key] = UpdateExpiryResponseResult(changed: [:], unchanged: [:], didError: true)
                 
                 if let reason: String = next.value.reason, let statusCode: Int = next.value.code {
                     SNLog("Couldn't update expiry from: \(next.key) due to error: \(reason) (\(statusCode)).")
@@ -74,7 +79,7 @@ extension UpdateExpiryResponse: ValidatableResponse {
             ///
             /// **Note:** If `updated` is empty then the `expiry` value will match the value that was
             /// included in the original request
-            let verificationBytes: [UInt8] = userX25519PublicKey.bytes
+            let verificationBytes: [UInt8] = publicKey.bytes
                 .appending(contentsOf: "\(appliedExpiry)".data(using: .ascii)?.bytes)
                 .appending(contentsOf: validationData.joined().bytes)
                 .appending(contentsOf: next.value.updated.sorted().joined().bytes)
@@ -85,18 +90,22 @@ extension UpdateExpiryResponse: ValidatableResponse {
                         result.append(contentsOf: "\(nextUnchanged.value)".data(using: .ascii)?.bytes ?? [])
                     }
                 )
-            let isValid: Bool = sodium.sign.verify(
-                message: verificationBytes,
-                publicKey: Data(hex: next.key).bytes,
-                signature: encodedSignature.bytes
+            let isValid: Bool = dependencies[singleton: .crypto].verify(
+                .signature(
+                    message: verificationBytes,
+                    publicKey: Data(hex: next.key).bytes,
+                    signature: encodedSignature.bytes
+                )
             )
             
             // If the update signature is invalid then we want to fail here
             guard isValid else { throw SnodeAPIError.signatureVerificationFailed }
             
-            result[next.key] = next.value.updated
-                .map { ($0, appliedExpiry) }
-                .appending(contentsOf: next.value.unchanged.map { ($0.key, $0.value) })
+            result[next.key] = UpdateExpiryResponseResult(
+                changed: next.value.updated.reduce(into: [:]) { prev, next in prev[next] = appliedExpiry },
+                unchanged: next.value.unchanged,
+                didError: false
+            )
         }
         
         return try Self.validated(map: validationMap, totalResponseCount: swarm.count)

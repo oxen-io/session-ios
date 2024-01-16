@@ -27,45 +27,65 @@ extension ProjectState {
         "_SharedTestUtilities/",    // Exclude shared test directory
         "external/"                 // External dependencies
     ]
-    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", "null" ]
+    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", ".", "/", "\\n", "null" ]
     static let excludedUnlocalisedStringLineMatching: Set<MatchType> = [
-        .contains(ProjectState.lintSuppression),
-        .prefix("#import"),
-        .prefix("@available("),
-        .contains("fatalError("),
-        .contains("precondition("),
-        .contains("preconditionFailure("),
-        .contains("print("),
-        .contains("NSLog("),
-        .contains("SNLog("),
-        .contains("SNLogNotTests("),
-        .contains("owsFailDebug("),
-        .contains("#imageLiteral(resourceName:"),
-        .contains("UIImage(named:"),
-        .contains("UIImage(systemName:"),
-        .contains("[UIImage imageNamed:"),
-        .contains("UIFont(name:"),
-        .contains(".dateFormat ="),
-        .contains(".accessibilityLabel ="),
-        .contains(".accessibilityValue ="),
-        .contains(".accessibilityIdentifier ="),
-        .contains("accessibilityIdentifier:"),
-        .contains("accessibilityLabel:"),
-        .contains("Accessibility(identifier:"),
-        .contains("Accessibility(label:"),
-        .contains("NSAttributedString.Key("),
-        .contains("Notification.Name("),
-        .contains("Notification.Key("),
-        .contains("DispatchQueue("),
-        .containsAnd("identifier:", .previousLine(numEarlier: 1, .contains("Accessibility("))),
-        .containsAnd("label:", .previousLine(numEarlier: 1, .contains("Accessibility("))),
-        .containsAnd("label:", .previousLine(numEarlier: 2, .contains("Accessibility("))),
-        .contains("SQL("),
+        .contains(ProjectState.lintSuppression, caseSensitive: false),
+        .prefix("#import", caseSensitive: false),
+        .prefix("@available(", caseSensitive: false),
+        .contains("fatalError(", caseSensitive: false),
+        .contains("precondition(", caseSensitive: false),
+        .contains("preconditionFailure(", caseSensitive: false),
+        .contains("print(", caseSensitive: false),
+        .contains("NSLog(", caseSensitive: false),
+        .contains("SNLog(", caseSensitive: false),
+        .contains("SNLogNotTests(", caseSensitive: false),
+        .contains("owsFailDebug(", caseSensitive: false),
+        .contains("#imageLiteral(resourceName:", caseSensitive: false),
+        .contains("UIImage(named:", caseSensitive: false),
+        .contains("UIImage(systemName:", caseSensitive: false),
+        .contains("[UIImage imageNamed:", caseSensitive: false),
+        .contains("UIFont(name:", caseSensitive: false),
+        .contains(".dateFormat =", caseSensitive: false),
+        .contains(".accessibilityLabel =", caseSensitive: false),
+        .contains(".accessibilityValue =", caseSensitive: false),
+        .contains(".accessibilityIdentifier =", caseSensitive: false),
+        .contains("accessibilityIdentifier:", caseSensitive: false),
+        .contains("accessibilityLabel:", caseSensitive: false),
+        .contains("Accessibility(identifier:", caseSensitive: false),
+        .contains("Accessibility(label:", caseSensitive: false),
+        .contains("NSAttributedString.Key(", caseSensitive: false),
+        .contains("Notification.Name(", caseSensitive: false),
+        .contains("Notification.Key(", caseSensitive: false),
+        .contains("DispatchQueue(", caseSensitive: false),
+        .containsAnd(
+            "identifier:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Accessibility(", caseSensitive: false))
+        ),
+        .containsAnd(
+            "label:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Accessibility(", caseSensitive: false))
+        ),
+        .containsAnd(
+            "label:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 2, .contains("Accessibility(", caseSensitive: false))
+        ),
+        .contains("SQL(", caseSensitive: false),
         .regex(".*static var databaseTableName: String"),
         .regex("Logger\\..*\\("),
         .regex("OWSLogger\\..*\\("),
         .regex("case .* = "),
-        .regex("Error.*\\(")
+        .regex("Error.*\\("),
+        .regex("Crypto.*\\(id:"),
+        .containsAnd("id:", caseSensitive: false, .previousLine(numEarlier: 1, .regex("Crypto.*\\("))),
+        .regex(".*\\.like\\(\".*%\""),
+        .containsAnd(
+            "identifier:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Dependencies.create", caseSensitive: false))
+        )
     ]
 }
 
@@ -528,21 +548,33 @@ extension ProjectState {
 }
 
 indirect enum MatchType: Hashable {
-    case prefix(String)
-    case contains(String)
-    case containsAnd(String, MatchType)
+    case prefix(String, caseSensitive: Bool)
+    case contains(String, caseSensitive: Bool)
+    case containsAnd(String, caseSensitive: Bool, MatchType)
     case regex(String)
     case previousLine(numEarlier: Int, MatchType)
     
     func matches(_ value: String, _ index: Int, _ lines: [String]) -> Bool {
         switch self {
-            case .prefix(let prefix):
+            case .prefix(let prefix, false):
+                return value
+                    .lowercased()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .hasPrefix(prefix.lowercased())
+                
+            case .prefix(let prefix, true):
                 return value
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .hasPrefix(prefix)
                 
-            case .contains(let other): return value.contains(other)
-            case .containsAnd(let other, let otherMatch):
+            case .contains(let other, false): return value.lowercased().contains(other.lowercased())
+            case .contains(let other, true): return value.contains(other)
+            case .containsAnd(let other, false, let otherMatch):
+                guard value.lowercased().contains(other.lowercased()) else { return false }
+                
+                return otherMatch.matches(value, index, lines)
+                
+            case .containsAnd(let other, true, let otherMatch):
                 guard value.contains(other) else { return false }
                 
                 return otherMatch.matches(value, index, lines)

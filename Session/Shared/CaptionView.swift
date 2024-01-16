@@ -59,17 +59,21 @@ public class CaptionContainerView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
 
-        setContentHuggingHigh()
-        setCompressionResistanceHigh()
+        setContentHugging(to: .required)
+        setCompressionResistance(to: .required)
 
         addSubview(currentCaptionView)
-        currentCaptionView.autoPinEdgesToSuperviewEdges(with: .zero, excludingEdge: .top)
-        currentCaptionView.autoPinEdge(toSuperviewEdge: .top, withInset: 0, relation: .greaterThanOrEqual)
+        currentCaptionView.pin(.top, greaterThanOrEqualTo: .top, of: self)
+        currentCaptionView.pin(.leading, to: .leading, of: self)
+        currentCaptionView.pin(.trailing, to: .trailing, of: self)
+        currentCaptionView.pin(.bottom, to: .bottom, of: self)
 
         pendingCaptionView.alpha = 0
         addSubview(pendingCaptionView)
-        pendingCaptionView.autoPinEdgesToSuperviewEdges(with: .zero, excludingEdge: .top)
-        pendingCaptionView.autoPinEdge(toSuperviewEdge: .top, withInset: 0, relation: .greaterThanOrEqual)
+        pendingCaptionView.pin(.top, greaterThanOrEqualTo: .top, of: self)
+        pendingCaptionView.pin(.leading, to: .leading, of: self)
+        pendingCaptionView.pin(.trailing, to: .trailing, of: self)
+        pendingCaptionView.pin(.bottom, to: .bottom, of: self)
     }
 
     public required init?(coder aDecoder: NSCoder) {
@@ -126,11 +130,13 @@ private class CaptionView: UIView {
         super.init(frame: frame)
 
         addSubview(textView)
-        textView.autoPinEdgesToSuperviewMargins()
+        textView.pin(toMarginsOf: self)
 
         addSubview(scrollFadeView)
-        scrollFadeView.autoPinEdgesToSuperviewEdges(with: .zero, excludingEdge: .top)
-        scrollFadeView.autoSetDimension(.height, toSize: 20)
+        scrollFadeView.pin(.leading, to: .leading, of: self)
+        scrollFadeView.pin(.trailing, to: .trailing, of: self)
+        scrollFadeView.pin(.bottom, to: .bottom, of: self)
+        scrollFadeView.set(.height, to: 20)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -147,8 +153,7 @@ private class CaptionView: UIView {
     // MARK: -
 
     class CaptionTextView: UITextView {
-
-        var kMaxHeight: CGFloat = ScaleFromIPhone5(200)
+        var kMaxHeight: CGFloat = Values.scaleFromIPhone5(200)
 
         override var text: String! {
             didSet {

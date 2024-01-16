@@ -94,9 +94,9 @@ public class LoadingViewController: UIViewController {
 
         // Layout
         
-        self.logoView.autoCenterInSuperview()
-        self.logoView.autoSetDimension(.width, toSize: 64)
-        self.logoView.autoSetDimension(.height, toSize: 64)
+        self.logoView.center(in: self.view)
+        self.logoView.set(.width, to: 64)
+        self.logoView.set(.height, to: 64)
         
         self.progressBar.set(.height, to: (self.progressBar.layer.cornerRadius * 2))
         self.progressBar.set(.width, to: .width, of: self.view, multiplier: 0.5)
@@ -104,14 +104,14 @@ public class LoadingViewController: UIViewController {
         self.labelStack.pin(.top, to: .bottom, of: self.logoView, withInset: 40)
         self.labelStack.pin(.left, to: .left, of: self.view)
         self.labelStack.pin(.right, to: .right, of: self.view)
-        self.labelStack.setCompressionResistanceHigh()
-        self.labelStack.setContentHuggingHigh()
+        self.labelStack.setContentHugging(to: .required)
+        self.labelStack.setCompressionResistance(to: .required)
         
         self.bottomLabel.pin(.top, to: .bottom, of: self.labelStack, withInset: 10)
         self.bottomLabel.pin(.left, to: .left, of: self.view)
         self.bottomLabel.pin(.right, to: .right, of: self.view)
-        self.bottomLabel.setCompressionResistanceHigh()
-        self.bottomLabel.setContentHuggingHigh()
+        self.bottomLabel.setContentHugging(to: .required)
+        self.bottomLabel.setCompressionResistance(to: .required)
     }
     
     // MARK: - Functions

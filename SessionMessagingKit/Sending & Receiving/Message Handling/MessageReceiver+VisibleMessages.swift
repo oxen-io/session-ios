@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
@@ -13,7 +12,7 @@ extension MessageReceiver {
         threadVariant: SessionThread.Variant,
         message: VisibleMessage,
         associatedWithProto proto: SNProtoContent,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws -> Int64 {
         guard let sender: String = message.sender, let dataMessage = proto.dataMessage else {
             throw MessageReceiverError.invalidMessage
@@ -21,18 +20,18 @@ extension MessageReceiver {
         
         // Note: `message.sentTimestamp` is in ms (convert to TimeInterval before converting to
         // seconds to maintain the accuracy)
-        let messageSentTimestamp: TimeInterval = (TimeInterval(message.sentTimestamp ?? 0) / 1000)
-        let isMainAppActive: Bool = (UserDefaults.sharedLokiProject?[.isMainAppActive]).defaulting(to: false)
+        let messageSentTimestamp: TimeInterval = TimeInterval(Double(message.sentTimestamp ?? 0) / 1000)
+        let isMainAppActive: Bool = dependencies[defaults: .appGroup, key: .isMainAppActive]
         
         // Update profile if needed (want to do this regardless of whether the message exists or
         // not to ensure the profile info gets sync between a users devices at every chance)
         if let profile = message.profile {
-            try ProfileManager.updateProfileIfNeeded(
+            try Profile.updateIfNeeded(
                 db,
                 publicKey: sender,
                 name: profile.displayName,
                 blocksCommunityMessageRequests: profile.blocksCommunityMessageRequests,
-                avatarUpdate: {
+                displayPictureUpdate: {
                     guard
                         let profilePictureUrl: String = profile.profilePictureUrl,
                         let profileKey: Data = profile.profileKey
@@ -66,9 +65,14 @@ extension MessageReceiver {
         }
         
         // Store the message variant so we can run variant-specific behaviours
-        let currentUserPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
-        let thread: SessionThread = try SessionThread
-            .fetchOrCreate(db, id: threadId, variant: threadVariant, shouldBeVisible: nil)
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
+        let thread: SessionThread = try SessionThread.fetchOrCreate(
+            db,
+            id: threadId,
+            variant: threadVariant,
+            shouldBeVisible: nil,
+            calledFromConfigHandling: false
+        )
         let maybeOpenGroup: OpenGroup? = {
             guard threadVariant == .community else { return nil }
             
@@ -76,10 +80,10 @@ extension MessageReceiver {
         }()
         let variant: Interaction.Variant = try {
             guard
-                let senderSessionId: SessionId = SessionId(from: sender),
+                let senderSessionId: SessionId = try? SessionId(from: sender),
                 let openGroup: OpenGroup = maybeOpenGroup
             else {
-                return (sender == currentUserPublicKey ?
+                return (sender == userSessionId.hexString ?
                     .standardOutgoing :
                     .standardIncoming
                 )
@@ -89,28 +93,19 @@ extension MessageReceiver {
             switch senderSessionId.prefix {
                 case .blinded15, .blinded25:
                     guard
-                        let userEdKeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db),
-                        let blindedKeyPair: KeyPair = dependencies.crypto.generate(
-                            .blindedKeyPair(
-                                serverPublicKey: openGroup.publicKey,
-                                edKeyPair: userEdKeyPair,
-                                using: dependencies
+                        dependencies[singleton: .crypto].verify(
+                            .sessionId(
+                                userSessionId.hexString,
+                                matchesBlindedId: sender,
+                                serverPublicKey: openGroup.publicKey
                             )
                         )
                     else { return .standardIncoming }
                     
-                    let senderIdCurrentUserBlinded: Bool = (
-                        sender == SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString ||
-                        sender == SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString
-                    )
-                    
-                    return (senderIdCurrentUserBlinded ?
-                        .standardOutgoing :
-                        .standardIncoming
-                    )
+                    return .standardOutgoing
                     
                 case .standard, .unblinded:
-                    return (sender == currentUserPublicKey ?
+                    return (sender == userSessionId.hexString ?
                         .standardOutgoing :
                         .standardIncoming
                     )
@@ -129,16 +124,11 @@ extension MessageReceiver {
             associatedWithProto: proto,
             sender: sender,
             messageSentTimestamp: messageSentTimestamp,
-            openGroup: maybeOpenGroup
+            openGroup: maybeOpenGroup,
+            using: dependencies
         ) {
             return interactionId
         }
-        
-        // Retrieve the disappearing messages config to set the 'expiresInSeconds' value
-        // accoring to the config
-        let disappearingMessagesConfiguration: DisappearingMessagesConfiguration = (try? thread.disappearingMessagesConfiguration.fetchOne(db))
-            .defaulting(to: DisappearingMessagesConfiguration.defaultWith(thread.id))
-        
         // Try to insert the interaction
         //
         // Note: There are now a number of unique constraints on the database which
@@ -157,12 +147,13 @@ extension MessageReceiver {
                 wasRead: (
                     // Auto-mark sent messages or messages older than the 'lastReadTimestampMs' as read
                     variant == .standardOutgoing ||
-                    SessionUtil.timestampAlreadyRead(
+                    LibSession.timestampAlreadyRead(
                         threadId: thread.id,
                         threadVariant: thread.variant,
                         timestampMs: Int64(messageSentTimestamp * 1000),
-                        userPublicKey: currentUserPublicKey,
-                        openGroup: maybeOpenGroup
+                        userSessionId: userSessionId,
+                        openGroup: maybeOpenGroup,
+                        using: dependencies
                     )
                 ),
                 hasMention: Interaction.isUserMentioned(
@@ -172,12 +163,8 @@ extension MessageReceiver {
                     quoteAuthorId: dataMessage.quote?.author,
                     using: dependencies
                 ),
-                // Note: Ensure we don't ever expire open group messages
-                expiresInSeconds: (disappearingMessagesConfiguration.isEnabled && message.openGroupServerMessageId == nil ?
-                    disappearingMessagesConfiguration.durationSeconds :
-                    nil
-                ),
-                expiresStartedAtMs: nil,
+                expiresInSeconds: message.expiresInSeconds,
+                expiresStartedAtMs: message.expiresStartedAtMs,
                 // OpenGroupInvitations are stored as LinkPreview's in the database
                 linkPreviewUrl: (message.linkPreview?.url ?? message.openGroupInvitation?.url),
                 // Keep track of the open group server message ID ↔ message ID relationship
@@ -208,7 +195,7 @@ extension MessageReceiver {
                     else { break }
                     
                     // If we receive an outgoing message that already exists in the database
-                    // then we still need up update the recipient and read states for the
+                    // then we still need to update the recipient and read states for the
                     // message (even if we don't need to do anything else)
                     try updateRecipientAndReadStatesForOutgoingInteraction(
                         db,
@@ -216,7 +203,17 @@ extension MessageReceiver {
                         interactionId: existingInteractionId,
                         messageSentTimestamp: messageSentTimestamp,
                         variant: variant,
-                        syncTarget: message.syncTarget
+                        syncTarget: message.syncTarget,
+                        using: dependencies
+                    )
+                    
+                    getExpirationForOutgoingDisappearingMessages(
+                        db,
+                        threadId: threadId,
+                        variant: variant,
+                        serverHash: message.serverHash,
+                        expireInSeconds: message.expiresInSeconds,
+                        using: dependencies
                     )
                     
                 default: break
@@ -234,7 +231,17 @@ extension MessageReceiver {
             interactionId: interactionId,
             messageSentTimestamp: messageSentTimestamp,
             variant: variant,
-            syncTarget: message.syncTarget
+            syncTarget: message.syncTarget,
+            using: dependencies
+        )
+        
+        getExpirationForOutgoingDisappearingMessages(
+            db,
+            threadId: threadId,
+            variant: variant,
+            serverHash: message.serverHash,
+            expireInSeconds: message.expiresInSeconds,
+            using: dependencies
         )
         
         // Parse & persist attachments
@@ -248,7 +255,7 @@ extension MessageReceiver {
             }
             .enumerated()
             .map { index, attachment in
-                let savedAttachment: Attachment = try attachment.saved(db)
+                let savedAttachment: Attachment = try attachment.upserted(db)
                 
                 // Link the attachment to the interaction and add to the id lookup
                 try InteractionAttachment(
@@ -275,7 +282,7 @@ extension MessageReceiver {
             db,
             proto: dataMessage,
             sentTimestampMs: (messageSentTimestamp * 1000)
-        )?.saved(db)
+        )?.upserted(db)
         
         // Open group invitations are stored as LinkPreview values so create one if needed
         if
@@ -287,7 +294,7 @@ extension MessageReceiver {
                 timestamp: LinkPreview.timestampFor(sentTimestampMs: (messageSentTimestamp * 1000)),
                 variant: .openGroupInvitation,
                 title: openGroupInvitationName
-            ).save(db)
+            ).upsert(db)
         }
         
         // Start attachment downloads if needed (ie. trusted contact or group thread)
@@ -300,7 +307,7 @@ extension MessageReceiver {
                 .appending(quote?.attachmentId)
                 .appending(linkPreview?.attachmentId)
                 .forEach { attachmentId in
-                    dependencies.jobRunner.add(
+                    dependencies[singleton: .jobRunner].add(
                         db,
                         job: Job(
                             variant: .attachmentDownload,
@@ -327,25 +334,37 @@ extension MessageReceiver {
         // Note: This is to resolve a rare edge-case where a conversation was started with a user on an old
         // version of the app and their message request approval state was set via a migration rather than
         // by using the approval process
-        if thread.variant == .contact {
-            try MessageReceiver.updateContactApprovalStatusIfNeeded(
-                db,
-                senderSessionId: sender,
-                threadId: thread.id
-            )
+        switch thread.variant {
+            case .contact:
+                try MessageReceiver.updateContactApprovalStatusIfNeeded(
+                    db,
+                    senderSessionId: sender,
+                    threadId: thread.id,
+                    using: dependencies
+                )
+                
+            case .group:
+                try MessageReceiver.updateMemberApprovalStatusIfNeeded(
+                    db,
+                    senderSessionId: sender,
+                    groupSessionIdHexString: thread.id,
+                    using: dependencies
+                )
+                
+            default: break
         }
         
         // Notify the user if needed
         guard variant == .standardIncoming && !interaction.wasRead else { return interactionId }
         
         // Use the same identifier for notifications when in backgroud polling to prevent spam
-        Environment.shared?.notificationsManager.wrappedValue?
-            .notifyUser(
-                db,
-                for: interaction,
-                in: thread,
-                applicationState: (isMainAppActive ? .active : .background)
-            )
+        dependencies[singleton: .notificationsManager].notifyUser(
+            db,
+            for: interaction,
+            in: thread,
+            applicationState: (isMainAppActive ? .active : .background),
+            using: dependencies
+        )
         
         return interactionId
     }
@@ -357,7 +376,8 @@ extension MessageReceiver {
         associatedWithProto proto: SNProtoContent,
         sender: String,
         messageSentTimestamp: TimeInterval,
-        openGroup: OpenGroup?
+        openGroup: OpenGroup?,
+        using dependencies: Dependencies
     ) throws -> Int64? {
         guard
             let reaction: VisibleMessage.VMReaction = message.reaction,
@@ -387,9 +407,9 @@ extension MessageReceiver {
             case .react:
                 // Determine whether the app is active based on the prefs rather than the UIApplication state to avoid
                 // requiring main-thread execution
-                let isMainAppActive: Bool = (UserDefaults.sharedLokiProject?[.isMainAppActive]).defaulting(to: false)
+                let isMainAppActive: Bool = dependencies[defaults: .appGroup, key: .isMainAppActive]
                 let timestampMs: Int64 = Int64(messageSentTimestamp * 1000)
-                let currentUserPublicKey: String = getUserHexEncodedPublicKey(db)
+                let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
                 let reaction: Reaction = try Reaction(
                     interactionId: interactionId,
                     serverHash: message.serverHash,
@@ -399,25 +419,26 @@ extension MessageReceiver {
                     count: 1,
                     sortId: sortId
                 ).inserted(db)
-                let timestampAlreadyRead: Bool = SessionUtil.timestampAlreadyRead(
+                let timestampAlreadyRead: Bool = LibSession.timestampAlreadyRead(
                     threadId: thread.id,
                     threadVariant: thread.variant,
                     timestampMs: timestampMs,
-                    userPublicKey: currentUserPublicKey,
-                    openGroup: openGroup
+                    userSessionId: userSessionId,
+                    openGroup: openGroup,
+                    using: dependencies
                 )
                 
                 // Don't notify if the reaction was added before the lastest read timestamp for
                 // the conversation
-                if sender != currentUserPublicKey && !timestampAlreadyRead {
-                    Environment.shared?.notificationsManager.wrappedValue?
-                        .notifyUser(
-                            db,
-                            forReaction: reaction,
-                            in: thread,
-                            applicationState: (isMainAppActive ? .active : .background)
-                        )
+                if sender != userSessionId.hexString && !timestampAlreadyRead {
+                    dependencies[singleton: .notificationsManager].notifyUser(
+                        db,
+                        forReaction: reaction,
+                        in: thread,
+                        applicationState: (isMainAppActive ? .active : .background)
+                    )
                 }
+                
             case .remove:
                 try Reaction
                     .filter(Reaction.Columns.interactionId == interactionId)
@@ -435,7 +456,8 @@ extension MessageReceiver {
         interactionId: Int64,
         messageSentTimestamp: TimeInterval,
         variant: Interaction.Variant,
-        syncTarget: String?
+        syncTarget: String?,
+        using dependencies: Dependencies
     ) throws {
         guard variant == .standardOutgoing else { return }
         
@@ -453,7 +475,7 @@ extension MessageReceiver {
                         interactionId: interactionId,
                         recipientId: syncTarget,
                         state: .sent
-                    ).save(db)
+                    ).upsert(db)
                 }
                 
             case .legacyGroup, .group:
@@ -465,7 +487,7 @@ extension MessageReceiver {
                             interactionId: interactionId,
                             recipientId: member.profileId,
                             state: .sent
-                        ).save(db)
+                        ).upsert(db)
                     }
                 
             case .community:
@@ -473,7 +495,7 @@ extension MessageReceiver {
                     interactionId: interactionId,
                     recipientId: thread.id, // For open groups this will always be the thread id
                     state: .sent
-                ).save(db)
+                ).upsert(db)
         }
     
         // For outgoing messages mark all older interactions as read (the user should have seen
@@ -485,7 +507,8 @@ extension MessageReceiver {
             threadId: thread.id,
             threadVariant: thread.variant,
             includingOlder: true,
-            trySendReadReceipt: false
+            trySendReadReceipt: false,
+            using: dependencies
         )
         
         // Process any PendingReadReceipt values
@@ -504,5 +527,40 @@ extension MessageReceiver {
             
             _ = try pendingReadReceipt.delete(db)
         }
+    }
+    
+    private static func getExpirationForOutgoingDisappearingMessages(
+        _ db: Database,
+        threadId: String,
+        variant: Interaction.Variant,
+        serverHash: String?,
+        expireInSeconds: TimeInterval?,
+        using dependencies: Dependencies
+    ) {
+        guard
+            variant == .standardOutgoing,
+            let serverHash: String = serverHash,
+            let expireInSeconds: TimeInterval = expireInSeconds,
+            expireInSeconds > 0
+        else {
+            return
+        }
+        
+        let startedAtTimestampMs: Double = Double(SnodeAPI.currentOffsetTimestampMs())
+        
+        dependencies[singleton: .jobRunner].add(
+            db,
+            job: Job(
+                variant: .getExpiration,
+                behaviour: .runOnce,
+                threadId: threadId,
+                details: GetExpirationJob.Details(
+                    expirationInfo: [serverHash: expireInSeconds],
+                    startedAtTimestampMs: startedAtTimestampMs
+                )
+            ),
+            canStartJob: true,
+            using: dependencies
+        )
     }
 }

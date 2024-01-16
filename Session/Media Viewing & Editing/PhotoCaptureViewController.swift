@@ -7,6 +7,7 @@ import SessionUIKit
 import SignalUtilitiesKit
 import SignalCoreKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 protocol PhotoCaptureViewControllerDelegate: AnyObject {
     func photoCaptureViewController(_ photoCaptureViewController: PhotoCaptureViewController, didFinishProcessingAttachment attachment: SignalAttachment)
@@ -124,7 +125,7 @@ class PhotoCaptureViewController: OWSViewController {
 
         init(imageName: String, block: @escaping () -> Void) {
             self.button = OWSButton(imageName: imageName, tintColor: .white, block: block)
-            button.autoPinToSquareAspectRatio()
+            button.set(.width, to: .height, of: button)
             button.themeShadowColor = .black
             button.layer.shadowOffset = CGSize.zero
             button.layer.shadowOpacity = 0.35
@@ -192,7 +193,8 @@ class PhotoCaptureViewController: OWSViewController {
     private func switchCamera() {
         UIView.animate(withDuration: 0.2) {
             let epsilonToForceCounterClockwiseRotation: CGFloat = 0.00001
-            self.switchCameraControl.button.transform = self.switchCameraControl.button.transform.rotate(.pi + epsilonToForceCounterClockwiseRotation)
+            self.switchCameraControl.button.transform = self.switchCameraControl.button.transform
+                .rotated(by: .pi + epsilonToForceCounterClockwiseRotation)
         }
         
         photoCapture.switchCamera()
@@ -277,8 +279,8 @@ class PhotoCaptureViewController: OWSViewController {
         switch captureOrientation {
             case .portrait: transformFromOrientation = .identity
             case .portraitUpsideDown: transformFromOrientation = CGAffineTransform(rotationAngle: .pi)
-            case .landscapeLeft: transformFromOrientation = CGAffineTransform(rotationAngle: .halfPi)
-            case .landscapeRight: transformFromOrientation = CGAffineTransform(rotationAngle: -1 * .halfPi)
+            case .landscapeLeft: transformFromOrientation = CGAffineTransform(rotationAngle: .pi * 0.5)
+            case .landscapeRight: transformFromOrientation = CGAffineTransform(rotationAngle: -1 * .pi * 0.5)
             @unknown default: transformFromOrientation = .identity
         }
 
@@ -319,13 +321,16 @@ class PhotoCaptureViewController: OWSViewController {
         Logger.debug("")
         view.addSubview(previewView)
         if UIDevice.current.hasIPhoneXNotch {
-            previewView.autoPinEdgesToSuperviewEdges()
+            previewView.pin(to: view)
         } else {
-            previewView.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets(top: 0, leading: 0, bottom: 40, trailing: 0))
+            previewView.pin(.top, to: .top, of: view)
+            previewView.pin(.leading, to: .leading, of: view)
+            previewView.pin(.trailing, to: .trailing, of: view)
+            previewView.pin(.bottom, to: .bottom, of: view, withInset: -40)
         }
 
         view.addSubview(captureButton)
-        captureButton.autoHCenterInSuperview()
+        captureButton.center(.horizontal, in: view)
         captureButton.centerYAnchor.constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: SendMediaNavigationController.bottomButtonsCenterOffset).isActive = true
     }
 
@@ -431,9 +436,8 @@ class CaptureButton: UIView {
     let zoomIndicator = CircleView()
 
     weak var delegate: CaptureButtonDelegate?
-
-    let defaultDiameter: CGFloat = ScaleFromIPhone5To7Plus(60, 80)
-    let recordingDiameter: CGFloat = ScaleFromIPhone5To7Plus(68, 120)
+    let defaultDiameter: CGFloat = Values.scaleFromIPhone5To7Plus(60, 80)
+    let recordingDiameter: CGFloat = Values.scaleFromIPhone5To7Plus(68, 120)
     var innerButtonSizeConstraints: [NSLayoutConstraint]!
     var zoomIndicatorSizeConstraints: [NSLayoutConstraint]!
 
@@ -448,21 +452,26 @@ class CaptureButton: UIView {
         innerButton.addGestureRecognizer(longPressGesture)
 
         addSubview(innerButton)
-        innerButtonSizeConstraints = autoSetDimensions(to: CGSize(width: defaultDiameter, height: defaultDiameter))
+        innerButtonSizeConstraints = [
+            set(.width, to: defaultDiameter),
+            set(.height, to: defaultDiameter)
+        ]
         innerButton.themeBackgroundColor = .white
         innerButton.layer.shadowOffset = .zero
         innerButton.layer.shadowOpacity = 0.33
         innerButton.layer.shadowRadius = 2
         innerButton.alpha = 0.33
-        innerButton.autoPinEdgesToSuperviewEdges()
+        innerButton.pin(to: self)
 
         addSubview(zoomIndicator)
-        zoomIndicatorSizeConstraints = zoomIndicator.autoSetDimensions(to: CGSize(width: defaultDiameter, height: defaultDiameter))
+        zoomIndicatorSizeConstraints = [
+            zoomIndicator.set(.width, to: defaultDiameter),
+            zoomIndicator.set(.height, to: defaultDiameter)
+        ]
         zoomIndicator.isUserInteractionEnabled = false
         zoomIndicator.themeBorderColor = .white
         zoomIndicator.layer.borderWidth = 1.5
-        zoomIndicator.autoAlignAxis(.horizontal, toSameAxisOf: innerButton)
-        zoomIndicator.autoAlignAxis(.vertical, toSameAxisOf: innerButton)
+        zoomIndicator.center(in: innerButton)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -523,7 +532,7 @@ class CaptureButton: UIView {
 
             Logger.verbose("distance: \(distance), alpha: \(alpha)")
 
-            let zoomIndicatorDiameter = CGFloatLerp(recordingDiameter, 3, alpha)
+            let zoomIndicatorDiameter = alpha.lerp(recordingDiameter, 3)
             self.zoomIndicatorSizeConstraints.forEach { $0.constant = zoomIndicatorDiameter }
             zoomIndicator.superview?.layoutIfNeeded()
 
@@ -586,7 +595,7 @@ class RecordingTimerView: UIView {
         stackView.spacing = stackViewSpacing
 
         addSubview(stackView)
-        stackView.autoPinEdgesToSuperviewMargins()
+        stackView.pin(toMarginsOf: self)
 
         updateView()
     }
@@ -617,7 +626,8 @@ class RecordingTimerView: UIView {
         icon.layer.shadowOpacity = 0.35
         icon.layer.shadowRadius = 4
         icon.themeBackgroundColor = .danger
-        icon.autoSetDimensions(to: CGSize(width: iconWidth, height: iconWidth))
+        icon.set(.width, to: iconWidth)
+        icon.set(.height, to: iconWidth)
         icon.alpha = 0
 
         return icon
@@ -628,7 +638,9 @@ class RecordingTimerView: UIView {
 
     func startCounting() {
         recordingStartTime = CACurrentMediaTime()
-        timer = Timer.weakScheduledTimer(withTimeInterval: 0.1, target: self, selector: #selector(updateView), userInfo: nil, repeats: true)
+        timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.updateView()
+        }
         UIView.animate(
             withDuration: 0.5,
             delay: 0,

@@ -7,6 +7,7 @@ import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
+import SessionMessagingKit
 
 public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHolder, ObservableTableSource, PagedObservationSource {
     public static let pageSize: Int = 30
@@ -15,7 +16,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     public let navigatableState: NavigatableState = NavigatableState()
     public let state: TableDataState<Section, TableItem> = TableDataState()
     public let observableState: ObservableTableSourceState<Section, TableItem> = ObservableTableSourceState()
-    private let selectedContactIdsSubject: CurrentValueSubject<Set<String>, Never> = CurrentValueSubject([])
+    private let selectedIdsSubject: CurrentValueSubject<Set<String>, Never> = CurrentValueSubject([])
     public private(set) var pagedDataObserver: PagedDatabaseObserver<Contact, TableItem>?
     
     // MARK: - Initialization
@@ -98,7 +99,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     let emptyStateTextPublisher: AnyPublisher<String?, Never> = Just("CONVERSATION_SETTINGS_BLOCKED_CONTACTS_EMPTY_STATE".localized())
             .eraseToAnyPublisher()
     
-    lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = selectedContactIdsSubject
+    lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = selectedIdsSubject
         .prepend([])
         .map { selectedContactIds in
             SessionButton.Info(
@@ -127,30 +128,24 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                             
                             return (lhsValue < rhsValue)
                         }
-                        .map { [weak self] model -> SessionCell.Info<TableItem> in
+                        .map { [selectedIdsSubject] model -> SessionCell.Info<TableItem> in
                             SessionCell.Info(
                                 id: model,
-                                leftAccessory: .profile(id: model.id, profile: model.profile),
+                                leadingAccessory: .profile(id: model.id, profile: model.profile),
                                 title: (
                                     model.profile?.displayName() ??
                                     Profile.truncated(id: model.id, truncating: .middle)
                                 ),
-                                rightAccessory: .radio(
-                                    isSelected: {
-                                        self?.selectedContactIdsSubject.value.contains(model.id) == true
-                                    }
+                                trailingAccessory: .radio(
+                                    liveIsSelected: { selectedIdsSubject.value.contains(model.id) == true }
                                 ),
                                 onTap: {
-                                    var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
-                                    
-                                    if !updatedSelectedIds.contains(model.id) {
-                                        updatedSelectedIds.insert(model.id)
+                                    if !selectedIdsSubject.value.contains(model.id) {
+                                        selectedIdsSubject.send(selectedIdsSubject.value.inserting(model.id))
                                     }
                                     else {
-                                        updatedSelectedIds.remove(model.id)
+                                        selectedIdsSubject.send(selectedIdsSubject.value.removing(model.id))
                                     }
-                                    
-                                    self?.selectedContactIdsSubject.send(updatedSelectedIds)
                                 }
                             )
                         }
@@ -163,14 +158,14 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
         ].flatMap { $0 }
     }
     
-    private func unblockTapped() {
-        guard !selectedContactIdsSubject.value.isEmpty else { return }
+    private func unblockTapped(using dependencies: Dependencies = Dependencies()) {
+        guard !selectedIdsSubject.value.isEmpty else { return }
         
-        let contactIds: Set<String> = selectedContactIdsSubject.value
+        let contactIds: Set<String> = selectedIdsSubject.value
         let contactNames: [String] = contactIds
             .compactMap { contactId in
                 guard
-                    let section: BlockedContactsViewModel.SectionModel = self.tableData
+                    let section: SectionModel = self.tableData
                         .first(where: { section in section.model == .contacts }),
                     let info: SessionCell.Info<TableItem> = section.elements
                         .first(where: { info in info.id.id == contactId })
@@ -204,7 +199,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                         lastName
                     )
                 ]
-                .reversed(if: CurrentAppContext().isRTL)
+                .reversed(if: Dependencies.isRTL)
                 .joined(separator: " ")
             }
             
@@ -223,7 +218,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                     (contactNames.count - numNamesToShow)
                 )
             ]
-            .reversed(if: CurrentAppContext().isRTL)
+            .reversed(if: Dependencies.isRTL)
             .joined(separator: " ")
         }()
         let confirmationModal: ConfirmationModal = ConfirmationModal(
@@ -234,13 +229,13 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                 cancelStyle: .alert_text
             ) { [weak self] _ in
                 // Unblock the contacts
-                Storage.shared.write { db in
+                dependencies[singleton: .storage].write { db in
                     _ = try Contact
                         .filter(ids: contactIds)
-                        .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false))
+                        .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false), using: dependencies)
                 }
                 
-                self?.selectedContactIdsSubject.send([])
+                self?.selectedIdsSubject.send([])
             }
         )
         self.transitionToScreen(confirmationModal, transitionType: .present)

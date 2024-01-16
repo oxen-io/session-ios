@@ -279,7 +279,7 @@ class PhotoCapture: NSObject {
             }
 
             // we might want this to be non-linear
-            let scale = CGFloatLerp(self.minimumZoom, self.maximumZoom, alpha)
+            let scale = alpha.lerp(self.minimumZoom, self.maximumZoom)
             let zoomFactor = self.clampZoom(scale, device: captureDevice)
             self.updateZoom(factor: zoomFactor)
         }
@@ -428,7 +428,7 @@ extension PhotoCapture: CaptureOutputDelegate {
             return
         }
 
-        let dataSource = DataSourceValue.dataSource(with: photoData, utiType: kUTTypeJPEG as String)
+        let dataSource = DataSourceValue(data: photoData, utiType: kUTTypeJPEG as String)
 
         let attachment = SignalAttachment.attachment(dataSource: dataSource, dataUTI: kUTTypeJPEG as String, imageQuality: .medium)
         delegate?.photoCapture(self, didFinishProcessingAttachment: attachment)
@@ -453,7 +453,7 @@ extension PhotoCapture: CaptureOutputDelegate {
             Logger.info("Ignoring error, since capture succeeded.")
         }
 
-        let dataSource = DataSourcePath.dataSource(with: outputFileURL, shouldDeleteOnDeallocation: true)
+        let dataSource = DataSourcePath(fileUrl: outputFileURL, shouldDeleteOnDeinit: true)
 
         let attachment = SignalAttachment.attachment(dataSource: dataSource, dataUTI: kUTTypeMPEG4 as String)
         delegate?.photoCapture(self, didFinishProcessingAttachment: attachment)
@@ -551,7 +551,7 @@ class CaptureOutput {
         let videoOrientation = delegate.captureOrientation
         videoConnection.videoOrientation = videoOrientation
 
-        let outputFilePath = OWSFileSystem.temporaryFilePath(withFileExtension: "mp4")
+        let outputFilePath = FileSystem.temporaryFilePath(fileExtension: "mp4")
         movieOutput.startRecording(to: URL(fileURLWithPath: outputFilePath), recordingDelegate: delegate)
     }
 
@@ -625,7 +625,7 @@ class PhotoCaptureOutputAdaptee: NSObject, ImageCaptureOutput {
             var data = photo.fileDataRepresentation()!
             // Call normalized here to fix the orientation
             if let srcImage = UIImage(data: data) {
-                data = srcImage.normalized().jpegData(compressionQuality: 1.0)!
+                data = srcImage.normalizedImage().jpegData(compressionQuality: 1.0)!
             }
             DispatchQueue.main.async {
                 self.delegate?.captureOutputDidFinishProcessing(photoData: data, error: error)

@@ -2,29 +2,24 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 //
 
-import Foundation
+import UIKit
 
-@objc
 public class OWSLayerView: UIView {
-    @objc
     public var layoutCallback: ((UIView) -> Void)
 
-    @objc
     public init() {
-        self.layoutCallback = { (_) in
-        }
+        self.layoutCallback = { _ in }
+        
         super.init(frame: .zero)
     }
 
-    @objc
     public init(frame: CGRect, layoutCallback : @escaping (UIView) -> Void) {
         self.layoutCallback = layoutCallback
         super.init(frame: frame)
     }
 
     public required init?(coder aDecoder: NSCoder) {
-        self.layoutCallback = { _ in
-        }
+        self.layoutCallback = { _ in }
         super.init(coder: aDecoder)
     }
 

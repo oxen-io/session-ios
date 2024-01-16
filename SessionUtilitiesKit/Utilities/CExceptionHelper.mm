@@ -22,8 +22,15 @@
     }
     catch (std::exception& e) {
         NSString* what = [NSString stringWithUTF8String: e.what()];
-        NSDictionary* userInfo = @{NSLocalizedDescriptionKey : what};
-        *error = [[NSError alloc] initWithDomain:@"cpp_exception" code:-2 userInfo:userInfo];
+        
+        if (what != nil) {
+            NSDictionary* userInfo = @{NSLocalizedDescriptionKey : what};
+            *error = [[NSError alloc] initWithDomain:@"cpp_exception" code:-2 userInfo:userInfo];
+        }
+        else {
+            NSDictionary* userInfo = @{NSLocalizedDescriptionKey : @"unknown exception"};
+            *error = [[NSError alloc] initWithDomain:@"cpp_exception" code:-2 userInfo:userInfo];
+        }
         return NO;
     }
     catch(...) {

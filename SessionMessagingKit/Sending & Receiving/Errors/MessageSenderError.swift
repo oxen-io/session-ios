@@ -14,13 +14,15 @@ public enum MessageSenderError: LocalizedError, Equatable {
     case noUsername
     case attachmentsNotUploaded
     case blindingFailed
+    case sendJobTimeout
     
     // Closed groups
     case noThread
     case noKeyPair
     case invalidClosedGroupUpdate
+    case invalidConfigMessageHandling
     
-    case other(Error)
+    case other(String, Error)
 
     internal var isRetryable: Bool {
         switch self {
@@ -43,12 +45,14 @@ public enum MessageSenderError: LocalizedError, Equatable {
             case .noUsername: return "Missing username."
             case .attachmentsNotUploaded: return "Attachments for this message have not been uploaded."
             case .blindingFailed: return "Couldn't blind the sender"
+            case .sendJobTimeout: return "Send job timeout (likely due to path building taking too long)."
             
             // Closed groups
             case .noThread: return "Couldn't find a thread associated with the given group public key."
             case .noKeyPair: return "Couldn't find a private key associated with the given group public key."
             case .invalidClosedGroupUpdate: return "Invalid group update."
-            case .other(let error): return error.localizedDescription
+            case .invalidConfigMessageHandling: return "Invalid handling of a config message."
+            case .other(_, let error): return error.localizedDescription
         }
     }
     
@@ -66,10 +70,14 @@ public enum MessageSenderError: LocalizedError, Equatable {
             case (.noKeyPair, .noKeyPair): return true
             case (.invalidClosedGroupUpdate, .invalidClosedGroupUpdate): return true
             case (.blindingFailed, .blindingFailed): return true
+            case (.sendJobTimeout, .sendJobTimeout): return true
             
-            case (.other(let lhsError), .other(let rhsError)):
+            case (.other(let lhsDescription, let lhsError), .other(let rhsDescription, let rhsError)):
                 // Not ideal but the best we can do
-                return (lhsError.localizedDescription == rhsError.localizedDescription)
+                return (
+                    lhsDescription == rhsDescription &&
+                    lhsError.localizedDescription == rhsError.localizedDescription
+                )
                 
             default: return false
         }

@@ -1,6 +1,7 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import GRDB
 
 public struct Version: Comparable {
     public let major: Int
@@ -52,4 +53,9 @@ public struct Version: Comparable {
         
         return (lhs.patch < rhs.patch)
     }
+}
+
+public enum FeatureVersion: Int, Codable, Equatable, Hashable, DatabaseValueConvertible {
+    case legacyDisappearingMessages
+    case newDisappearingMessages
 }

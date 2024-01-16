@@ -18,6 +18,8 @@ final class LinkPreviewView: UIView {
     private lazy var imageViewContainerHeightConstraint = imageView.set(.height, to: 100)
 
     // MARK: UI Components
+    
+    public var previewView: UIView { hStackView }
 
     private lazy var imageView: UIImageView = {
         let result: UIImageView = UIImageView()

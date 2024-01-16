@@ -2,6 +2,7 @@
 
 import UIKit
 import GRDB
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 extension SessionCallManager {
@@ -9,7 +10,7 @@ extension SessionCallManager {
     public func startCallAction() -> Bool {
         guard let call: CurrentCallProtocol = self.currentCall else { return false }
         
-        Storage.shared.writeAsync { db in
+        dependencies[singleton: .storage].writeAsync { db in
             call.startSessionCall(db)
         }
         
@@ -18,14 +19,17 @@ extension SessionCallManager {
     
     @discardableResult
     public func answerCallAction() -> Bool {
-        guard let call: SessionCall = (self.currentCall as? SessionCall) else { return false }
+        guard
+            let call: SessionCall = (self.currentCall as? SessionCall),
+            dependencies.hasInitialised(singleton: .appContext)
+        else { return false }
         
-        if let _ = CurrentAppContext().frontmostViewController() as? CallVC {
+        if dependencies[singleton: .appContext].frontmostViewController is CallVC {
             call.answerSessionCall()
         }
         else {
-            guard let presentingVC = CurrentAppContext().frontmostViewController() else { return false } // FIXME: Handle more gracefully
-            let callVC = CallVC(for: call)
+            guard let presentingVC = dependencies[singleton: .appContext].frontmostViewController else { return false } // FIXME: Handle more gracefully
+            let callVC = CallVC(for: call, using: dependencies)
             
             if let conversationVC = presentingVC as? ConversationVC {
                 callVC.conversationVC = conversationVC
@@ -37,6 +41,7 @@ extension SessionCallManager {
                 call.answerSessionCall()
             }
         }
+        
         return true
     }
     
