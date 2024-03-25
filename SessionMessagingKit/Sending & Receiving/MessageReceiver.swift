@@ -257,13 +257,6 @@ public enum MessageReceiver {
                     db,
                     threadId: threadId,
                     threadVariant: threadVariant,
-                    message: message
-                )
-            
-                try MessageReceiver.handleExpirationTimerUpdate(
-                    db,
-                    threadId: threadId,
-                    threadVariant: threadVariant,
                     message: message,
                     serverExpirationTimestamp: serverExpirationTimestamp,
                     proto: proto

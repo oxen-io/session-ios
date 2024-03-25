@@ -27,14 +27,6 @@ public final class ExpirationTimerUpdate: ControlMessage {
         self.syncTarget = syncTarget
         self.duration = duration
     }
-
-    // MARK: - Validation
-    
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
-        
-        return (duration != nil || Features.useNewDisappearingMessagesConfig)
-    }
     
     // MARK: - Codable
     

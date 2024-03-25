@@ -133,8 +133,6 @@ public extension DisappearingMessagesConfiguration {
         public let type: DisappearingMessageType?
         
         var previewText: String {
-            guard Features.useNewDisappearingMessagesConfig && self.threadVariant != nil else { return legacyPreviewText }
-            
             guard let senderName: String = senderName else {
                 guard isEnabled, durationSeconds > 0 else {
                     return "YOU_DISAPPEARING_MESSAGES_INFO_DISABLE".localized()
@@ -156,28 +154,6 @@ public extension DisappearingMessagesConfiguration {
                 senderName,
                 floor(durationSeconds).formatted(format: .long),
                 (type == .disappearAfterRead ? "DISAPPEARING_MESSAGE_STATE_READ".localized() : "DISAPPEARING_MESSAGE_STATE_SENT".localized())
-            )
-        }
-        
-        private var legacyPreviewText: String {
-            guard let senderName: String = senderName else {
-                // Changed by this device or via synced transcript
-                guard isEnabled, durationSeconds > 0 else { return "YOU_DISABLED_DISAPPEARING_MESSAGES_CONFIGURATION".localized() }
-                
-                return String(
-                    format: "YOU_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(),
-                    floor(durationSeconds).formatted(format: .long)
-                )
-            }
-            
-            guard isEnabled, durationSeconds > 0 else {
-                return String(format: "OTHER_DISABLED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(), senderName)
-            }
-            
-            return String(
-                format: "OTHER_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(),
-                senderName,
-                floor(durationSeconds).formatted(format: .long)
             )
         }
     }
@@ -267,22 +243,20 @@ public extension DisappearingMessagesConfiguration {
         serverExpirationTimestamp: TimeInterval?,
         using dependencies: Dependencies = Dependencies()
     ) throws -> Int64? {
-        if Features.useNewDisappearingMessagesConfig {
-            switch threadVariant {
-                case .contact:
-                    _ = try Interaction
-                        .filter(Interaction.Columns.threadId == threadId)
-                        .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
-                        .filter(Interaction.Columns.authorId == authorId)
-                        .deleteAll(db)
-                case .legacyGroup:
-                    _ = try Interaction
-                        .filter(Interaction.Columns.threadId == threadId)
-                        .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
-                        .deleteAll(db)
-                default:
-                    break
-            }
+        switch threadVariant {
+            case .contact:
+                _ = try Interaction
+                    .filter(Interaction.Columns.threadId == threadId)
+                    .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
+                    .filter(Interaction.Columns.authorId == authorId)
+                    .deleteAll(db)
+            case .legacyGroup:
+                _ = try Interaction
+                    .filter(Interaction.Columns.threadId == threadId)
+                    .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
+                    .deleteAll(db)
+            default:
+                break
         }
         
         let currentUserPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)

@@ -664,7 +664,6 @@ public extension Message {
         isGroupMessage: Bool,
         isSyncMessage: Bool
     ) -> UInt64 {
-        guard Features.useNewDisappearingMessagesConfig else { return message.ttl }
         // Not disappearing messages
         guard let expiresInSeconds = message.expiresInSeconds else { return message.ttl }
         

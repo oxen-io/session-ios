@@ -1533,10 +1533,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     ) {
         let currentDisappearingMessagesConfiguration: DisappearingMessagesConfiguration? = disappearingMessagesConfiguration ?? self.viewModel.threadData.disappearingMessagesConfiguration
         // Do not show the banner until the new disappearing messages is enabled
-        guard 
-            Features.useNewDisappearingMessagesConfig &&
-            currentDisappearingMessagesConfiguration?.isEnabled == true
-        else {
+        guard currentDisappearingMessagesConfiguration?.isEnabled == true else {
             self.outdatedClientBanner.isHidden = true
             self.emptyStateLabelTopConstraint?.constant = Values.largeSpacing
             return
