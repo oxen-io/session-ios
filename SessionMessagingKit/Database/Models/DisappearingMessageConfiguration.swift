@@ -308,29 +308,7 @@ public extension DisappearingMessagesConfiguration {
 // MARK: - UI Constraints
 
 extension DisappearingMessagesConfiguration {
-    // TODO: Remove this when disappearing messages V2 is up and running
-    public static var validDurationsSeconds: [TimeInterval] {
-        return [
-            5,
-            10,
-            30,
-            (1 * 60),
-            (5 * 60),
-            (30 * 60),
-            (1 * 60 * 60),
-            (6 * 60 * 60),
-            (12 * 60 * 60),
-            (24 * 60 * 60),
-            (7 * 24 * 60 * 60)
-        ]
-    }
-    
-    public static var maxDurationSeconds: TimeInterval = {
-        return (validDurationsSeconds.max() ?? 0)
-    }()
-    
     public static func validDurationsSeconds(_ type: DisappearingMessageType) -> [TimeInterval] {
-        
         switch type {
             case .disappearAfterRead:
                 var result =  [
