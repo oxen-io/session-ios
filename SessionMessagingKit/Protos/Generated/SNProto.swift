@@ -2521,9 +2521,6 @@ extension SNProtoDataMessageClosedGroupControlMessage.SNProtoDataMessageClosedGr
         if hasFlags {
             builder.setFlags(flags)
         }
-        if hasExpireTimer {
-            builder.setExpireTimer(expireTimer)
-        }
         if let _value = profileKey {
             builder.setProfileKey(_value)
         }
@@ -2577,10 +2574,6 @@ extension SNProtoDataMessageClosedGroupControlMessage.SNProtoDataMessageClosedGr
 
         @objc public func setFlags(_ valueParam: UInt32) {
             proto.flags = valueParam
-        }
-
-        @objc public func setExpireTimer(_ valueParam: UInt32) {
-            proto.expireTimer = valueParam
         }
 
         @objc public func setProfileKey(_ valueParam: Data) {
@@ -2669,13 +2662,6 @@ extension SNProtoDataMessageClosedGroupControlMessage.SNProtoDataMessageClosedGr
     }
     @objc public var hasFlags: Bool {
         return proto.hasFlags
-    }
-
-    @objc public var expireTimer: UInt32 {
-        return proto.expireTimer
-    }
-    @objc public var hasExpireTimer: Bool {
-        return proto.hasExpireTimer
     }
 
     @objc public var profileKey: Data? {

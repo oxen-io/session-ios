@@ -341,12 +341,9 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                     serverExpirationTimestamp: nil
                 )
             
-            let expirationTimerUpdateMessage: ExpirationTimerUpdate = ExpirationTimerUpdate(
-                syncTarget: nil,
-                duration: nil
-            )
-            .with(sentTimestamp: UInt64(currentTimestampMs))
-            .with(updatedConfig)
+            let expirationTimerUpdateMessage: ExpirationTimerUpdate = ExpirationTimerUpdate()
+                .with(sentTimestamp: UInt64(currentTimestampMs))
+                .with(updatedConfig)
 
             try MessageSender.send(
                 db,

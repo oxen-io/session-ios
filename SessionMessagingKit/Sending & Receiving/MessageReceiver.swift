@@ -173,7 +173,6 @@ public enum MessageReceiver {
             
             switch message {
                 case let message as VisibleMessage: return ((message.syncTarget ?? sender), .contact)
-                case let message as ExpirationTimerUpdate: return ((message.syncTarget ?? sender), .contact)
                 default: return (sender, .contact)
             }
         }()
