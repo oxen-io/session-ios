@@ -29,7 +29,7 @@ PODS:
   - NVActivityIndicatorView (5.1.1):
     - NVActivityIndicatorView/Base (= 5.1.1)
   - NVActivityIndicatorView/Base (5.1.1)
-  - OpenSSL-Universal (1.1.1300)
+  - OpenSSL-Universal (1.1.2200)
   - PureLayout (3.1.9)
   - Quick (7.3.0)
   - Reachability (3.2)
@@ -60,7 +60,7 @@ DEPENDENCIES:
   - Quick
   - Reachability
   - SAMKeychain
-  - SignalCoreKit (from `https://github.com/oxen-io/session-ios-core-kit`, branch `session-version`)
+  - SignalCoreKit (from `https://github.com/oxen-io/session-ios-core-kit`, commit `3acbfe5`)
   - Sodium (from `https://github.com/oxen-io/session-ios-swift-sodium.git`, branch `session-build`)
   - SQLCipher (~> 4.5.3)
   - SwiftProtobuf (~> 1.5.0)
@@ -89,7 +89,7 @@ EXTERNAL SOURCES:
     :branch: session-version
     :git: https://github.com/oxen-io/session-ios-curve-25519-kit.git
   SignalCoreKit:
-    :branch: session-version
+    :commit: 3acbfe5
     :git: https://github.com/oxen-io/session-ios-core-kit
   Sodium:
     :branch: session-build
@@ -102,7 +102,7 @@ CHECKOUT OPTIONS:
     :commit: ee1bc83e61d9d672105eed85a4b8fbaec3d376f5
     :git: https://github.com/oxen-io/session-ios-curve-25519-kit.git
   SignalCoreKit:
-    :commit: 4590c2737a2b5dc0ef4ace9f9019b581caccc1de
+    :commit: 3acbfe5
     :git: https://github.com/oxen-io/session-ios-core-kit
   Sodium:
     :commit: 4ecfe2ddfd75e7b396c57975b4163e5c8cf4d5cc
@@ -119,7 +119,7 @@ SPEC CHECKSUMS:
   libwebp: 1786c9f4ff8a279e4dac1e8f385004d5fc253009
   Nimble: f8a8219d16f176429b951e8f7e72df5c23ceddc0
   NVActivityIndicatorView: 1f6c5687f1171810aa27a3296814dc2d7dec3667
-  OpenSSL-Universal: e7311447fd2419f57420c79524b641537387eff2
+  OpenSSL-Universal: 6e1ae0555546e604dbc632a2b9a24a9c46c41ef6
   PureLayout: 5fb5e5429519627d60d079ccb1eaa7265ce7cf88
   Quick: d32871931c05547cb4e0bc9009d66a18b50d8558
   Reachability: 33e18b67625424e47b6cde6d202dce689ad7af96
@@ -131,6 +131,6 @@ SPEC CHECKSUMS:
   WebRTC-lib: d83df8976fa608b980f1d85796b3de66d60a1953
   YYImage: f1ddd15ac032a58b78bbed1e012b50302d318331
 
-PODFILE CHECKSUM: 4e88e94d595188c412f739792fb78e0e92a8be12
+PODFILE CHECKSUM: 2c877a533db6e82eaa94407c95be114d80c2f893
 
 COCOAPODS: 1.15.0

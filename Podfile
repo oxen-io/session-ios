@@ -33,7 +33,7 @@ abstract_target 'GlobalDependencies' do
   # Dependencies to be included only in all extensions/frameworks
   abstract_target 'FrameworkAndExtensionDependencies' do
     pod 'Curve25519Kit', git: 'https://github.com/oxen-io/session-ios-curve-25519-kit.git', branch: 'session-version'
-    pod 'SignalCoreKit', git: 'https://github.com/oxen-io/session-ios-core-kit', branch: 'session-version'
+    pod 'SignalCoreKit', git: 'https://github.com/oxen-io/session-ios-core-kit', :commit => '3acbfe5'
     
     target 'SessionNotificationServiceExtension'
     target 'SessionSnodeKit'
