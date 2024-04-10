@@ -13,21 +13,46 @@ public extension ProfilePictureView {
         additionalProfile: Profile? = nil,
         additionalProfileIcon: ProfileIcon = .none
     ) {
+        let (info, additionalInfo): (Info?, Info?) = Self.getProfilePictureInfo(
+            size: self.size,
+            publicKey: publicKey,
+            threadVariant: threadVariant,
+            customImageData: customImageData,
+            profile: profile,
+            profileIcon: profileIcon,
+            additionalProfile: additionalProfile,
+            additionalProfileIcon: additionalProfileIcon
+        )
+        
+        guard let info: Info = info else { return }
+        update(info, additionalInfo: additionalInfo)
+    }
+    
+    static func getProfilePictureInfo(
+        size: Size,
+        publicKey: String,
+        threadVariant: SessionThread.Variant,
+        customImageData: Data?,
+        profile: Profile?,
+        profileIcon: ProfileIcon = .none,
+        additionalProfile: Profile? = nil,
+        additionalProfileIcon: ProfileIcon = .none
+    ) -> (Info?, Info?) {
         // If we are given 'customImageData' then only use that
-        guard customImageData == nil else { return update(Info(imageData: customImageData)) }
+        guard customImageData == nil else { return (Info(imageData: customImageData), nil) }
         
         // Otherwise there are conversation-type-specific behaviours
         switch threadVariant {
             case .community:
                 let placeholderImage: UIImage = {
-                    switch self.size {
+                    switch size {
                         case .navigation, .message: return #imageLiteral(resourceName: "SessionWhite16")
                         case .list: return #imageLiteral(resourceName: "SessionWhite24")
                         case .hero: return #imageLiteral(resourceName: "SessionWhite40")
                     }
                 }()
                 
-                update(
+                return (
                     Info(
                         imageData: placeholderImage.pngData(),
                         inset: UIEdgeInsets(
@@ -38,13 +63,14 @@ public extension ProfilePictureView {
                         ),
                         icon: profileIcon,
                         forcedBackgroundColor: .theme(.classicDark, color: .borderSeparator)
-                    )
+                    ),
+                    nil
                 )
                 
             case .legacyGroup, .group:
-                guard !publicKey.isEmpty else { return }
+                guard !publicKey.isEmpty else { return (nil, nil) }
                 
-                update(
+                return (
                     Info(
                         imageData: (
                             profile.map { ProfileManager.profileAvatar(profile: $0) } ??
@@ -53,14 +79,14 @@ public extension ProfilePictureView {
                                 text: (profile?.displayName(for: threadVariant))
                                     .defaulting(to: publicKey),
                                 size: (additionalProfile != nil ?
-                                    self.size.multiImageSize :
-                                    self.size.viewSize
+                                    size.multiImageSize :
+                                    size.viewSize
                                 )
                             ).pngData()
                         ),
                         icon: profileIcon
                     ),
-                    additionalInfo: additionalProfile
+                    additionalProfile
                         .map { otherProfile in
                             Info(
                                 imageData: (
@@ -68,7 +94,7 @@ public extension ProfilePictureView {
                                     PlaceholderIcon.generate(
                                         seed: otherProfile.id,
                                         text: otherProfile.displayName(for: threadVariant),
-                                        size: self.size.multiImageSize
+                                        size: size.multiImageSize
                                     ).pngData()
                                 ),
                                 icon: additionalProfileIcon
@@ -91,9 +117,9 @@ public extension ProfilePictureView {
                 )
                 
             case .contact:
-                guard !publicKey.isEmpty else { return }
+                guard !publicKey.isEmpty else { return (nil, nil) }
                 
-                update(
+                return (
                     Info(
                         imageData: (
                             profile.map { ProfileManager.profileAvatar(profile: $0) } ??
@@ -102,13 +128,14 @@ public extension ProfilePictureView {
                                 text: (profile?.displayName(for: threadVariant))
                                     .defaulting(to: publicKey),
                                 size: (additionalProfile != nil ?
-                                    self.size.multiImageSize :
-                                    self.size.viewSize
+                                    size.multiImageSize :
+                                    size.viewSize
                                 )
                             ).pngData()
                         ),
                         icon: profileIcon
-                    )
+                    ),
+                    nil
                 )
         }
     }

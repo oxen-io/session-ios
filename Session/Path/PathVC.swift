@@ -253,7 +253,7 @@ private final class LineView: UIView {
     private var dotViewWidthConstraint: NSLayoutConstraint!
     private var dotViewHeightConstraint: NSLayoutConstraint!
     private var dotViewAnimationTimer: Timer!
-    private let reachability: Reachability? = Environment.shared?.reachabilityManager.reachability
+    private let reachability: Reachability? = SessionEnvironment.shared?.reachabilityManager.reachability
 
     enum Location {
         case top, middle, bottom

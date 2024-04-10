@@ -53,7 +53,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         AppSetup.setupEnvironment(
             appSpecificBlock: {
-                Environment.shared?.notificationsManager.mutate {
+                SessionEnvironment.shared?.notificationsManager.mutate {
                     $0 = NoopNotificationsManager()
                 }
             },

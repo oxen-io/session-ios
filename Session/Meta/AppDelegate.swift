@@ -88,7 +88,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             }
         )
         
-        if Environment.shared?.callManager.wrappedValue?.currentCall == nil {
+        if SessionEnvironment.shared?.callManager.wrappedValue?.currentCall == nil {
             UserDefaults.sharedLokiProject?[.isCallOngoing] = false
             UserDefaults.sharedLokiProject?[.lastCallPreOffer] = nil
         }
@@ -391,8 +391,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
         
         // May as well run these on the background thread
-        Environment.shared?.audioSession.setup()
-        Environment.shared?.reachabilityManager.setup()
+        SessionEnvironment.shared?.audioSession.setup()
+        SessionEnvironment.shared?.reachabilityManager.setup()
     }
     
     private func showFailedStartupAlert(
@@ -834,7 +834,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         let callVC: CallVC = CallVC(for: call)
         
-        if let conversationVC: ConversationVC = presentingVC as? ConversationVC, conversationVC.viewModel.threadData.threadId == call.sessionId {
+        if
+            let conversationVC: ConversationVC = (presentingVC as? TopBannerController)?.wrappedViewController() as? ConversationVC,
+            conversationVC.viewModel.threadData.threadId == call.sessionId
+        {
             callVC.conversationVC = conversationVC
             conversationVC.inputAccessoryView?.isHidden = true
             conversationVC.inputAccessoryView?.alpha = 0

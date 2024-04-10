@@ -26,41 +26,26 @@
 # request ever gets implemented: https://github.com/CocoaPods/CocoaPods/issues/8464
 
 # Need to set the path or we won't find cmake
-PATH=${PATH}:/usr/local/bin:/opt/homebrew/bin:/sbin/md5
+PATH=${PATH}:/usr/local/bin:/opt/local/bin:/opt/homebrew/bin:/sbin/md5
 
 exec 3>&1 # Save original stdout
 
 # Ensure the build directory exists (in case we need it before XCode creates it)
 mkdir -p "${TARGET_BUILD_DIR}/libSessionUtil"
 
-# Remove any old build errors
-rm -rf "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
-
-# Restore stdout and stderr and redirect it to the 'libsession_util_output.log' file
-exec &> "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
-
-# Define a function to echo a message.
-function echo_message() {
-  exec 1>&3 # Restore stdout
-  echo "$1"
-  exec >> "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" # Redirect all output to the log file
-}
-
-echo_message "info: Validating build requirements"
-
-set -x
+echo "Validating build requirements"
 
 # Ensure the build directory exists (in case we need it before XCode creates it)
 mkdir -p "${TARGET_BUILD_DIR}"
 
 if ! which cmake > /dev/null; then
-  echo_message "error: cmake is required to build, please install (can install via homebrew with 'brew install cmake')."
+  echo "error: cmake is required to build, please install (can install via homebrew with 'brew install cmake')."
   exit 0
 fi
 
 # Check if we have the `LibSession-Util` submodule checked out and if not (depending on the 'SHOULD_AUTO_INIT_SUBMODULES' argument) perform the checkout
 if [ ! -d "${SRCROOT}/LibSession-Util" ] || [ ! -d "${SRCROOT}/LibSession-Util/src" ] || [ ! "$(ls -A "${SRCROOT}/LibSession-Util")" ]; then
-  echo_message "error: Need to fetch LibSession-Util submodule (git submodule update --init --recursive)."
+  echo "error: Need to fetch LibSession-Util submodule (git submodule update --init --recursive)."
   exit 0
 else
   are_submodules_valid() {
@@ -86,7 +71,7 @@ else
       
       # If the child path doesn't exist then it's invalid
       if [ ! -d "${PARENT_PATH}/${CHILD_PATH}" ]; then
-        echo_message "info: Submodule '${RELATIVE_PATH}/${CHILD_PATH}' doesn't exist."
+        echo "Submodule '${RELATIVE_PATH}/${CHILD_PATH}' doesn't exist."
         return 1
       fi
 
@@ -94,7 +79,7 @@ else
       local RESULT=$?
 
       if [ "${RESULT}" -eq 1 ]; then
-        echo_message "info: Submodule '${RELATIVE_PATH}/${CHILD_PATH}' is in an invalid state."
+        echo "Submodule '${RELATIVE_PATH}/${CHILD_PATH}' is in an invalid state."
         return 1
       fi
     done
@@ -108,13 +93,13 @@ else
   HAS_INVALID_SUBMODULE=$?
 
   if [ "${HAS_INVALID_SUBMODULE}" -eq 1 ]; then
-    echo_message "error: Submodules are in an invalid state, please delete 'LibSession-Util' and run 'git submodule update --init --recursive'."
+    echo "error: Submodules are in an invalid state, please delete 'LibSession-Util' and run 'git submodule update --init --recursive'."
     exit 0
   fi
 fi
 
 # Generate a hash of the libSession-util source files and check if they differ from the last hash
-echo "info: Checking for changes to source"
+echo "Checking for changes to source"
 
 NEW_SOURCE_HASH=$(find "${SRCROOT}/LibSession-Util/src" -type f -exec md5 {} + | awk '{print $NF}' | sort | md5 | awk '{print $NF}')
 NEW_HEADER_HASH=$(find "${SRCROOT}/LibSession-Util/include" -type f -exec md5 {} + | awk '{print $NF}' | sort | md5 | awk '{print $NF}')
@@ -133,12 +118,12 @@ fi
 
 # If all of the hashes match, the archs match and there is a library file then we can just stop here
 if [ "${NEW_SOURCE_HASH}" == "${OLD_SOURCE_HASH}" ] && [ "${NEW_HEADER_HASH}" == "${OLD_HEADER_HASH}" ] && [ "${ARCHS[*]}" == "${OLD_ARCHS}" ] && [ -f "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a" ]; then
-  echo_message "info: Build is up-to-date"
+  echo "Build is up-to-date"
   exit 0
 fi
 
 # If any of the above differ then we need to rebuild
-echo_message "info: Build is not up-to-date - creating new build"
+echo "Build is not up-to-date - creating new build"
 
 # Import settings from XCode (defaulting values if not present)
 VALID_SIM_ARCHS=(arm64 x86_64)
@@ -182,22 +167,54 @@ if [ -z $PLATFORM_NAME ] || [ $PLATFORM_NAME = "iphoneos" ]; then
     done
 fi
 
+# Remove any old build logs (since we are doing a new build)
+rm -rf "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
+
 # Build the individual architectures
 for i in "${!TARGET_ARCHS[@]}"; do
     build="${TARGET_BUILD_DIR}/libSessionUtil/${TARGET_ARCHS[$i]}"
     platform="${TARGET_PLATFORMS[$i]}"
-    echo_message "Building ${TARGET_ARCHS[$i]} for $platform in $build"
+    echo "Building ${TARGET_ARCHS[$i]} for $platform in $build"
+    
+    # Redirect the build output to a log file and only include the progress lines in the XCode output
+    exec > >(tee "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | grep --line-buffered '^\[.*%\]') 2>&1
 
     cd "${SRCROOT}/LibSession-Util"
-    ./utils/static-bundle.sh "$build" "" \
+    env -i PATH="$PATH" SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
+        ./utils/static-bundle.sh "$build" "" \
         -DCMAKE_TOOLCHAIN_FILE="${SRCROOT}/LibSession-Util/external/ios-cmake/ios.toolchain.cmake" \
         -DPLATFORM=$platform \
         -DDEPLOYMENT_TARGET=$IPHONEOS_DEPLOYMENT_TARGET \
-        -DENABLE_BITCODE=$ENABLE_BITCODE
-    
-    if [ $? -ne 0 ]; then
-      LAST_OUTPUT=$(tail -n 4 "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | head -n 1)
-      echo_message "error: $LAST_OUTPUT"
+        -DENABLE_BITCODE=$ENABLE_BITCODE \
+        -DBUILD_TESTS=OFF \
+        -DBUILD_STATIC_DEPS=ON
+        
+    # Capture the exit status of the ./utils/static-bundle.sh command
+    EXIT_STATUS=$?
+        
+    # Flush the tee buffer (ensure any errors have been properly written to the log before continuing) and
+    # restore stdout
+    echo ""
+    exec 1>&3
+
+    if [ $EXIT_STATUS -ne 0 ]; then
+      ALL_ERROR_LINES=($(grep -n "error:" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | cut -d ":" -f 1))
+
+      for e in "${!ALL_ERROR_LINES[@]}"; do
+        error_line="${ALL_ERROR_LINES[$e]}"
+        error=$(sed "${error_line}q;d" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log")
+
+        # If it was a CMake Error then the actual error will be on the next line so we want to append that info
+        if [[ $error == *'CMake Error'* ]]; then
+            actual_error_line=$((error_line + 1))
+            error="${error}$(sed "${actual_error_line}q;d" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log")"
+        fi
+
+        # Exclude the 'ALL_ERROR_LINES' line and the 'grep' line
+        if [[ ! $error == *'grep -n "error'* ]] && [[ ! $error == *'grep -n error'* ]]; then
+            echo "error: $error"
+        fi
+      done
       exit 1
     fi
 done
@@ -212,7 +229,7 @@ if [ "${#TARGET_SIM_ARCHS[@]}" -eq "1" ]; then
     cp "${TARGET_BUILD_DIR}/libSessionUtil/${TARGET_SIM_ARCHS[0]}/libsession-util.a" "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a"
 elif [ "${#TARGET_SIM_ARCHS[@]}" -gt "1" ]; then
     # Combine multiple device builds into a multi-arch lib
-    echo_message "info: Built multiple architectures, merging into single static library"
+    echo "Built multiple architectures, merging into single static library"
     lipo -create "${TARGET_BUILD_DIR}/libSessionUtil"/sim-*/libsession-util.a -output "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a"
 fi
 
@@ -221,7 +238,7 @@ if [ "${#TARGET_DEVICE_ARCHS[@]}" -eq "1" ]; then
     cp "${TARGET_BUILD_DIR}/libSessionUtil/${TARGET_DEVICE_ARCHS[0]}/libsession-util.a" "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a"
 elif [ "${#TARGET_DEVICE_ARCHS[@]}" -gt "1" ]; then
     # Combine multiple device builds into a multi-arch lib
-    echo_message "info: Built multiple architectures, merging into single static library"
+    echo "Built multiple architectures, merging into single static library"
     lipo -create "${TARGET_BUILD_DIR}/libSessionUtil"/ios-*/libsession-util.a -output "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a"
 fi
 
@@ -229,10 +246,10 @@ fi
 echo "${NEW_SOURCE_HASH}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_source_hash.log"
 echo "${NEW_HEADER_HASH}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_header_hash.log"
 echo "${ARCHS[*]}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_archs.log"
-echo_message "info: Build complete"
+echo "Build complete"
 
 # Copy the headers across
-echo_message "info: Copy headers and prepare modulemap"
+echo "Copy headers and prepare modulemap"
 mkdir -p "${TARGET_BUILD_DIR}/libSessionUtil/Headers"
 cp -r "${SRCROOT}/LibSession-Util/include/session" "${TARGET_BUILD_DIR}/libSessionUtil/Headers"
 
@@ -240,22 +257,11 @@ cp -r "${SRCROOT}/LibSession-Util/include/session" "${TARGET_BUILD_DIR}/libSessi
 modmap="${TARGET_BUILD_DIR}/libSessionUtil/Headers/module.modulemap"
 echo "module SessionUtil {" >"$modmap"
 echo "  module capi {" >>"$modmap"
-for x in $(cd include && find session -name '*.h'); do
+for x in $(cd "${TARGET_BUILD_DIR}/libSessionUtil/Headers" && find session -name '*.h'); do
     echo "    header \"$x\"" >>"$modmap"
 done
 echo -e "    export *\n  }" >>"$modmap"
-if false; then
-    # If we include the cpp headers like this then Xcode will try to load them as C headers (which
-    # of course breaks) and doesn't provide any way to only load the ones you need (because this is
-    # Apple land, why would anything useful be available?).  So we include the headers in the
-    # archive but can't let xcode discover them because it will do it wrong.
-    echo -e "\n  module cppapi {" >>"$modmap"
-    for x in $(cd include && find session -name '*.hpp'); do
-        echo "    header \"$x\"" >>"$modmap"
-    done
-    echo -e "    export *\n  }" >>"$modmap"
-fi
 echo "}" >>"$modmap"
 
 # Output to XCode just so the output is good
-echo_message "info: libSessionUtil Ready"
+echo "libSession is Ready"

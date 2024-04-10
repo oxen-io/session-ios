@@ -172,6 +172,8 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     
     private lazy var answerButton: UIButton = {
         let result = UIButton(type: .custom)
+        result.accessibilityIdentifier = "Answer call"
+        result.accessibilityLabel = "Answer call"
         result.setImage(
             UIImage(named: "AnswerCall")?
                 .withRenderingMode(.alwaysTemplate),

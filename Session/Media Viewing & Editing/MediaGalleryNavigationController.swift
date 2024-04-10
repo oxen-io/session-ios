@@ -74,3 +74,33 @@ class MediaGalleryNavigationController: UINavigationController {
         relayoutBackgroundView()
     }
 }
+
+// MARK: - SwiftUI
+import SwiftUI
+
+struct MediaGalleryNavigationController_SwiftUI: UIViewControllerRepresentable {
+    typealias UIViewControllerType = MediaGalleryNavigationController
+    
+    public var viewControllers: [UIViewController]
+    private let transitioningDelegate: UIViewControllerTransitioningDelegate?
+    
+    public init(
+        viewControllers: [UIViewController],
+        transitioningDelegate: UIViewControllerTransitioningDelegate? = nil
+    ) {
+        self.viewControllers = viewControllers
+        self.transitioningDelegate = transitioningDelegate
+    }
+    
+    func makeUIViewController(context: Context) -> MediaGalleryNavigationController {
+        let mediaGalleryNavigationController = MediaGalleryNavigationController()
+        mediaGalleryNavigationController.modalPresentationStyle = .fullScreen
+        mediaGalleryNavigationController.transitioningDelegate = transitioningDelegate
+        
+        return mediaGalleryNavigationController
+    }
+    
+    func updateUIViewController(_ mediaGalleryNavigationController: MediaGalleryNavigationController, context: Context) {
+        mediaGalleryNavigationController.viewControllers = viewControllers
+    }
+}

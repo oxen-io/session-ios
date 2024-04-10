@@ -496,3 +496,44 @@ public class MediaView: UIView {
         unloadBlock?()
     }
 }
+
+// MARK: - SwiftUI
+
+import SwiftUI
+
+struct MediaView_SwiftUI: UIViewRepresentable {
+    public typealias UIViewType = MediaView
+    
+    private let mediaCache: NSCache<NSString, AnyObject>?
+    public let attachment: Attachment
+    private let isOutgoing: Bool
+    private let cornerRadius: CGFloat
+    
+    public init(
+        mediaCache: NSCache<NSString, AnyObject>? = nil,
+        attachment: Attachment,
+        isOutgoing: Bool,
+        cornerRadius: CGFloat
+    ) {
+        self.mediaCache = mediaCache
+        self.attachment = attachment
+        self.isOutgoing = isOutgoing
+        self.cornerRadius = cornerRadius
+    }
+    
+    func makeUIView(context: Context) -> MediaView {
+        let mediaView = MediaView(
+            mediaCache: mediaCache,
+            attachment: attachment,
+            isOutgoing: isOutgoing, 
+            shouldSupressControls: true,
+            cornerRadius: cornerRadius
+        )
+        
+        return mediaView
+    }
+    
+    func updateUIView(_ mediaView: MediaView, context: Context) {
+        mediaView.loadMedia()
+    }
+}

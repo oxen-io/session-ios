@@ -18,7 +18,7 @@ public class AudioActivity: NSObject {
     }
 
     deinit {
-        Environment.shared?.audioSession.ensureAudioSessionActivationStateAfterDelay()
+        SessionEnvironment.shared?.audioSession.ensureAudioSessionActivationStateAfterDelay()
     }
 
     // MARK: 
@@ -84,9 +84,9 @@ public class OWSAudioSession: NSObject {
 
     func ensureAudioCategory() throws {
         if aggregateBehaviors.contains(.audioMessagePlayback) {
-            Environment.shared?.proximityMonitoringManager.add(lifetime: self)
+            SessionEnvironment.shared?.proximityMonitoringManager.add(lifetime: self)
         } else {
-            Environment.shared?.proximityMonitoringManager.remove(lifetime: self)
+            SessionEnvironment.shared?.proximityMonitoringManager.remove(lifetime: self)
         }
 
         if aggregateBehaviors.contains(.call) {

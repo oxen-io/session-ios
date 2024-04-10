@@ -111,10 +111,10 @@ public enum Permissions {
                 // the picker view then will dismiss, too. The selection process cannot be finished
                 // this way. So we add a flag (isRequestingPermission) to prevent the ScreenLockUI
                 // from showing when we request the photo library permission.
-                Environment.shared?.isRequestingPermission = true
+                SessionEnvironment.shared?.isRequestingPermission = true
                 
                 PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-                    Environment.shared?.isRequestingPermission = false
+                    SessionEnvironment.shared?.isRequestingPermission = false
                     if [ PHAuthorizationStatus.authorized, PHAuthorizationStatus.limited ].contains(status) {
                         onAuthorized()
                     }

@@ -47,10 +47,10 @@ public class AppEnvironment {
 
     public func setup() {
         // Hang certain singletons on Environment too.
-        Environment.shared?.callManager.mutate {
+        SessionEnvironment.shared?.callManager.mutate {
             $0 = callManager
         }
-        Environment.shared?.notificationsManager.mutate {
+        SessionEnvironment.shared?.notificationsManager.mutate {
             $0 = notificationPresenter
         }
         setupLogFiles()

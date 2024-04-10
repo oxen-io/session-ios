@@ -788,7 +788,7 @@ po zatwierdzeniu przez odbiorcę tego żądania wiadomości";
 "DISAPPERING_MESSAGES_SUBTITLE_GROUPS" = "Wiadomości kasują się po ich przeczytaniu.";
 
 /* A record that appears within the message history to indicate that the current user turned on disappearing messages */
-"YOU_DISAPPEARING_MESSAGES_INFO_ENABLE" = "%@ ustawił(a) znikające wiadomości na %@ po tym, jak były na %@";
+"YOU_DISAPPEARING_MESSAGES_INFO_ENABLE" = "Ty ustawił(a) znikające wiadomości na %@ po tym, jak były na %@";
 
 /* A record that appears within the message history to indicate that the current user update the disappearing messages setting */
 "YOU_DISAPPEARING_MESSAGES_INFO_UPDATE" = "%@ ustawił(a) znikające wiadomości na %@ po tym, jak były na %@";

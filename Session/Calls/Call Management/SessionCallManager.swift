@@ -3,6 +3,7 @@
 import UIKit
 import CallKit
 import GRDB
+import SessionUIKit
 import SessionMessagingKit
 import SignalCoreKit
 import SignalUtilitiesKit
@@ -219,7 +220,10 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
                     preconditionFailure()   // FIXME: Handle more gracefully
                 }
                 
-                if let conversationVC: ConversationVC = presentingVC as? ConversationVC, conversationVC.viewModel.threadData.threadId == call.sessionId {
+                if
+                    let conversationVC: ConversationVC = (presentingVC as? TopBannerController)?.wrappedViewController() as? ConversationVC,
+                    conversationVC.viewModel.threadData.threadId == call.sessionId
+                {
                     let callVC = CallVC(for: call)
                     callVC.conversationVC = conversationVC
                     conversationVC.inputAccessoryView?.isHidden = true

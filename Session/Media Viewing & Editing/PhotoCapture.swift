@@ -51,7 +51,7 @@ class PhotoCapture: NSObject {
     func startAudioCapture() throws {
         assertIsOnSessionQueue()
 
-        guard Environment.shared?.audioSession.startAudioActivity(recordingAudioActivity) == true else {
+        guard SessionEnvironment.shared?.audioSession.startAudioActivity(recordingAudioActivity) == true else {
             throw PhotoCaptureError.assertionError(description: "unable to capture audio activity")
         }
 
@@ -82,7 +82,7 @@ class PhotoCapture: NSObject {
         }
         session.removeInput(audioDeviceInput)
         self.audioDeviceInput = nil
-        Environment.shared?.audioSession.endAudioActivity(recordingAudioActivity)
+        SessionEnvironment.shared?.audioSession.endAudioActivity(recordingAudioActivity)
     }
 
     func startCapture() -> AnyPublisher<Void, Error> {

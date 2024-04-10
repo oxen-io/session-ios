@@ -170,6 +170,7 @@ extension ContextMenuVC {
         currentUserBlinded25PublicKey: String?,
         currentUserIsOpenGroupModerator: Bool,
         currentThreadIsMessageRequest: Bool,
+        forMessageInfoScreen: Bool,
         delegate: ContextMenuActionDelegate?,
         using dependencies: Dependencies = Dependencies()
     ) -> [Action]? {
@@ -242,10 +243,8 @@ extension ContextMenuVC {
                     on: cellViewModel.threadOpenGroupServer
                 )
             }
-            return !currentThreadIsMessageRequest
+            return !currentThreadIsMessageRequest && !forMessageInfoScreen
         }()
-        
-        let shouldShowInfo: Bool = (cellViewModel.attachments?.isEmpty == false)
         
         let generatedActions: [Action] = [
             (canRetry ? Action.retry(cellViewModel, delegate, using: dependencies) : nil),
@@ -256,18 +255,18 @@ extension ContextMenuVC {
             (canDelete ? Action.delete(cellViewModel, delegate, using: dependencies) : nil),
             (canBan ? Action.ban(cellViewModel, delegate, using: dependencies) : nil),
             (canBan ? Action.banAndDeleteAllMessages(cellViewModel, delegate, using: dependencies) : nil),
-            (shouldShowInfo ? Action.info(cellViewModel, delegate, using: dependencies) : nil),
+            (forMessageInfoScreen ? nil : Action.info(cellViewModel, delegate, using: dependencies)),
         ]
         .appending(
             contentsOf: (shouldShowEmojiActions ? recentEmojis : [])
                 .map { Action.react(cellViewModel, $0, delegate, using: dependencies) }
         )
-        .appending(Action.emojiPlusButton(cellViewModel, delegate, using: dependencies))
+        .appending(forMessageInfoScreen ? nil : Action.emojiPlusButton(cellViewModel, delegate, using: dependencies))
         .compactMap { $0 }
         
         guard !generatedActions.isEmpty else { return [] }
         
-        return generatedActions.appending(Action.dismiss(delegate))
+        return generatedActions.appending(forMessageInfoScreen ? nil : Action.dismiss(delegate))
     }
 }
 

@@ -102,7 +102,7 @@ class ScreenLockUI {
             return .none;
         }
         
-        if Environment.shared?.isRequestingPermission == true {
+        if SessionEnvironment.shared?.isRequestingPermission == true {
             return .none;
         }
         

@@ -150,6 +150,12 @@ public class TopBannerController: UIViewController {
     }
     
     // MARK: - Functions
+    public func wrappedViewController() -> UIViewController? {
+        if let navVC = child as? UINavigationController {
+            return navVC.topViewController
+        }
+        return child
+    }
     
     public func attachChild() {
         child.willMove(toParent: self)

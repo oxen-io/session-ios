@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit.UIColor
+import SwiftUI
 import SessionUtilitiesKit
 
 // MARK: - Theme
@@ -65,12 +66,36 @@ public enum Theme: String, CaseIterable, Codable, EnumStringSetting {
             default: return colors[value]
         }
     }
+    
+    private var colorsSwiftUI: [ThemeValue: Color] {
+        switch self {
+            case .classicDark: return Theme_ClassicDark.themeSwiftUI
+            case .classicLight: return Theme_ClassicLight.themeSwiftUI
+            case .oceanDark: return Theme_OceanDark.themeSwiftUI
+            case .oceanLight: return Theme_OceanLight.themeSwiftUI
+        }
+    }
+    
+    public func colorSwiftUI(for themeValue: ThemeValue) -> Color? {
+        switch themeValue {
+            case .value(let value, let alpha): return colorSwiftUI(for: value)?.opacity(alpha)
+            
+            case .highlighted(let value, let alwaysDarken):
+                switch (self.interfaceStyle, alwaysDarken) {
+                case (.light, _), (_, true): return (colorSwiftUI(for: value)?.grayscale(0.06) as? Color)
+                    default: return (colorSwiftUI(for: value)?.brightness(0.08) as? Color)
+                }
+            
+            default: return colorsSwiftUI[themeValue]
+        }
+    }
 }
 
 // MARK: - ThemeColors
 
 public protocol ThemeColors {
     static var theme: [ThemeValue: UIColor] { get }
+    static var themeSwiftUI: [ThemeValue: Color] { get }
 }
 
 // MARK: - ThemedNavigation

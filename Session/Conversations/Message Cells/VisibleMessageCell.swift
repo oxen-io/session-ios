@@ -566,9 +566,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                                 .outgoing :
                                 .incoming
                             ),
-                            attachment: cellViewModel.quoteAttachment,
-                            hInset: hInset,
-                            maxWidth: maxWidth
+                            attachment: cellViewModel.quoteAttachment
                         )
                         self.quoteView = quoteView
                         let quoteViewContainer = UIView(wrapping: quoteView, withInsets: UIEdgeInsets(top: 0, leading: hInset, bottom: 0, trailing: hInset))
@@ -1097,6 +1095,143 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         }
     }
     
+    static func getBodyAttributedText(
+        for cellViewModel: MessageViewModel,
+        theme: Theme,
+        primaryColor: Theme.PrimaryColor,
+        textColor: ThemeValue,
+        searchText: String?
+    ) -> NSMutableAttributedString?
+    {
+        guard
+            let body: String = cellViewModel.body,
+            !body.isEmpty,
+            let actualTextColor: UIColor = theme.color(for: textColor),
+            let backgroundPrimaryColor: UIColor = theme.color(for: .backgroundPrimary),
+            let textPrimaryColor: UIColor = theme.color(for: .textPrimary)
+        else { return nil }
+        
+        let isOutgoing: Bool = (cellViewModel.variant == .standardOutgoing)
+        
+        let attributedText: NSMutableAttributedString = NSMutableAttributedString(
+            attributedString: MentionUtilities.highlightMentions(
+                in: body,
+                threadVariant: cellViewModel.threadVariant,
+                currentUserPublicKey: cellViewModel.currentUserPublicKey,
+                currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
+                currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
+                isOutgoingMessage: isOutgoing,
+                textColor: actualTextColor,
+                theme: theme,
+                primaryColor: primaryColor,
+                attributes: [
+                    .foregroundColor: actualTextColor,
+                    .font: UIFont.systemFont(ofSize: getFontSize(for: cellViewModel))
+                ]
+            )
+        )
+        
+        // Custom handle links
+        let links: [URL: NSRange] = {
+            guard let detector: NSDataDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+                return [:]
+            }
+            
+            // Note: The 'String.count' value is based on actual character counts whereas
+            // NSAttributedString and NSRange are both based on UTF-16 encoded lengths, so
+            // in order to avoid strings which contain emojis breaking strings which end
+            // with URLs we need to use the 'String.utf16.count' value when creating the range
+            return detector
+                .matches(
+                    in: attributedText.string,
+                    options: [],
+                    range: NSRange(location: 0, length: attributedText.string.utf16.count)
+                )
+                .reduce(into: [:]) { result, match in
+                    guard
+                        let matchUrl: URL = match.url,
+                        let originalRange: Range = Range(match.range, in: attributedText.string)
+                    else { return }
+                    
+                    /// If the URL entered didn't have a scheme it will default to 'http', we want to catch this and
+                    /// set the scheme to 'https' instead as we don't load previews for 'http' so this will result
+                    /// in more previews actually getting loaded without forcing the user to enter 'https://' before
+                    /// every URL they enter
+                    let originalString: String = String(attributedText.string[originalRange])
+                    
+                    guard matchUrl.absoluteString != "http://\(originalString)" else {
+                        guard let httpsUrl: URL = URL(string: "https://\(originalString)") else {
+                            return
+                        }
+                        
+                        result[httpsUrl] = match.range
+                        return
+                    }
+                    
+                    result[matchUrl] = match.range
+                }
+        }()
+        
+        for (linkUrl, urlRange) in links {
+            attributedText.addAttributes(
+                [
+                    .font: UIFont.systemFont(ofSize: getFontSize(for: cellViewModel)),
+                    .foregroundColor: actualTextColor,
+                    .underlineColor: actualTextColor,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    .attachment: linkUrl
+                ],
+                range: urlRange
+            )
+        }
+        
+        // If there is a valid search term then highlight each part that matched
+        if let searchText = searchText, searchText.count >= ConversationSearchController.minimumSearchTextLength {
+            let normalizedBody: String = attributedText.string.lowercased()
+            
+            SessionThreadViewModel.searchTermParts(searchText)
+                .map { part -> String in
+                    guard part.hasPrefix("\"") && part.hasSuffix("\"") else { return part }
+                    
+                    let partRange = (part.index(after: part.startIndex)..<part.index(before: part.endIndex))
+                    return String(part[partRange])
+                }
+                .forEach { part in
+                    // Highlight all ranges of the text (Note: The search logic only finds
+                    // results that start with the term so we use the regex below to ensure
+                    // we only highlight those cases)
+                    normalizedBody
+                        .ranges(
+                            of: (Singleton.appContext.isRTL ?
+                                 "(\(part.lowercased()))(^|[^a-zA-Z0-9])" :
+                                 "(^|[^a-zA-Z0-9])(\(part.lowercased()))"
+                            ),
+                            options: [.regularExpression]
+                        )
+                        .forEach { range in
+                            let targetRange: Range<String.Index> = {
+                                let term: String = String(normalizedBody[range])
+                                
+                                // If the matched term doesn't actually match the "part" value then it means
+                                // we've matched a term after a non-alphanumeric character so need to shift
+                                // the range over by 1
+                                guard term.starts(with: part.lowercased()) else {
+                                    return (normalizedBody.index(after: range.lowerBound)..<range.upperBound)
+                                }
+                                
+                                return range
+                            }()
+                            
+                            let legacyRange: NSRange = NSRange(targetRange, in: normalizedBody)
+                            attributedText.addThemeAttribute(.background(backgroundPrimaryColor), range: legacyRange)
+                            attributedText.addThemeAttribute(.foreground(textPrimaryColor), range: legacyRange)
+                        }
+                }
+        }
+        
+        return attributedText
+    }
+    
     static func getBodyTappableLabel(
         for cellViewModel: MessageViewModel,
         with availableWidth: CGFloat,
@@ -1104,7 +1239,6 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         searchText: String?,
         delegate: TappableLabelDelegate?
     ) -> TappableLabel {
-        let isOutgoing: Bool = (cellViewModel.variant == .standardOutgoing)
         let result: TappableLabel = TappableLabel()
         result.setContentCompressionResistancePriority(.required, for: .vertical)
         result.themeBackgroundColor = .clear
@@ -1113,130 +1247,15 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         result.delegate = delegate
         
         ThemeManager.onThemeChange(observer: result) { [weak result] theme, primaryColor in
-            guard
-                let actualTextColor: UIColor = theme.color(for: textColor),
-                let backgroundPrimaryColor: UIColor = theme.color(for: .backgroundPrimary),
-                let textPrimaryColor: UIColor = theme.color(for: .textPrimary)
-            else { return }
-            
             let hasPreviousSetText: Bool = ((result?.attributedText?.length ?? 0) > 0)
             
-            let attributedText: NSMutableAttributedString = NSMutableAttributedString(
-                attributedString: MentionUtilities.highlightMentions(
-                    in: (cellViewModel.body ?? ""),
-                    threadVariant: cellViewModel.threadVariant,
-                    currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                    currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                    currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
-                    isOutgoingMessage: isOutgoing,
-                    textColor: actualTextColor,
-                    theme: theme,
-                    primaryColor: primaryColor,
-                    attributes: [
-                        .foregroundColor: actualTextColor,
-                        .font: UIFont.systemFont(ofSize: getFontSize(for: cellViewModel))
-                    ]
-                )
+            result?.attributedText = Self.getBodyAttributedText(
+                for: cellViewModel,
+                theme: theme,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                searchText: searchText
             )
-            
-            // Custom handle links
-            let links: [URL: NSRange] = {
-                guard let detector: NSDataDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
-                    return [:]
-                }
-                
-                // Note: The 'String.count' value is based on actual character counts whereas
-                // NSAttributedString and NSRange are both based on UTF-16 encoded lengths, so
-                // in order to avoid strings which contain emojis breaking strings which end
-                // with URLs we need to use the 'String.utf16.count' value when creating the range
-                return detector
-                    .matches(
-                        in: attributedText.string,
-                        options: [],
-                        range: NSRange(location: 0, length: attributedText.string.utf16.count)
-                    )
-                    .reduce(into: [:]) { result, match in
-                        guard
-                            let matchUrl: URL = match.url,
-                            let originalRange: Range = Range(match.range, in: attributedText.string)
-                        else { return }
-                        
-                        /// If the URL entered didn't have a scheme it will default to 'http', we want to catch this and
-                        /// set the scheme to 'https' instead as we don't load previews for 'http' so this will result
-                        /// in more previews actually getting loaded without forcing the user to enter 'https://' before
-                        /// every URL they enter
-                        let originalString: String = String(attributedText.string[originalRange])
-                        
-                        guard matchUrl.absoluteString != "http://\(originalString)" else {
-                            guard let httpsUrl: URL = URL(string: "https://\(originalString)") else {
-                                return
-                            }
-                            
-                            result[httpsUrl] = match.range
-                            return
-                        }
-                        
-                        result[matchUrl] = match.range
-                    }
-            }()
-            
-            for (linkUrl, urlRange) in links {
-                attributedText.addAttributes(
-                    [
-                        .font: UIFont.systemFont(ofSize: getFontSize(for: cellViewModel)),
-                        .foregroundColor: actualTextColor,
-                        .underlineColor: actualTextColor,
-                        .underlineStyle: NSUnderlineStyle.single.rawValue,
-                        .attachment: linkUrl
-                    ],
-                    range: urlRange
-                )
-            }
-            
-            // If there is a valid search term then highlight each part that matched
-            if let searchText = searchText, searchText.count >= ConversationSearchController.minimumSearchTextLength {
-                let normalizedBody: String = attributedText.string.lowercased()
-                
-                SessionThreadViewModel.searchTermParts(searchText)
-                    .map { part -> String in
-                        guard part.hasPrefix("\"") && part.hasSuffix("\"") else { return part }
-                        
-                        let partRange = (part.index(after: part.startIndex)..<part.index(before: part.endIndex))
-                        return String(part[partRange])
-                    }
-                    .forEach { part in
-                        // Highlight all ranges of the text (Note: The search logic only finds
-                        // results that start with the term so we use the regex below to ensure
-                        // we only highlight those cases)
-                        normalizedBody
-                            .ranges(
-                                of: (Singleton.hasAppContext && Singleton.appContext.isRTL ?
-                                     "(\(part.lowercased()))(^|[^a-zA-Z0-9])" :
-                                     "(^|[^a-zA-Z0-9])(\(part.lowercased()))"
-                                ),
-                                options: [.regularExpression]
-                            )
-                            .forEach { range in
-                                let targetRange: Range<String.Index> = {
-                                    let term: String = String(normalizedBody[range])
-                                    
-                                    // If the matched term doesn't actually match the "part" value then it means
-                                    // we've matched a term after a non-alphanumeric character so need to shift
-                                    // the range over by 1
-                                    guard term.starts(with: part.lowercased()) else {
-                                        return (normalizedBody.index(after: range.lowerBound)..<range.upperBound)
-                                    }
-                                    
-                                    return range
-                                }()
-                                
-                                let legacyRange: NSRange = NSRange(targetRange, in: normalizedBody)
-                                attributedText.addThemeAttribute(.background(backgroundPrimaryColor), range: legacyRange)
-                                attributedText.addThemeAttribute(.foreground(textPrimaryColor), range: legacyRange)
-                            }
-                    }
-            }
-            result?.attributedText = attributedText
             
             if let result: TappableLabel = result, !hasPreviousSetText {
                 let availableSpace = CGSize(width: availableWidth, height: .greatestFiniteMagnitude)

@@ -30,7 +30,15 @@ You can then add the Session repo to sync with upstream changes:
 git remote add upstream https://github.com/oxen-io/session-ios
 ```
 
-## 2. Pods
+## 2. Submodules
+
+Session requires a number of submodules to build, these can be retrieved by navigating to the project directory and running:
+
+```
+git submodule update --init --recursive
+```
+
+## 3. Pods
 
 To build and configure the libraries Session uses, just run:
 
@@ -38,7 +46,7 @@ To build and configure the libraries Session uses, just run:
 pod install
 ```
 
-## 3. Xcode
+## 4. Xcode
 
 Open the `Session.xcworkspace` in Xcode.
 

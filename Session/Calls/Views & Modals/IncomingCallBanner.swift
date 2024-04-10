@@ -202,7 +202,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         else { preconditionFailure() } // FIXME: Handle more gracefully
         
         let callVC = CallVC(for: self.call)
-        if let conversationVC = presentingVC as? ConversationVC {
+        if let conversationVC = (presentingVC as? TopBannerController)?.wrappedViewController() as? ConversationVC {
             callVC.conversationVC = conversationVC
             conversationVC.inputAccessoryView?.isHidden = true
             conversationVC.inputAccessoryView?.alpha = 0
