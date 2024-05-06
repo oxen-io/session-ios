@@ -66,7 +66,7 @@ public struct Contact: Codable, Identifiable, Equatable, FetchableRecord, Persis
         self.id = id
         self.isTrusted = (
             isTrusted ||
-            id == getUserHexEncodedPublicKey(db, using: dependencies)  // Always trust ourselves
+            id == getUserSessionId(db, using: dependencies).hexString  // Always trust ourselves
         )
         self.isApproved = isApproved
         self.isBlocked = isBlocked
@@ -85,5 +85,20 @@ public extension Contact {
     /// it will need to be explicitly saved after calling
     static func fetchOrCreate(_ db: Database, id: ID) -> Contact {
         return ((try? fetchOne(db, id: id)) ?? Contact(db, id: id))
+    }
+}
+
+// MARK: - Convenience
+
+extension Contact: ProfileAssociated {
+    public var profileId: String { id }
+    
+    public static func compare(lhs: WithProfile<Contact>, rhs: WithProfile<Contact>) -> Bool {
+        let lhsDisplayName: String = (lhs.profile?.displayName(for: .contact))
+            .defaulting(to: Profile.truncated(id: lhs.profileId, threadVariant: .contact))
+        let rhsDisplayName: String = (rhs.profile?.displayName(for: .contact))
+            .defaulting(to: Profile.truncated(id: rhs.profileId, threadVariant: .contact))
+        
+        return (lhsDisplayName < rhsDisplayName)
     }
 }

@@ -5,8 +5,19 @@ import GRDB
 import DifferenceKit
 import SignalUtilitiesKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 public class ThreadPickerViewModel {
+    // MARK: - Initialization
+    
+    public let dependencies: Dependencies
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+    
+    // MARK: - Content
+    
     /// This value is the current state of the view
     public private(set) var viewData: [SessionThreadViewModel] = []
     
@@ -22,10 +33,10 @@ public class ThreadPickerViewModel {
     /// just in case the database has changed between the two reads - unfortunately it doesn't look like there is a way to prevent this
     public lazy var observableViewData = ValueObservation
         .trackingConstantRegion { db -> [SessionThreadViewModel] in
-            let userPublicKey: String = getUserHexEncodedPublicKey(db)
+            let userSessionId: SessionId = getUserSessionId(db)
             
             return try SessionThreadViewModel
-                .shareQuery(userPublicKey: userPublicKey)
+                .shareQuery(userSessionId: userSessionId)
                 .fetchAll(db)
         }
         .map { threads -> [SessionThreadViewModel] in threads.filter { $0.canWrite } }   // Exclude unwritable threads

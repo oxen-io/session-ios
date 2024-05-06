@@ -7,6 +7,7 @@ import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
 import SignalCoreKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 public class DocumentTileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
@@ -19,6 +20,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     static let footerBarHeight: CGFloat = 40
     static let loadMoreHeaderHeight: CGFloat = 100
     
+    private let dependencies: Dependencies
     private let viewModel: MediaGalleryViewModel
     private var hasLoadedInitialData: Bool = false
     private var didFinishInitialLayout: Bool = false
@@ -29,9 +31,10 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     
     // MARK: - Initialization
 
-    init(viewModel: MediaGalleryViewModel) {
+    init(viewModel: MediaGalleryViewModel, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.viewModel = viewModel
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -79,7 +82,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
 
         // Add a custom back button if this is the only view controller
         if self.navigationController?.viewControllers.first == self {
-            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: dependencies)
             self.navigationItem.leftBarButtonItem = backButton
         }
         
@@ -90,7 +93,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         )
 
         view.addSubview(self.tableView)
-        tableView.autoPin(toEdgesOf: view)
+        tableView.pin(to: view)
         
         // Notifications
         NotificationCenter.default.addObserver(
@@ -342,7 +345,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         if
             attachment.isText ||
             attachment.isMicrosoftDoc ||
-            attachment.contentType == OWSMimeTypeApplicationPdf
+            attachment.contentType == MimeTypeUtil.MimeType.applicationPdf
         {
             
             delegate?.preview(fileUrl: fileUrl)
@@ -589,7 +592,10 @@ class DocumentStaticHeaderView: UIView {
         label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.numberOfLines = 0
-        label.autoPinEdgesToSuperviewMargins(with: UIEdgeInsets(top: 0, leading: Values.largeSpacing, bottom: 0, trailing: Values.largeSpacing))
+        label.pin(.top, toMargin: .top, of: self)
+        label.pin(.leading, toMargin: .leading, of: self, withInset: Values.largeSpacing)
+        label.pin(.trailing, toMargin: .trailing, of: self, withInset: -Values.largeSpacing)
+        label.pin(.bottom, toMargin: .bottom, of: self)
     }
 
     @available(*, unavailable, message: "Unimplemented")

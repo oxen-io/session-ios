@@ -146,125 +146,125 @@ class BatchResponseSpec: QuickSpec {
             }
         }
         
-        // MARK: - a Decodable
-        describe("a Decodable") {
-            // MARK: -- decodes correctly
-            it("decodes correctly") {
-                let jsonData: Data = "{\"stringValue\":\"testValue\"}".data(using: .utf8)!
-                let result: TestType? = try? TestType.decoded(from: jsonData)
-                
-                expect(result).to(equal(TestType(stringValue: "testValue")))
-            }
-        }
-        
-        // MARK: - a (ResponseInfoType, Data?) Publisher
-        describe("a (ResponseInfoType, Data?) Publisher") {
-            // MARK: -- decodes valid data correctly
-            it("decodes valid data correctly") {
-                var result: HTTP.BatchResponse?
-                Just((responseInfo, data))
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-                    .decoded(as: [
-                        HTTP.BatchSubResponse<TestType>.self,
-                        HTTP.BatchSubResponse<TestType2>.self
-                    ])
-                    .sinkUntilComplete(
-                        receiveValue: { result = $0 }
+        // MARK: - an HTTP.BatchResponse
+        describe("an HTTP.BatchResponse") {
+            // MARK: -- when decoding responses
+            context("when decoding responses") {
+                // MARK: -- decodes valid data correctly
+                it("decodes valid data correctly") {
+                    let result: HTTP.BatchResponse? = try? HTTP.BatchResponse.decodingResponses(
+                        from: data,
+                        as: [
+                            HTTP.BatchSubResponse<TestType>.self,
+                            HTTP.BatchSubResponse<TestType2>.self
+                        ],
+                        requireAllResults: true
                     )
-        
-                expect(result).toNot(beNil())
-                expect((result?.responses[0] as? HTTP.BatchSubResponse<TestType>)?.body)
-                    .to(equal(testType))
-                expect((result?.responses[1] as? HTTP.BatchSubResponse<TestType2>)?.body)
-                    .to(equal(testType2))
+                    
+                    expect(result).toNot(beNil())
+                    expect((result?.data[0] as? HTTP.BatchSubResponse<TestType>)?.body)
+                        .to(equal(testType))
+                    expect((result?.data[1] as? HTTP.BatchSubResponse<TestType2>)?.body)
+                        .to(equal(testType2))
+                }
             }
             
             // MARK: -- fails if there is no data
             it("fails if there is no data") {
-                var error: Error?
-                Just((responseInfo, nil))
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-                    .decoded(as: [])
-                    .mapError { error.setting(to: $0) }
-                    .sinkUntilComplete()
-                
-                expect(error).to(matchError(HTTPError.parsingFailed))
+                expect {
+                    try HTTP.BatchResponse.decodingResponses(
+                        from: nil,
+                        as: [Int.self],
+                        requireAllResults: true
+                    )
+                }.to(throwError(HTTPError.parsingFailed))
             }
             
             // MARK: -- fails if the data is not JSON
             it("fails if the data is not JSON") {
-                var error: Error?
-                Just((responseInfo, Data([1, 2, 3])))
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-                    .decoded(as: [])
-                    .mapError { error.setting(to: $0) }
-                    .sinkUntilComplete()
-                
-                expect(error).to(matchError(HTTPError.parsingFailed))
+                expect {
+                    try HTTP.BatchResponse.decodingResponses(
+                        from: Data([1, 2, 3]),
+                        as: [Int.self],
+                        requireAllResults: true
+                    )
+                }.to(throwError(HTTPError.parsingFailed))
             }
             
             // MARK: -- fails if the data is not a JSON array
             it("fails if the data is not a JSON array") {
-                var error: Error?
-                Just((responseInfo, "{}".data(using: .utf8)))
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-                    .decoded(as: [])
-                    .mapError { error.setting(to: $0) }
-                    .sinkUntilComplete()
-                
-                expect(error).to(matchError(HTTPError.parsingFailed))
-            }
-            
-            // MARK: -- fails if the JSON array does not have the same number of items as the expected types
-            it("fails if the JSON array does not have the same number of items as the expected types") {
-                var error: Error?
-                Just((responseInfo, data))
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-                    .decoded(as: [
-                        HTTP.BatchSubResponse<TestType>.self,
-                        HTTP.BatchSubResponse<TestType2>.self,
-                        HTTP.BatchSubResponse<TestType2>.self
-                    ])
-                    .mapError { error.setting(to: $0) }
-                    .sinkUntilComplete()
-                
-                expect(error).to(matchError(HTTPError.parsingFailed))
-            }
-            
-            // MARK: -- fails if one of the JSON array values fails to decode
-            it("fails if one of the JSON array values fails to decode") {
-                data = """
-                [\([
-                    try! JSONEncoder().with(outputFormatting: .sortedKeys).encode(
-                        HTTP.BatchSubResponse(
-                            code: 200,
-                            headers: [:],
-                            body: testType,
-                            failedToParseBody: false
-                        )
+                expect {
+                    try HTTP.BatchResponse.decodingResponses(
+                        from: "{}".data(using: .utf8),
+                        as: [Int.self],
+                        requireAllResults: true
                     )
-                ]
-                .map { String(data: $0, encoding: .utf8)! }
-                .joined(separator: ",")),{"test": "test"}]
-                """.data(using: .utf8)!
+                }.to(throwError(HTTPError.parsingFailed))
+            }
+            
+            // MARK: -- and requiring all responses
+            context("and requiring all responses") {
+                // MARK: ---- fails if the JSON array does not have the same number of items as the expected types
+                it("fails if the JSON array does not have the same number of items as the expected types") {
+                    expect {
+                        try HTTP.BatchResponse.decodingResponses(
+                            from: data,
+                            as: [
+                                HTTP.BatchSubResponse<TestType>.self,
+                                HTTP.BatchSubResponse<TestType2>.self,
+                                HTTP.BatchSubResponse<TestType2>.self
+                            ],
+                            requireAllResults: true
+                        )
+                    }.to(throwError(HTTPError.parsingFailed))
+                }
                 
-                var error: Error?
-                Just((responseInfo, data))
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-                    .decoded(as: [
-                        HTTP.BatchSubResponse<TestType>.self,
-                        HTTP.BatchSubResponse<TestType2>.self
-                    ])
-                    .mapError { error.setting(to: $0) }
-                    .sinkUntilComplete()
-                
-                expect(error).to(matchError(HTTPError.parsingFailed))
+                // MARK: ---- fails if one of the JSON array values fails to decode
+                it("fails if one of the JSON array values fails to decode") {
+                    data = """
+                    [\([
+                        try! JSONEncoder().with(outputFormatting: .sortedKeys).encode(
+                            HTTP.BatchSubResponse(
+                                code: 200,
+                                headers: [:],
+                                body: testType,
+                                failedToParseBody: false
+                            )
+                        )
+                    ]
+                    .map { String(data: $0, encoding: .utf8)! }
+                    .joined(separator: ",")),{"test": "test"}]
+                    """.data(using: .utf8)!
+                    
+                    expect {
+                        try HTTP.BatchResponse.decodingResponses(
+                            from: data,
+                            as: [
+                                HTTP.BatchSubResponse<TestType>.self,
+                                HTTP.BatchSubResponse<TestType2>.self
+                            ],
+                            requireAllResults: true
+                        )
+                    }.to(throwError(HTTPError.parsingFailed))
+                }
+            }
+            
+            // MARK: -- and not requiring all responses
+            context("and not requiring all responses") {
+                // MARK: ---- succeeds when the JSON array does not have the same number of items as the expected types
+                it("succeeds when the JSON array does not have the same number of items as the expected types") {
+                    expect {
+                        try HTTP.BatchResponse.decodingResponses(
+                            from: data,
+                            as: [
+                                HTTP.BatchSubResponse<TestType>.self,
+                                HTTP.BatchSubResponse<TestType2>.self,
+                                HTTP.BatchSubResponse<TestType2>.self
+                            ],
+                            requireAllResults: false
+                        )
+                    }.toNot(throwError(HTTPError.parsingFailed))
+                }
             }
         }
     }

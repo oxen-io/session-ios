@@ -82,20 +82,21 @@ public class PhotoGridViewCell: UICollectionViewCell {
         self.contentView.addSubview(selectedView)
         self.contentView.addSubview(selectedBadgeView)
 
-        imageView.autoPinEdgesToSuperviewEdges()
-        highlightedView.autoPinEdgesToSuperviewEdges()
-        selectedView.autoPinEdgesToSuperviewEdges()
+        imageView.pin(to: contentView)
+        highlightedView.pin(to: contentView)
+        selectedView.pin(to: contentView)
 
         // Note assets were rendered to match exactly. We don't want to re-size with
         // content mode lest they become less legible.
-        let kContentTypeBadgeSize = CGSize(width: 18, height: 12)
-        contentTypeBadgeView.autoPinEdge(toSuperviewEdge: .leading, withInset: 3)
-        contentTypeBadgeView.autoPinEdge(toSuperviewEdge: .bottom, withInset: 3)
-        contentTypeBadgeView.autoSetDimensions(to: kContentTypeBadgeSize)
+        contentTypeBadgeView.pin(.leading, to: .leading, of: contentView, withInset: 3)
+        contentTypeBadgeView.pin(.bottom, to: .bottom, of: contentView, withInset: -3)
+        contentTypeBadgeView.set(.width, to: 18)
+        contentTypeBadgeView.set(.height, to: 12)
 
-        selectedBadgeView.autoPinEdge(toSuperviewEdge: .trailing, withInset: Values.verySmallSpacing)
-        selectedBadgeView.autoPinEdge(toSuperviewEdge: .bottom, withInset: Values.verySmallSpacing)
-        selectedBadgeView.autoSetDimensions(to: kSelectedBadgeSize)
+        selectedBadgeView.pin(.trailing, to: .trailing, of: contentView, withInset: -Values.verySmallSpacing)
+        selectedBadgeView.pin(.bottom, to: .bottom, of: contentView, withInset: -Values.verySmallSpacing)
+        selectedBadgeView.set(.width, to: kSelectedBadgeSize.width)
+        selectedBadgeView.set(.height, to: kSelectedBadgeSize.height)
     }
 
     @available(*, unavailable, message: "Unimplemented")

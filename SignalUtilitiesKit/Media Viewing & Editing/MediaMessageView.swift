@@ -77,7 +77,7 @@ public class MediaMessageView: UIView {
 
     // Currently we only use one mode (AttachmentApproval), so we could simplify this class, but it's kind
     // of nice that it's written in a flexible way in case we'd want to use it elsewhere again in the future.
-    public required init(attachment: SignalAttachment, mode: MediaMessageView.Mode) {
+    public required init(attachment: SignalAttachment, mode: MediaMessageView.Mode, using dependencies: Dependencies) {
         if attachment.hasError { owsFailDebug(attachment.error.debugDescription) }
         
         self.attachment = attachment
@@ -90,7 +90,7 @@ public class MediaMessageView: UIView {
         
         super.init(frame: CGRect.zero)
 
-        setupViews()
+        setupViews(using: dependencies)
         setupLayout()
     }
 
@@ -211,15 +211,15 @@ public class MediaMessageView: UIView {
         // Styling
         switch mode {
             case .attachmentApproval:
-                label.font = UIFont.boldSystemFont(ofSize: ScaleFromIPhone5To7Plus(16, 22))
+                label.font = UIFont.boldSystemFont(ofSize: Values.scaleFromIPhone5To7Plus(16, 22))
                 label.themeTextColor = .textPrimary
                 
             case .large:
-                label.font = UIFont.systemFont(ofSize: ScaleFromIPhone5To7Plus(18, 24))
+                label.font = UIFont.systemFont(ofSize: Values.scaleFromIPhone5To7Plus(18, 24))
                 label.themeTextColor = .primary
                 
             case .small:
-                label.font = UIFont.systemFont(ofSize: ScaleFromIPhone5To7Plus(14, 14))
+                label.font = UIFont.systemFont(ofSize: Values.scaleFromIPhone5To7Plus(14, 14))
                 label.themeTextColor = .primary
         }
         
@@ -266,15 +266,15 @@ public class MediaMessageView: UIView {
         // Styling
         switch mode {
             case .attachmentApproval:
-                label.font = UIFont.systemFont(ofSize: ScaleFromIPhone5To7Plus(12, 18))
+                label.font = UIFont.systemFont(ofSize: Values.scaleFromIPhone5To7Plus(12, 18))
                 label.themeTextColor = .textSecondary
                 
             case .large:
-                label.font = UIFont.systemFont(ofSize: ScaleFromIPhone5To7Plus(18, 24))
+                label.font = UIFont.systemFont(ofSize: Values.scaleFromIPhone5To7Plus(18, 24))
                 label.themeTextColor = .primary
                 
             case .small:
-                label.font = UIFont.systemFont(ofSize: ScaleFromIPhone5To7Plus(14, 14))
+                label.font = UIFont.systemFont(ofSize: Values.scaleFromIPhone5To7Plus(14, 14))
                 label.themeTextColor = .primary
         }
         
@@ -318,7 +318,7 @@ public class MediaMessageView: UIView {
     
     // MARK: - Layout
 
-    private func setupViews() {
+    private func setupViews(using dependencies: Dependencies) {
         // Plain text will just be put in the 'message' input so do nothing
         guard !attachment.isText else { return }
         
@@ -367,7 +367,7 @@ public class MediaMessageView: UIView {
                 // error message will be broken
                 stackView.axis = .horizontal
                 
-                loadLinkPreview(linkPreviewURL: linkPreviewUrl)
+                loadLinkPreview(linkPreviewURL: linkPreviewUrl, using: dependencies)
             }
         }
         else {
@@ -389,14 +389,14 @@ public class MediaMessageView: UIView {
                 let imageSize: CGSize = (animatedImageView.image?.size ?? CGSize(width: 1, height: 1))
                 let aspectRatio: CGFloat = (imageSize.width / imageSize.height)
             
-                return CGFloatClamp(aspectRatio, 0.05, 95.0)
+                return aspectRatio.clamp(0.05, 95.0)
             }
             
             // All other types should maintain the ratio of the image in the 'imageView'
             let imageSize: CGSize = (imageView.image?.size ?? CGSize(width: 1, height: 1))
             let aspectRatio: CGFloat = (imageSize.width / imageSize.height)
         
-            return CGFloatClamp(aspectRatio, 0.05, 95.0)
+            return aspectRatio.clamp(0.05, 95.0)
         }()
         
         let maybeImageSize: CGFloat? = {
@@ -489,10 +489,10 @@ public class MediaMessageView: UIView {
     
     // MARK: - Link Loading
     
-    private func loadLinkPreview(linkPreviewURL: String) {
+    private func loadLinkPreview(linkPreviewURL: String, using dependencies: Dependencies) {
         loadingView.startAnimating()
         
-        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL)
+        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL, using: dependencies)
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .sink(

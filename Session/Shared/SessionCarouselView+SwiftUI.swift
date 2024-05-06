@@ -1,6 +1,7 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import SwiftUI
+import SessionMessagingKit
 
 public struct SessionCarouselView_SwiftUI: View {
     @Binding var index: Int

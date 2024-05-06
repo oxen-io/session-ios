@@ -12,9 +12,11 @@ public enum SnodeAPIError: Error, CustomStringConvertible {
     case noKeyPair
     case signingFailed
     case signatureVerificationFailed
+    case invalidAuthentication
     case invalidIP
     case emptySnodePool
     case responseFailedValidation
+    case unauthorised
     case ranOutOfRandomSnodes(Error?)
     
     // ONS
@@ -31,9 +33,11 @@ public enum SnodeAPIError: Error, CustomStringConvertible {
             case .noKeyPair: return "Missing user key pair (SnodeAPIError.noKeyPair)."
             case .signingFailed: return "Couldn't sign message (SnodeAPIError.signingFailed)."
             case .signatureVerificationFailed: return "Failed to verify the signature (SnodeAPIError.signatureVerificationFailed)."
+            case .invalidAuthentication: return "Invalid Authentication (SnodeAPIError.invalidAuthentication)."
             case .invalidIP: return "Invalid IP (SnodeAPIError.invalidIP)."
             case .emptySnodePool: return "Service Node pool is empty (SnodeAPIError.emptySnodePool)."
             case .responseFailedValidation: return "Response failed validation (SnodeAPIError.responseFailedValidation)."
+            case .unauthorised: return "Unauthorized (SnodeAPIError.unauthorised)."
             case .ranOutOfRandomSnodes(let maybeError):
                 switch maybeError {
                     case .none: return "Ran out of random snodes (SnodeAPIError.ranOutOfRandomSnodes(nil))."

@@ -14,7 +14,7 @@ enum _001_InitialSetupMigration: Migration {
         Snode.self, SnodeSet.self, SnodeReceivedMessageInfo.self
     ]
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: Snode.self) { t in
             t.column(.address, .text).notNull()
             t.column(.port, .integer).notNull()
@@ -56,6 +56,6 @@ enum _001_InitialSetupMigration: Migration {
             t.uniqueKey([.key, .hash])
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

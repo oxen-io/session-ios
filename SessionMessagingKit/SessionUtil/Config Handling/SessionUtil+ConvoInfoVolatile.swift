@@ -16,11 +16,11 @@ internal extension SessionUtil {
     
     static func handleConvoInfoVolatileUpdate(
         _ db: Database,
-        in conf: UnsafeMutablePointer<config_object>?,
-        mergeNeedsDump: Bool
+        in config: Config?,
+        using dependencies: Dependencies
     ) throws {
-        guard mergeNeedsDump else { return }
-        guard conf != nil else { throw SessionUtilError.nilConfigObject }
+        guard config.needsDump(using: dependencies) else { return }
+        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
         
         // Get the volatile thread info from the conf and local conversations
         let volatileThreadInfo: [VolatileThreadInfo] = try extractConvoVolatileInfo(from: conf)
@@ -53,9 +53,11 @@ internal extension SessionUtil {
                 {
                     try SessionThread
                         .filter(id: threadId)
-                        .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                        .updateAllAndConfig(
                             db,
-                            SessionThread.Columns.markedAsUnread.set(to: markedAsUnread)
+                            SessionThread.Columns.markedAsUnread.set(to: markedAsUnread),
+                            calledFromConfig: .convoInfoVolatile,
+                            using: dependencies
                         )
                 }
                 
@@ -86,9 +88,11 @@ internal extension SessionUtil {
                     .asRequest(of: Interaction.ReadInfo.self)
                     .fetchAll(db)
                 try interactionQuery
-                    .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                    .updateAllAndConfig(
                         db,
-                        Interaction.Columns.wasRead.set(to: true)
+                        Interaction.Columns.wasRead.set(to: true),
+                        calledFromConfig: .convoInfoVolatile,
+                        using: dependencies
                     )
                 try Interaction.scheduleReadJobs(
                     db,
@@ -97,7 +101,8 @@ internal extension SessionUtil {
                     interactionInfo: interactionInfoToMarkAsRead,
                     lastReadTimestampMs: lastReadTimestampMs,
                     trySendReadReceipt: false,  // Interactions already read, no need to send
-                    calledFromConfigHandling: true
+                    calledFromConfig: .convoInfoVolatile,
+                    using: dependencies
                 )
                 return nil
             }
@@ -107,15 +112,17 @@ internal extension SessionUtil {
         
         try upsert(
             convoInfoVolatileChanges: newerLocalChanges,
-            in: conf
+            in: config,
+            using: dependencies
         )
     }
     
     static func upsert(
         convoInfoVolatileChanges: [VolatileThreadInfo],
-        in conf: UnsafeMutablePointer<config_object>?
+        in config: Config?,
+        using dependencies: Dependencies
     ) throws {
-        guard conf != nil else { throw SessionUtilError.nilConfigObject }
+        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
         
         // Exclude any invalid thread info
         let validChanges: [VolatileThreadInfo] = convoInfoVolatileChanges
@@ -123,7 +130,7 @@ internal extension SessionUtil {
                 switch info.variant {
                     case .contact:
                         // FIXME: libSession V1 doesn't sync volatileThreadInfo for blinded message requests
-                        guard SessionId(from: info.threadId)?.prefix == .standard else { return false }
+                        guard (try? SessionId(from: info.threadId))?.prefix == .standard else { return false }
                         
                         return true
                         
@@ -141,7 +148,7 @@ internal extension SessionUtil {
                     guard convo_info_volatile_get_or_construct_1to1(conf, &oneToOne, &cThreadId) else {
                         /// It looks like there are some situations where this object might not get created correctly (and
                         /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert contact volatile info to SessionUtil: \(SessionUtil.lastError(conf))")
+                        SNLog("Unable to upsert contact volatile info to SessionUtil: \(config.lastError)")
                         throw SessionUtilError.getOrConstructFailedUnexpectedly
                     }
                     
@@ -162,7 +169,7 @@ internal extension SessionUtil {
                     guard convo_info_volatile_get_or_construct_legacy_group(conf, &legacyGroup, &cThreadId) else {
                         /// It looks like there are some situations where this object might not get created correctly (and
                         /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert legacy group volatile info to SessionUtil: \(SessionUtil.lastError(conf))")
+                        SNLog("Unable to upsert legacy group volatile info to SessionUtil: \(config.lastError)")
                         throw SessionUtilError.getOrConstructFailedUnexpectedly
                     }
                     
@@ -192,7 +199,7 @@ internal extension SessionUtil {
                     guard convo_info_volatile_get_or_construct_community(conf, &community, &cBaseUrl, &cRoomToken, &cPubkey) else {
                         /// It looks like there are some situations where this object might not get created correctly (and
                         /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                        SNLog("Unable to upsert community volatile info to SessionUtil: \(SessionUtil.lastError(conf))")
+                        SNLog("Unable to upsert community volatile info to SessionUtil: \(config.lastError)")
                         throw SessionUtilError.getOrConstructFailedUnexpectedly
                     }
                     
@@ -207,19 +214,48 @@ internal extension SessionUtil {
                     }
                     convo_info_volatile_set_community(conf, &community)
                     
-                case .group: return
+                case .group:
+                    var group: convo_info_volatile_group = convo_info_volatile_group()
+
+                    guard convo_info_volatile_get_or_construct_group(conf, &group, &cThreadId) else {
+                        /// It looks like there are some situations where this object might not get created correctly (and
+                        /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+                        SNLog("Unable to upsert group volatile info to SessionUtil: \(config.lastError)")
+                        throw SessionUtilError.getOrConstructFailedUnexpectedly
+                    }
+
+                    threadInfo.changes.forEach { change in
+                        switch change {
+                            case .lastReadTimestampMs(let lastReadMs):
+                                group.last_read = max(group.last_read, lastReadMs)
+
+                            case .markedAsUnread(let unread):
+                                group.unread = unread
+                        }
+                    }
+                    convo_info_volatile_set_group(conf, &group)
             }
         }
     }
     
     static func updateMarkedAsUnreadState(
         _ db: Database,
-        threads: [SessionThread]
+        threads: [SessionThread],
+        using dependencies: Dependencies
     ) throws {
+        // The current users thread data is stored in the `UserProfile` config so exclude it, we
+        // also don't want to sync blinded message requests so exclude those as well
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
+        let targetThreads: [SessionThread] = threads
+            .filter {
+                $0.id != userSessionId.hexString &&
+                (try? SessionId(from: $0.id))?.prefix == .standard
+            }
+        
         // If we have no updated threads then no need to continue
-        guard !threads.isEmpty else { return }
+        guard !targetThreads.isEmpty else { return }
 
-        let changes: [VolatileThreadInfo] = try threads.map { thread in
+        let changes: [VolatileThreadInfo] = try targetThreads.map { thread in
             VolatileThreadInfo(
                 threadId: thread.id,
                 variant: thread.variant,
@@ -233,21 +269,30 @@ internal extension SessionUtil {
         try SessionUtil.performAndPushChange(
             db,
             for: .convoInfoVolatile,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
             try upsert(
                 convoInfoVolatileChanges: changes,
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
-    static func remove(_ db: Database, volatileContactIds: [String]) throws {
+    static func remove(
+        _ db: Database,
+        volatileContactIds: [String],
+        using dependencies: Dependencies
+    ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .convoInfoVolatile,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
             volatileContactIds.forEach { contactId in
                 var cSessionId: [CChar] = contactId.cArray.nullTerminated()
                 
@@ -257,12 +302,19 @@ internal extension SessionUtil {
         }
     }
     
-    static func remove(_ db: Database, volatileLegacyGroupIds: [String]) throws {
+    static func remove(
+        _ db: Database,
+        volatileLegacyGroupIds: [String],
+        using dependencies: Dependencies
+    ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .convoInfoVolatile,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
             volatileLegacyGroupIds.forEach { legacyGroupId in
                 var cLegacyGroupId: [CChar] = legacyGroupId.cArray.nullTerminated()
                 
@@ -272,12 +324,41 @@ internal extension SessionUtil {
         }
     }
     
-    static func remove(_ db: Database, volatileCommunityInfo: [OpenGroupUrlInfo]) throws {
+    static func remove(
+        _ db: Database,
+        volatileGroupSessionIds: [String],
+        using dependencies: Dependencies
+    ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .convoInfoVolatile,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
+            volatileGroupSessionIds.forEach { groupSessionId in
+                var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
+
+                // Don't care if the data doesn't exist
+                convo_info_volatile_erase_group(conf, &cGroupSessionId)
+            }
+        }
+    }
+    
+    static func remove(
+        _ db: Database,
+        volatileCommunityInfo: [OpenGroupUrlInfo],
+        using dependencies: Dependencies
+    ) throws {
+        try SessionUtil.performAndPushChange(
+            db,
+            for: .convoInfoVolatile,
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
             volatileCommunityInfo.forEach { urlInfo in
                 var cBaseUrl: [CChar] = urlInfo.server.cArray.nullTerminated()
                 var cRoom: [CChar] = urlInfo.roomToken.cArray.nullTerminated()
@@ -296,13 +377,15 @@ public extension SessionUtil {
         _ db: Database,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        lastReadTimestampMs: Int64
+        lastReadTimestampMs: Int64,
+        using dependencies: Dependencies
     ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .convoInfoVolatile,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
             try upsert(
                 convoInfoVolatileChanges: [
                     VolatileThreadInfo(
@@ -314,7 +397,8 @@ public extension SessionUtil {
                         changes: [.lastReadTimestampMs(lastReadTimestampMs)]
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
@@ -323,13 +407,16 @@ public extension SessionUtil {
         threadId: String,
         threadVariant: SessionThread.Variant,
         timestampMs: Int64,
-        userPublicKey: String,
-        openGroup: OpenGroup?
+        userSessionId: SessionId,
+        openGroup: OpenGroup?,
+        using dependencies: Dependencies
     ) -> Bool {
-        return SessionUtil
-            .config(for: .convoInfoVolatile, publicKey: userPublicKey)
+        return dependencies[cache: .sessionUtil]
+            .config(for: .convoInfoVolatile, sessionId: userSessionId)
             .wrappedValue
-            .map { conf in
+            .map { config in
+                guard case .object(let conf) = config else { return false }
+                
                 switch threadVariant {
                     case .contact:
                         var cThreadId: [CChar] = threadId.cArray.nullTerminated()
@@ -363,7 +450,15 @@ public extension SessionUtil {
                         
                         return (convoCommunity.last_read >= timestampMs)
                         
-                    case .group: return false
+                    case .group:
+                        var cThreadId: [CChar] = threadId.cArray.nullTerminated()
+                        var group: convo_info_volatile_group = convo_info_volatile_group()
+
+                        guard convo_info_volatile_get_group(conf, &group, &cThreadId) else {
+                            return false
+                        }
+
+                        return (group.last_read >= timestampMs)
                 }
             }
             .defaulting(to: false) // If we don't have a config then just assume it's unread
@@ -437,13 +532,7 @@ public extension SessionUtil {
             )
         }
         
-        static func fetchAll(_ db: Database? = nil, ids: [String]? = nil) -> [VolatileThreadInfo] {
-            guard let db: Database = db else {
-                return Storage.shared
-                    .read { db in fetchAll(db, ids: ids) }
-                    .defaulting(to: [])
-            }
-            
+        static func fetchAll(_ db: Database, ids: [String]? = nil) -> [VolatileThreadInfo] {
             struct FetchedInfo: FetchableRecord, Codable, Hashable {
                 let id: String
                 let variant: SessionThread.Variant
@@ -528,6 +617,7 @@ public extension SessionUtil {
         var oneToOne: convo_info_volatile_1to1 = convo_info_volatile_1to1()
         var community: convo_info_volatile_community = convo_info_volatile_community()
         var legacyGroup: convo_info_volatile_legacy_group = convo_info_volatile_legacy_group()
+        var group: convo_info_volatile_group = convo_info_volatile_group()
         let convoIterator: OpaquePointer = convo_info_volatile_iterator_new(conf)
 
         while !convo_info_volatile_iterator_done(convoIterator) {
@@ -550,7 +640,7 @@ public extension SessionUtil {
                 let roomToken: String = String(libSessionVal: community.room)
                 let publicKey: String = Data(
                     libSessionVal: community.pubkey,
-                    count: OpenGroup.pubkeyByteLength
+                    count: SessionUtil.sizeCommunityPubkeyBytes
                 ).toHexString()
                 
                 result.append(
@@ -578,6 +668,18 @@ public extension SessionUtil {
                         changes: [
                             .markedAsUnread(legacyGroup.unread),
                             .lastReadTimestampMs(legacyGroup.last_read)
+                        ]
+                    )
+                )
+            }
+            else if convo_info_volatile_it_is_group(convoIterator, &group) {
+                result.append(
+                    VolatileThreadInfo(
+                        threadId: String(libSessionVal: group.group_id),
+                        variant: .group,
+                        changes: [
+                            .markedAsUnread(group.unread),
+                            .lastReadTimestampMs(group.last_read)
                         ]
                     )
                 )

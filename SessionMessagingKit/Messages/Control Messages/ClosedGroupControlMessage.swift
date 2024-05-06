@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 
 public final class ClosedGroupControlMessage: ControlMessage {
@@ -157,7 +156,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
         public var publicKey: String?
         public var encryptedKeyPair: Data?
 
-        public var isValid: Bool { publicKey != nil && encryptedKeyPair != nil }
+        public func isValid(using dependencies: Dependencies) -> Bool { publicKey != nil && encryptedKeyPair != nil }
 
         public init(publicKey: String, encryptedKeyPair: Data) {
             self.publicKey = publicKey
@@ -192,8 +191,8 @@ public final class ClosedGroupControlMessage: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid, let kind = kind else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies), let kind = kind else { return false }
         
         switch kind {
             case .new(let publicKey, let name, let encryptionKeyPair, let members, let admins, _):
@@ -253,7 +252,10 @@ public final class ClosedGroupControlMessage: ControlMessage {
                         publicKey: publicKey,
                         name: name,
                         encryptionKeyPair: KeyPair(
-                            publicKey: encryptionKeyPairAsProto.publicKey.removingIdPrefixIfNeeded().bytes,
+                            publicKey: SessionId(
+                                .standard,
+                                publicKey: Array(encryptionKeyPairAsProto.publicKey)
+                            ).publicKey,
                             secretKey: encryptionKeyPairAsProto.privateKey.bytes
                         ),
                         members: closedGroupControlMessageProto.members,
@@ -383,18 +385,18 @@ public extension ClosedGroupControlMessage.Kind {
                 )
                 
             case .membersRemoved(let membersAsData):
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+                let userSessionId: SessionId = getUserSessionId(db)
                 let memberIds: Set<String> = membersAsData
                     .map { $0.toHexString() }
                     .asSet()
                 
                 var infoMessage: String = ""
                 
-                if !memberIds.removing(userPublicKey).isEmpty {
+                if !memberIds.removing(userSessionId.hexString).isEmpty {
                     let knownMemberNameMap: [String: String] = try Profile
-                        .fetchAll(db, ids: memberIds.removing(userPublicKey))
+                        .fetchAll(db, ids: memberIds.removing(userSessionId.hexString))
                         .reduce(into: [:]) { result, next in result[next.id] = next.displayName() }
-                    let removedMemberNames: [String] = memberIds.removing(userPublicKey)
+                    let removedMemberNames: [String] = memberIds.removing(userSessionId.hexString)
                         .map {
                             knownMemberNameMap[$0] ??
                             Profile.truncated(id: $0, threadVariant: .legacyGroup)
@@ -409,16 +411,16 @@ public extension ClosedGroupControlMessage.Kind {
                     )
                 }
                 
-                if memberIds.contains(userPublicKey) {
+                if memberIds.contains(userSessionId.hexString) {
                     infoMessage = infoMessage.appending("YOU_WERE_REMOVED".localized())
                 }
                 
                 return infoMessage
                 
             case .memberLeft:
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+                let userSessionId: SessionId = getUserSessionId(db)
                 
-                guard sender != userPublicKey else { return "GROUP_YOU_LEFT".localized() }
+                guard sender != userSessionId.hexString else { return "GROUP_YOU_LEFT".localized() }
                 
                 if let displayName: String = Profile.displayNameNoFallback(db, id: sender) {
                     return String(format: "GROUP_MEMBER_LEFT".localized(), displayName)

@@ -22,7 +22,15 @@ private extension DispatchQueue {
     }
 }
 
-public func SNLog(_ message: String) {
+public enum LogType {
+    case verbose
+    case debug
+    case info
+    case warn
+    case error
+}
+
+public func SNLog(_ type: LogType, _ message: String) {
     let logPrefixes: String = [
         "Session",
         (Thread.isMainThread ? "Main" : nil),
@@ -34,11 +42,22 @@ public func SNLog(_ message: String) {
     #if DEBUG
     print("[\(logPrefixes)] \(message)")
     #endif
-    OWSLogger.info("[\(logPrefixes)] \(message)")
+    
+    switch type {
+        case .verbose: OWSLogger.verbose("[\(logPrefixes)] \(message)")
+        case .debug: OWSLogger.debug("[\(logPrefixes)] \(message)")
+        case .info: OWSLogger.info("[\(logPrefixes)] \(message)")
+        case .warn: OWSLogger.warn("[\(logPrefixes)] \(message)")
+        case .error: OWSLogger.error("[\(logPrefixes)] \(message)")
+    }
 }
 
-public func SNLogNotTests(_ message: String) {
+public func SNLogNotTests(_ type: LogType, _ message: String) {
     guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
     
-    SNLog(message)
+    SNLog(type, message)
 }
+
+// Default to 'info'
+public func SNLog(_ message: String) { SNLog(.info, message) }
+public func SNLogNotTests(_ message: String) { SNLogNotTests(.info, message) }

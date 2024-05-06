@@ -30,10 +30,10 @@ public final class ExpirationTimerUpdate: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies) else { return false }
         
-        return (duration != nil || Features.useNewDisappearingMessagesConfig)
+        return (duration != nil || dependencies[feature: .updatedDisappearingMessages])
     }
     
     // MARK: - Codable

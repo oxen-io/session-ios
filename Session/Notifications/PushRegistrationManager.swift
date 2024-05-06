@@ -21,12 +21,6 @@ public enum PushRegistrationError: Error {
  */
 @objc public class PushRegistrationManager: NSObject, PKPushRegistryDelegate {
 
-    // MARK: - Dependencies
-
-    private var notificationPresenter: NotificationPresenter {
-        return AppEnvironment.shared.notificationPresenter
-    }
-
     // MARK: - Singleton class
 
     @objc
@@ -51,10 +45,10 @@ public enum PushRegistrationError: Error {
 
     // MARK: - Public interface
 
-    public func requestPushTokens() -> AnyPublisher<(pushToken: String, voipToken: String), Error> {
+    public func requestPushTokens(using dependencies: Dependencies) -> AnyPublisher<(pushToken: String, voipToken: String), Error> {
         Logger.info("")
         
-        return registerUserNotificationSettings()
+        return registerUserNotificationSettings(using: dependencies)
             .setFailureType(to: Error.self)
             .tryFlatMap { _ -> AnyPublisher<(pushToken: String, voipToken: String), Error> in
                 #if targetEnvironment(simulator)
@@ -102,8 +96,8 @@ public enum PushRegistrationError: Error {
 
     // User notification settings must be registered *before* AppDelegate will
     // return any requested push tokens.
-    public func registerUserNotificationSettings() -> AnyPublisher<Void, Never> {
-        return notificationPresenter.registerNotificationSettings()
+    public func registerUserNotificationSettings(using dependencies: Dependencies) -> AnyPublisher<Void, Never> {
+        return dependencies[singleton: .notificationsManager].registerNotificationSettings()
     }
 
     /**
@@ -272,8 +266,11 @@ public enum PushRegistrationError: Error {
     
     // NOTE: This function MUST report an incoming call.
     public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
+        // Called via the OS so create a default 'Dependencies' instance
+        let dependencies: Dependencies = Dependencies()
+        
         SNLog("[Calls] Receive new voip notification.")
-        owsAssertDebug(Singleton.hasAppContext && Singleton.appContext.isMainApp)
+        owsAssertDebug(dependencies.hasInitialised(singleton: .appContext) && dependencies[singleton: .appContext].isMainApp)
         owsAssertDebug(type == .voIP)
         let payload = payload.dictionaryPayload
         
@@ -286,27 +283,32 @@ public enum PushRegistrationError: Error {
             return
         }
         
-        Storage.resumeDatabaseAccess()
+        Storage.resumeDatabaseAccess(using: dependencies)
         
-        let maybeCall: SessionCall? = Storage.shared.write { db in
+        let maybeCall: SessionCall? = dependencies[singleton: .storage].write { db in
             let messageInfo: CallMessage.MessageInfo = CallMessage.MessageInfo(
-                state: (caller == getUserHexEncodedPublicKey(db) ?
+                state: (caller == getUserSessionId(db, using: dependencies).hexString ?
                     .outgoing :
                     .incoming
                 )
             )
             
             let messageInfoString: String? = {
-                if let messageInfoData: Data = try? JSONEncoder().encode(messageInfo) {
+                if let messageInfoData: Data = try? JSONEncoder(using: dependencies).encode(messageInfo) {
                    return String(data: messageInfoData, encoding: .utf8)
                 } else {
                     return "Incoming call." // TODO: We can do better here.
                 }
             }()
             
-            let call: SessionCall = SessionCall(db, for: caller, uuid: uuid, mode: .answer)
-            let thread: SessionThread = try SessionThread
-                .fetchOrCreate(db, id: caller, variant: .contact, shouldBeVisible: nil)
+            let call: SessionCall = SessionCall(db, for: caller, uuid: uuid, mode: .answer, using: dependencies)
+            let thread: SessionThread = try SessionThread.fetchOrCreate(
+                db,
+                id: caller,
+                variant: .contact,
+                shouldBeVisible: nil,
+                calledFromConfig: nil
+            )
             
             let interaction: Interaction = try Interaction(
                 messageUuid: uuid,

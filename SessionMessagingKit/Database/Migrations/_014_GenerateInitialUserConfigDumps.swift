@@ -17,18 +17,18 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
     ]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // If we have no ed25519 key then there is no need to create cached dump data
-        guard let secretKey: [UInt8] = Identity.fetchUserEd25519KeyPair(db)?.secretKey else {
-            Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        guard Identity.fetchUserEd25519KeyPair(db) != nil else {
+            Storage.update(progress: 1, for: self, in: target, using: dependencies)
             return
         }
         
         // Create the initial config state
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         let timestampMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         
-        SessionUtil.loadState(db, userPublicKey: userPublicKey, ed25519SecretKey: secretKey)
+        SessionUtil.loadState(db, using: dependencies)
         
         // Retrieve all threads (we are going to base the config dump data on the active
         // threads rather than anything else in the database)
@@ -38,47 +38,48 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         
         // MARK: - UserProfile Config Dump
         
-        try SessionUtil
-            .config(for: .userProfile, publicKey: userPublicKey)
-            .mutate { conf in
+        try dependencies[cache: .sessionUtil]
+            .config(for: .userProfile, sessionId: userSessionId)
+            .mutate { config in
                 try SessionUtil.update(
                     profile: Profile.fetchOrCreateCurrentUser(db),
-                    in: conf
+                    in: config
                 )
                 
                 try SessionUtil.updateNoteToSelf(
                     priority: {
-                        guard allThreads[userPublicKey]?.shouldBeVisible == true else { return SessionUtil.hiddenPriority }
+                        guard allThreads[userSessionId.hexString]?.shouldBeVisible == true else { return SessionUtil.hiddenPriority }
                         
-                        return Int32(allThreads[userPublicKey]?.pinnedPriority ?? 0)
+                        return Int32(allThreads[userSessionId.hexString]?.pinnedPriority ?? 0)
                     }(),
-                    in: conf
+                    in: config
                 )
                 
-                if config_needs_dump(conf) {
+                if config.needsDump(using: dependencies) {
                     try SessionUtil
                         .createDump(
-                            conf: conf,
+                            config: config,
                             for: .userProfile,
-                            publicKey: userPublicKey,
-                            timestampMs: timestampMs
+                            sessionId: userSessionId,
+                            timestampMs: timestampMs,
+                            using: dependencies
                         )?
-                        .save(db)
+                        .upsert(db)
                 }
             }
         
         // MARK: - Contact Config Dump
         
-        try SessionUtil
-            .config(for: .contacts, publicKey: userPublicKey)
-            .mutate { conf in
+        try dependencies[cache: .sessionUtil]
+            .config(for: .contacts, sessionId: userSessionId)
+            .mutate { config in
                 // Exclude Note to Self, community, group and outgoing blinded message requests
                 let validContactIds: [String] = allThreads
                     .values
                     .filter { thread in
                         thread.variant == .contact &&
-                        thread.id != userPublicKey &&
-                        SessionId(from: thread.id)?.prefix == .standard
+                        thread.id != userSessionId.hexString &&
+                        (try? SessionId(from: thread.id))?.prefix == .standard
                     }
                     .map { $0.id }
                 let contactsData: [ContactInfo] = try Contact
@@ -118,58 +119,63 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
                                 created: allThreads[data.contact.id]?.creationDateTimestamp
                             )
                         },
-                    in: conf
+                    in: config,
+                    using: dependencies
                 )
                 
-                if config_needs_dump(conf) {
+                if config.needsDump(using: dependencies) {
                     try SessionUtil
                         .createDump(
-                            conf: conf,
+                            config: config,
                             for: .contacts,
-                            publicKey: userPublicKey,
-                            timestampMs: timestampMs
+                            sessionId: userSessionId,
+                            timestampMs: timestampMs,
+                            using: dependencies
                         )?
-                        .save(db)
+                        .upsert(db)
                 }
             }
         
         // MARK: - ConvoInfoVolatile Config Dump
         
-        try SessionUtil
-            .config(for: .convoInfoVolatile, publicKey: userPublicKey)
-            .mutate { conf in
+        try dependencies[cache: .sessionUtil]
+            .config(for: .convoInfoVolatile, sessionId: userSessionId)
+            .mutate { config in
                 let volatileThreadInfo: [SessionUtil.VolatileThreadInfo] = SessionUtil.VolatileThreadInfo
                     .fetchAll(db, ids: Array(allThreads.keys))
                 
                 try SessionUtil.upsert(
                     convoInfoVolatileChanges: volatileThreadInfo,
-                    in: conf
+                    in: config,
+                    using: dependencies
                 )
                 
-                if config_needs_dump(conf) {
+                if config.needsDump(using: dependencies) {
                     try SessionUtil
                         .createDump(
-                            conf: conf,
+                            config: config,
                             for: .convoInfoVolatile,
-                            publicKey: userPublicKey,
-                            timestampMs: timestampMs
+                            sessionId: userSessionId,
+                            timestampMs: timestampMs,
+                            using: dependencies
                         )?
-                        .save(db)
+                        .upsert(db)
                 }
             }
         
         // MARK: - UserGroups Config Dump
         
-        try SessionUtil
-            .config(for: .userGroups, publicKey: userPublicKey)
-            .mutate { conf in
+        try dependencies[cache: .sessionUtil]
+            .config(for: .userGroups, sessionId: userSessionId)
+            .mutate { config in
                 let legacyGroupData: [SessionUtil.LegacyGroupInfo] = try SessionUtil.LegacyGroupInfo.fetchAll(db)
                 let communityData: [SessionUtil.OpenGroupUrlInfo] = try SessionUtil.OpenGroupUrlInfo
                     .fetchAll(db, ids: Array(allThreads.keys))
                 
                 try SessionUtil.upsert(
                     legacyGroups: legacyGroupData,
-                    in: conf
+                    in: config,
+                    using: dependencies
                 )
                 try SessionUtil.upsert(
                     communities: communityData
@@ -179,33 +185,35 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
                                 priority: Int32(allThreads[urlInfo.threadId]?.pinnedPriority ?? 0)
                             )
                         },
-                    in: conf
+                    in: config,
+                    using: dependencies
                 )
                 
-                if config_needs_dump(conf) {
+                if config.needsDump(using: dependencies) {
                     try SessionUtil
                         .createDump(
-                            conf: conf,
+                            config: config,
                             for: .userGroups,
-                            publicKey: userPublicKey,
-                            timestampMs: timestampMs
+                            sessionId: userSessionId,
+                            timestampMs: timestampMs,
+                            using: dependencies
                         )?
-                        .save(db)
+                        .upsert(db)
                 }
         }
                 
         // MARK: - Threads
         
-        try SessionUtil.updatingThreads(db, Array(allThreads.values))
+        try SessionUtil.updatingThreads(db, Array(allThreads.values), using: dependencies)
         
         // MARK: - Syncing
         
         // Enqueue a config sync job to ensure the generated configs get synced
-        db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(userPublicKey)) { db in
-            ConfigurationSyncJob.enqueue(db, publicKey: userPublicKey)
+        db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(userSessionId.hexString)) { db in
+            ConfigurationSyncJob.enqueue(db, sessionIdHexString: userSessionId.hexString)
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
     
     struct ContactInfo: FetchableRecord, Decodable, ColumnExpressible {

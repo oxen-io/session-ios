@@ -15,7 +15,7 @@ enum _017_RebuildFTSIfNeeded_2_4_5: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         func ftsIsValid(_ db: Database, _ tableName: String) -> Bool {
             return (
                 ((try? db.tableExists(tableName)) == true) &&            // Table itself
@@ -79,6 +79,6 @@ enum _017_RebuildFTSIfNeeded_2_4_5: Migration {
             }
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

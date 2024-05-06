@@ -1054,3 +1054,7 @@ The point that a message will disappear in a disappearing message update message
 
 /* A message indicating how the disappearing messages setting applies in a one-to-one conversation for legacy mode */
 "DISAPPERING_MESSAGES_SUBTITLE_LEGACY" = "This setting applies to everyone in this conversation.";
+
+"GROUP_MEMBERS_MIN_VERSION" = "Users must have at least Session version {version} to see invites";
+
+"CURRENT_USER" = "Current User";

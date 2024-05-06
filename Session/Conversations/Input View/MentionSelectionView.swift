@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
@@ -85,7 +86,7 @@ final class MentionSelectionView: UIView, UITableViewDataSource, UITableViewDele
             with: candidates[indexPath.row].profile,
             threadVariant: candidates[indexPath.row].threadVariant,
             isUserModeratorOrAdmin: OpenGroupManager.isUserModeratorOrAdmin(
-                candidates[indexPath.row].profile.id,
+                publicKey: candidates[indexPath.row].profile.id,
                 for: candidates[indexPath.row].openGroupRoomToken,
                 on: candidates[indexPath.row].openGroupServer
             ),
@@ -189,7 +190,7 @@ private extension MentionSelectionView {
             profilePictureView.update(
                 publicKey: profile.id,
                 threadVariant: .contact,    // Always show the display picture in 'contact' mode
-                customImageData: nil,
+                displayPictureFilename: nil,
                 profile: profile,
                 profileIcon: (isUserModeratorOrAdmin ? .crown : .none)
             )

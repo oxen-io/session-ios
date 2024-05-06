@@ -19,7 +19,7 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
     
     // MARK: - Initialization
     
-    init(shouldShowCloseButton: Bool = false, using dependencies: Dependencies = Dependencies()) {
+    init(shouldShowCloseButton: Bool = false, using dependencies: Dependencies) {
         self.dependencies = dependencies
         self.shouldShowCloseButton = shouldShowCloseButton
     }
@@ -109,12 +109,9 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .screenLock,
                             title: "PRIVACY_SCREEN_SECURITY_LOCK_SESSION_TITLE".localized(),
                             subtitle: "PRIVACY_SCREEN_SECURITY_LOCK_SESSION_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .isScreenLockEnabled,
-                                    value: current.isScreenLockEnabled,
-                                    oldValue: (previous ?? current).isScreenLockEnabled
-                                )
+                            trailingAccessory: .toggle(
+                                current.isScreenLockEnabled,
+                                oldValue: previous?.isScreenLockEnabled
                             ),
                             onTap: { [weak self] in
                                 // Make sure the device has a passcode set before allowing screen lock to
@@ -133,8 +130,12 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                     return
                                 }
                                 
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.isScreenLockEnabled, to: !db[.isScreenLockEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .isScreenLockEnabled,
+                                        to: !db[.isScreenLockEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -147,18 +148,16 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .communityMessageRequests,
                             title: "PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_TITLE".localized(),
                             subtitle: "PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .checkForCommunityMessageRequests,
-                                    value: current.checkForCommunityMessageRequests,
-                                    oldValue: (previous ?? current).checkForCommunityMessageRequests
-                                )
+                            trailingAccessory: .toggle(
+                                current.checkForCommunityMessageRequests,
+                                oldValue: previous?.checkForCommunityMessageRequests
                             ),
                             onTap: { [weak self] in
-                                Storage.shared.write { db in
+                                dependencies[singleton: .storage].write { db in
                                     try db.setAndUpdateConfig(
                                         .checkForCommunityMessageRequests,
-                                        to: !db[.checkForCommunityMessageRequests]
+                                        to: !db[.checkForCommunityMessageRequests],
+                                        using: dependencies
                                     )
                                 }
                             }
@@ -172,16 +171,17 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .readReceipts,
                             title: "PRIVACY_READ_RECEIPTS_TITLE".localized(),
                             subtitle: "PRIVACY_READ_RECEIPTS_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .areReadReceiptsEnabled,
-                                    value: current.areReadReceiptsEnabled,
-                                    oldValue: (previous ?? current).areReadReceiptsEnabled
-                                )
+                            trailingAccessory: .toggle(
+                                current.areReadReceiptsEnabled,
+                                oldValue: previous?.areReadReceiptsEnabled
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.areReadReceiptsEnabled, to: !db[.areReadReceiptsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .areReadReceiptsEnabled,
+                                        to: !db[.areReadReceiptsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -211,7 +211,10 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                     // Use a transform scale to reduce the size of the typing indicator to the
                                     // desired size (this way the animation remains intact)
                                     let cell: TypingIndicatorCell = TypingIndicatorCell()
-                                    cell.transform = CGAffineTransform.scale(targetHeight / cell.bounds.height)
+                                    cell.transform = CGAffineTransform(
+                                        scaleX: targetHeight / cell.bounds.height,
+                                        y: targetHeight / cell.bounds.height
+                                    )
                                     cell.typingIndicatorView.startAnimation()
                                     result.addSubview(cell)
                                     
@@ -226,16 +229,17 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                     return result
                                 }
                             ),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .typingIndicatorsEnabled,
-                                    value: current.typingIndicatorsEnabled,
-                                    oldValue: (previous ?? current).typingIndicatorsEnabled
-                                )
+                            trailingAccessory: .toggle(
+                                current.typingIndicatorsEnabled,
+                                oldValue: previous?.typingIndicatorsEnabled
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.typingIndicatorsEnabled, to: !db[.typingIndicatorsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .typingIndicatorsEnabled,
+                                        to: !db[.typingIndicatorsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -248,16 +252,17 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .linkPreviews,
                             title: "PRIVACY_LINK_PREVIEWS_TITLE".localized(),
                             subtitle: "PRIVACY_LINK_PREVIEWS_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .areLinkPreviewsEnabled,
-                                    value: current.areLinkPreviewsEnabled,
-                                    oldValue: (previous ?? current).areLinkPreviewsEnabled
-                                )
+                            trailingAccessory: .toggle(
+                                current.areLinkPreviewsEnabled,
+                                oldValue: previous?.areLinkPreviewsEnabled
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.areLinkPreviewsEnabled, to: !db[.areLinkPreviewsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .areLinkPreviewsEnabled,
+                                        to: !db[.areLinkPreviewsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -270,12 +275,9 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .calls,
                             title: "PRIVACY_CALLS_TITLE".localized(),
                             subtitle: "PRIVACY_CALLS_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .areCallsEnabled,
-                                    value: current.areCallsEnabled,
-                                    oldValue: (previous ?? current).areCallsEnabled
-                                )
+                            trailingAccessory: .toggle(
+                                current.areCallsEnabled,
+                                oldValue: previous?.areCallsEnabled
                             ),
                             accessibility: Accessibility(
                                 label: "Allow voice and video calls"
@@ -287,11 +289,15 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                 confirmTitle: "continue_2".localized(),
                                 confirmAccessibility: Accessibility(identifier: "Enable"),
                                 confirmStyle: .textPrimary,
-                                onConfirm: { _ in Permissions.requestMicrophonePermissionIfNeeded() }
+                                onConfirm: { _ in Permissions.requestMicrophonePermissionIfNeeded(using: dependencies) }
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.areCallsEnabled, to: !db[.areCallsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .areCallsEnabled,
+                                        to: !db[.areCallsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )

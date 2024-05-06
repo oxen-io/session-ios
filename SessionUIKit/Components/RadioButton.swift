@@ -118,6 +118,7 @@ public class RadioButton: UIView {
         
         titleLabel.center(.vertical, in: self)
         titleLabel.pin(.leading, to: .leading, of: self)
+        titleLabel.pin(.trailing, to: .trailing, of: selectionBorderView, withInset: -Values.verySmallSpacing)
         
         selectionBorderView.center(.vertical, in: self)
         selectionBorderView.pin(.trailing, to: .trailing, of: self)

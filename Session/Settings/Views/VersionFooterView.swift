@@ -7,6 +7,8 @@ class VersionFooterView: UIView {
     private static let footerHeight: CGFloat = 75
     private static let logoHeight: CGFloat = 24
     
+    private let multiTapCallback: (() -> Void)?
+    
     // MARK: - UI
     
     private lazy var logoImageView: UIImageView = {
@@ -16,7 +18,7 @@ class VersionFooterView: UIView {
         )
         result.setContentHuggingPriority(.required, for: .vertical)
         result.setContentCompressionResistancePriority(.required, for: .vertical)
-        result.themeTintColor = .textSecondary// .value(.textPrimary, alpha: Values.mediumOpacity)
+        result.themeTintColor = .textSecondary
         result.contentMode = .scaleAspectFit
         result.set(.height, to: VersionFooterView.logoHeight)
         
@@ -28,14 +30,14 @@ class VersionFooterView: UIView {
         result.setContentHuggingPriority(.required, for: .vertical)
         result.setContentCompressionResistancePriority(.required, for: .vertical)
         result.font = .systemFont(ofSize: Values.verySmallFontSize)
-        result.themeTextColor = .textSecondary//.value(.textPrimary, alpha: Values.mediumOpacity)
+        result.themeTextColor = .textSecondary
         result.textAlignment = .center
         result.lineBreakMode = .byCharWrapping
         result.numberOfLines = 0
         
         if
-            let version: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-            let buildNumber: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+            let version: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, // stringlint:disable
+            let buildNumber: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String // stringlint:disable
         {
             result.text = "Version \(version) (\(buildNumber))"
         }
@@ -45,7 +47,9 @@ class VersionFooterView: UIView {
     
     // MARK: - Initialization
     
-    init() {
+    init(numTaps: Int = 0, multiTapCallback: (() -> Void)? = nil) {
+        self.multiTapCallback = multiTapCallback
+        
         // Note: Need to explicitly set the height for a table footer view
         // or it will have no height
         super.init(
@@ -57,7 +61,7 @@ class VersionFooterView: UIView {
             )
         )
         
-        setupViewHierarchy()
+        setupViewHierarchy(numTaps: numTaps)
     }
     
     required init?(coder: NSCoder) {
@@ -66,7 +70,7 @@ class VersionFooterView: UIView {
     
     // MARK: - Content
     
-    private func setupViewHierarchy() {
+    private func setupViewHierarchy(numTaps: Int) {
         addSubview(logoImageView)
         addSubview(versionLabel)
         
@@ -75,5 +79,18 @@ class VersionFooterView: UIView {
         versionLabel.pin(.top, to: .bottom, of: logoImageView, withInset: Values.mediumSpacing)
         versionLabel.pin(.left, to: .left, of: self)
         versionLabel.pin(.right, to: .right, of: self)
+        
+        if numTaps > 0 {
+            let tapGestureRecognizer: UITapGestureRecognizer = UITapGestureRecognizer(
+                target: self,
+                action: #selector(onMultiTap)
+            )
+            tapGestureRecognizer.numberOfTapsRequired = numTaps
+            addGestureRecognizer(tapGestureRecognizer)
+        }
+    }
+    
+    @objc private func onMultiTap() {
+        self.multiTapCallback?()
     }
 }

@@ -15,7 +15,7 @@ public struct OxenDaemonRPCRequest<T: Encodable>: Encodable {
         endpoint: SnodeAPI.Endpoint,
         body: T
     ) {
-        self.endpoint = endpoint.rawValue
+        self.endpoint = endpoint.path
         self.body = body
     }
 }

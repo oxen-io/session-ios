@@ -31,10 +31,11 @@ class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, U
     
     // MARK: - Variables
     
+    private let dependencies: Dependencies
     private lazy var defaultSearchResults: [SectionModel] = {
-        let result: SessionThreadViewModel? = Storage.shared.read { db -> SessionThreadViewModel? in
+        let result: SessionThreadViewModel? = Dependencies()[singleton: .storage].read { db -> SessionThreadViewModel? in
             try SessionThreadViewModel
-                .noteToSelfOnlyQuery(userPublicKey: getUserHexEncodedPublicKey(db))
+                .noteToSelfOnlyQuery(userSessionId: getUserSessionId(db))
                 .fetchOne(db)
         }
         
@@ -56,7 +57,17 @@ class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, U
             refreshSearchResults()
         }
     }
-
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     // MARK: - UI Components
 
     internal lazy var searchBar: SearchBar = {
@@ -142,12 +153,14 @@ class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, U
             searchBarContainer.addSubview(ipadCancelButton)
             
             ipadCancelButton.pin(.trailing, to: .trailing, of: searchBarContainer)
-            ipadCancelButton.autoVCenterInSuperview()
-            searchBar.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets.zero, excludingEdge: .trailing)
+            ipadCancelButton.center(.vertical, in: searchBarContainer)
+            searchBar.pin(.top, to: .top, of: searchBar)
+            searchBar.pin(.leading, to: .leading, of: searchBar)
             searchBar.pin(.trailing, to: .leading, of: ipadCancelButton, withInset: -Values.smallSpacing)
+            searchBar.pin(.bottom, to: .bottom, of: searchBar)
         }
         else {
-            searchBar.autoPinEdgesToSuperviewMargins()
+            searchBar.pin(toMarginsOf: searchBarContainer)
         }
     }
 
@@ -155,12 +168,16 @@ class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, U
 
     private func refreshSearchResults() {
         refreshTimer?.invalidate()
-        refreshTimer = WeakTimer.scheduledTimer(timeInterval: 0.1, target: self, userInfo: nil, repeats: false) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimerOnMainThread(withTimeInterval: 0.1) { [weak self] _ in
             self?.updateSearchResults(searchText: (self?.searchText ?? ""))
         }
     }
 
-    private func updateSearchResults(searchText rawSearchText: String, force: Bool = false) {
+    private func updateSearchResults(
+        searchText rawSearchText: String,
+        force: Bool = false,
+        using dependencies: Dependencies = Dependencies()
+    ) {
         let searchText = rawSearchText.stripped
         
         guard searchText.count > 0 else {
@@ -178,21 +195,21 @@ class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, U
         DispatchQueue.global(qos: .default).async { [weak self] in
             self?.readConnection.wrappedValue?.interrupt()
             
-            let result: Result<[SectionModel], Error>? = Storage.shared.read { db -> Result<[SectionModel], Error> in
+            let result: Result<[SectionModel], Error>? = dependencies[singleton: .storage].read { db -> Result<[SectionModel], Error> in
                 self?.readConnection.mutate { $0 = db }
                 
                 do {
-                    let userPublicKey: String = getUserHexEncodedPublicKey(db)
+                    let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
                     let contactsAndGroupsResults: [SessionThreadViewModel] = try SessionThreadViewModel
                         .contactsAndGroupsQuery(
-                            userPublicKey: userPublicKey,
+                            userSessionId: userSessionId,
                             pattern: try SessionThreadViewModel.pattern(db, searchTerm: searchText),
                             searchTerm: searchText
                         )
                         .fetchAll(db)
                     let messageResults: [SessionThreadViewModel] = try SessionThreadViewModel
                         .messagesQuery(
-                            userPublicKey: userPublicKey,
+                            userSessionId: userSessionId,
                             pattern: try SessionThreadViewModel.pattern(db, searchTerm: searchText)
                         )
                         .fetchAll(db)
@@ -308,7 +325,13 @@ extension GlobalSearchViewController {
         }
     }
 
-    private func show(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionInfo: Interaction.TimestampInfo? = nil, animated: Bool = true) {
+    private func show(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedInteractionInfo: Interaction.TimestampInfo? = nil,
+        animated: Bool = true,
+        using dependencies: Dependencies = Dependencies()
+    ) {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
                 self?.show(threadId: threadId, threadVariant: threadVariant, focusedInteractionInfo: focusedInteractionInfo, animated: animated)
@@ -319,12 +342,14 @@ extension GlobalSearchViewController {
         // If it's a one-to-one thread then make sure the thread exists before pushing to it (in case the
         // contact has been hidden)
         if threadVariant == .contact {
-            Storage.shared.write { db in
+            dependencies[singleton: .storage].write { db in
                 try SessionThread.fetchOrCreate(
                     db,
                     id: threadId,
                     variant: threadVariant,
-                    shouldBeVisible: nil    // Don't change current state
+                    shouldBeVisible: nil,    // Don't change current state
+                    calledFromConfig: nil,
+                    using: dependencies
                 )
             }
         }
@@ -332,7 +357,8 @@ extension GlobalSearchViewController {
         let viewController: ConversationVC = ConversationVC(
             threadId: threadId,
             threadVariant: threadVariant,
-            focusedInteractionInfo: focusedInteractionInfo
+            focusedInteractionInfo: focusedInteractionInfo,
+            using: dependencies
         )
         self.navigationController?.pushViewController(viewController, animated: true)
     }
@@ -415,7 +441,11 @@ extension GlobalSearchViewController {
                 
             case .messages:
                 let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
-                cell.updateForMessageSearchResult(with: section.elements[indexPath.row], searchText: self.termForCurrentSearchResultSet)
+                cell.updateForMessageSearchResult(
+                    with: section.elements[indexPath.row],
+                    searchText: self.termForCurrentSearchResultSet,
+                    using: dependencies
+                )
                 return cell
         }
     }

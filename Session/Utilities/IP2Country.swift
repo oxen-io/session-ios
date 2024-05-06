@@ -3,10 +3,13 @@ import GRDB
 import SessionSnodeKit
 import SessionUtilitiesKit
 
-final class IP2Country {
-    static var isInitialized = false
+final class IP2Country: Hashable {
+    static var isInitialized: Bool = false
+    static let shared: IP2Country = IP2Country()
     
-    var countryNamesCache: Atomic<[String: String]> = Atomic([:])
+    private let instanceIdentifier: UUID = UUID()
+    private let dependencies: Dependencies
+    public var countryNamesCache: Atomic<[String: String]> = Atomic([:])
     
     // MARK: - Tables
     /// This table has two columns: the "network" column and the "registered_country_geoname_id" column. The network column contains
@@ -14,26 +17,35 @@ final class IP2Country {
     /// to that range. We look up an IP by finding the first index in the network column where the value is greater than the IP we're looking
     /// up (converted to an integer). The IP we're looking up must then be in the range **before** that range.
     private lazy var ipv4Table: [String: [Int]] = {
-        let url = Bundle.main.url(forResource: "GeoLite2-Country-Blocks-IPv4", withExtension: nil)!
+        let url = Bundle.main.url(
+            forResource: "GeoLite2-Country-Blocks-IPv4",        // stringlint:disable
+            withExtension: nil
+        )!
         let data = try! Data(contentsOf: url)
         return try! NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data) as! [String: [Int]]
     }()
     
     private lazy var countryNamesTable: [String: [String]] = {
-        let url = Bundle.main.url(forResource: "GeoLite2-Country-Locations-English", withExtension: nil)!
+        let url = Bundle.main.url(
+            forResource: "GeoLite2-Country-Locations-English",  // stringlint:disable
+            withExtension: nil
+        )!
         let data = try! Data(contentsOf: url)
         return try! NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(data) as! [String: [String]]
     }()
 
-    // MARK: Lifecycle
-    static let shared = IP2Country()
+    // MARK: - Initialization
 
-    private init() {
-        NotificationCenter.default.addObserver(self, selector: #selector(populateCacheIfNeededAsync), name: .pathsBuilt, object: nil)
+    private init(using dependencies: Dependencies = Dependencies()) {
+        self.dependencies = dependencies
+        
+        dependencies.addFeatureObserver(self, for: .networkLayers, events: [.pathsBuilt]) { [weak self] _, _ in
+            self?.populateCacheIfNeededAsync()
+        }
     }
 
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        dependencies.removeFeatureObserver(self)
     }
     
     // MARK: - Implementation
@@ -44,10 +56,13 @@ final class IP2Country {
         let ipAsInt: Int = IPv4.toInt(ip)
         
         guard
-            let ipv4TableIndex = ipv4Table["network"]?.firstIndex(where: { $0 > ipAsInt }).map({ $0 - 1 }),
-            let countryID: Int = ipv4Table["registered_country_geoname_id"]?[ipv4TableIndex],
-            let countryNamesTableIndex = countryNamesTable["geoname_id"]?.firstIndex(of: String(countryID)),
-            let result: String = countryNamesTable["country_name"]?[countryNamesTableIndex]
+            let ipv4TableIndex: Int = ipv4Table["network"]?                                     // stringlint:disable
+                .firstIndex(where: { $0 > ipAsInt })
+                .map({ $0 - 1 }),
+            let countryID: Int = ipv4Table["registered_country_geoname_id"]?[ipv4TableIndex],   // stringlint:disable
+            let countryNamesTableIndex = countryNamesTable["geoname_id"]?                       // stringlint:disable
+                .firstIndex(of: String(countryID)),
+            let result: String = countryNamesTable["country_name"]?[countryNamesTableIndex]     // stringlint:disable
         else {
             return "Unknown Country" // Relies on the array being sorted
         }
@@ -62,8 +77,8 @@ final class IP2Country {
         }
     }
 
-    @discardableResult func populateCacheIfNeeded() -> Bool {
-        guard let pathToDisplay: [Snode] = OnionRequestAPI.paths.first else { return false }
+    @discardableResult func populateCacheIfNeeded(using dependencies: Dependencies = Dependencies()) -> Bool {
+        guard let pathToDisplay: [Snode] = dependencies[cache: .onionRequestAPI].paths.first else { return false }
         
         countryNamesCache.mutate { [weak self] cache in
             pathToDisplay.forEach { snode in
@@ -73,9 +88,19 @@ final class IP2Country {
         
         DispatchQueue.main.async {
             IP2Country.isInitialized = true
-            NotificationCenter.default.post(name: .onionRequestPathCountriesLoaded, object: nil)
+            dependencies.notifyObservers(for: .networkLayers, with: .onionRequestPathCountriesLoaded)
         }
         SNLog("Finished preloading onion request path countries.")
         return true
+    }
+    
+    // MARK: - Conformance
+    
+    static func == (lhs: IP2Country, rhs: IP2Country) -> Bool {
+        return (lhs.instanceIdentifier == rhs.instanceIdentifier)
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        instanceIdentifier.hash(into: &hasher)
     }
 }

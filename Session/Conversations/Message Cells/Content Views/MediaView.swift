@@ -159,7 +159,7 @@ public class MediaView: UIView {
         animatedImageView.themeBackgroundColor = .backgroundSecondary
         animatedImageView.isHidden = !attachment.isValid
         addSubview(animatedImageView)
-        animatedImageView.autoPinEdgesToSuperviewEdges()
+        animatedImageView.pin(to: self)
         _ = addUploadProgressIfNecessary(animatedImageView)
 
         loadBlock = { [weak self] in
@@ -216,7 +216,7 @@ public class MediaView: UIView {
         stillImageView.themeBackgroundColor = .backgroundSecondary
         stillImageView.isHidden = !attachment.isValid
         addSubview(stillImageView)
-        stillImageView.autoPinEdgesToSuperviewEdges()
+        stillImageView.pin(to: self)
         _ = addUploadProgressIfNecessary(stillImageView)
         
         loadBlock = { [weak self] in
@@ -276,7 +276,7 @@ public class MediaView: UIView {
         stillImageView.isHidden = !attachment.isValid
 
         addSubview(stillImageView)
-        stillImageView.autoPinEdgesToSuperviewEdges()
+        stillImageView.pin(to: self)
 
         if !addUploadProgressIfNecessary(stillImageView) && !shouldSupressControls {
             if let duration: TimeInterval = attachment.duration {
@@ -306,7 +306,7 @@ public class MediaView: UIView {
             videoPlayButton.set(.width, to: 72)
             videoPlayButton.set(.height, to: 72)
             stillImageView.addSubview(videoPlayButton)
-            videoPlayButton.autoCenterInSuperview()
+            videoPlayButton.center(in: stillImageView)
         }
 
         loadBlock = { [weak self] in
@@ -398,7 +398,7 @@ public class MediaView: UIView {
         iconView.themeTintColor = .textPrimary
         iconView.alpha = Values.mediumOpacity
         addSubview(iconView)
-        iconView.autoCenterInSuperview()
+        iconView.center(in: self)
     }
 
     private func tryToLoadMedia(

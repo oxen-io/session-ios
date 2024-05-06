@@ -60,8 +60,7 @@ class GifPickerLayout: UICollectionViewLayout {
         // 2 columns will show fewer GIFs at a time,
         // but use less network & be a more responsive experience.
         let columnCount = UInt(2)
-
-        let totalViewWidth = UInt(collectionView.width())
+        let totalViewWidth = UInt(collectionView.bounds.width)
         let hTotalWhitespace = (2 * hInset) + (hSpacing * (columnCount - 1))
         let hRemainderSpace = totalViewWidth - hTotalWhitespace
         let columnWidth = UInt(hRemainderSpace / columnCount)
@@ -137,6 +136,7 @@ class GifPickerLayout: UICollectionViewLayout {
         guard let collectionView = collectionView else {
             return false
         }
-        return collectionView.width() != newBounds.size.width
+        
+        return collectionView.bounds.width != newBounds.size.width
     }
 }

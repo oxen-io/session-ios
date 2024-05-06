@@ -2,16 +2,14 @@
 //  Copyright (c) 2020 Open Whisper Systems. All rights reserved.
 //
 
-import Foundation
+import UIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class NotificationServiceExtensionContext: AppContext {
     var _temporaryDirectory: String?
-    
     let appLaunchTime: Date = Date()
     let reportedApplicationState: UIApplication.State = .background
-    let isRTL: Bool = false
     
     var openSystemSettingsAction: UIAlertAction?
     var wasWokenUpByPushNotification = true
@@ -28,12 +26,16 @@ final class NotificationServiceExtensionContext: AppContext {
 
     func canPresentNotifications() -> Bool { true }
     func mainApplicationStateOnLaunch() -> UIApplication.State { .inactive }
+    
+    // MARK: - Initialization
+
+    init() {
+        self.createTemporaryDirectory()
+    }
 
     // MARK: - Currently Unused
 
     var mainWindow: UIWindow?
 
-    func frontmostViewController() -> UIViewController? { nil }
-    func setNetworkActivityIndicatorVisible(_ value: Bool) { }
-    func setStatusBarHidden(_ isHidden: Bool, animated isAnimated: Bool) { }
+    static func determineDeviceRTL() -> Bool { false }
 }

@@ -4,7 +4,12 @@ import UIKit
 import SessionUtilitiesKit
 
 public extension UIContextualAction {
-    private static var lookupMap: Atomic<[Int: [String: [Int: ThemeValue]]]> = Atomic([:])
+    private static var lookupMap: Atomic<[Int: [String: [Int: ActionInfo]]]> = Atomic([:])
+    
+    private struct ActionInfo {
+        let themeTintColor: ThemeValue
+        let accessibility: Accessibility?
+    }
     
     enum Side: Int {
         case leading
@@ -30,6 +35,7 @@ public extension UIContextualAction {
         iconHeight: CGFloat = Values.mediumFontSize,
         themeTintColor: ThemeValue = .white,
         themeBackgroundColor: ThemeValue,
+        accessibility: Accessibility? = nil,
         side: Side,
         actionIndex: Int,
         indexPath: IndexPath,
@@ -46,13 +52,20 @@ public extension UIContextualAction {
             )?
             .withRenderingMode(.alwaysTemplate)
         self.themeBackgroundColor = themeBackgroundColor
+        self.accessibilityLabel = accessibility?.label
         
         UIContextualAction.lookupMap.mutate {
             $0[tableView.hashValue] = ($0[tableView.hashValue] ?? [:])
                 .setting(
                     side.key(for: indexPath),
                     (($0[tableView.hashValue] ?? [:])[side.key(for: indexPath)] ?? [:])
-                        .setting(actionIndex, themeTintColor)
+                        .setting(
+                            actionIndex,
+                            ActionInfo(
+                                themeTintColor: themeTintColor,
+                                accessibility: accessibility
+                            )
+                        )
                 )
         }
     }
@@ -139,7 +152,7 @@ public extension UIContextualAction {
                 .filter({ $0 != targetCell })
                 .first,
             let side: Side = Side(for: targetSuperview),
-            let themeMap: [Int: ThemeValue] = UIContextualAction.lookupMap.wrappedValue
+            let themeMap: [Int: ActionInfo] = UIContextualAction.lookupMap.wrappedValue
                 .getting(tableView.hashValue)?
                 .getting(side.key(for: indexPath)),
             targetSuperview.subviews.count == themeMap.count
@@ -152,9 +165,10 @@ public extension UIContextualAction {
         
         // Set the imageView and background colours (so they change correctly when the theme changes)
         targetViews.enumerated().forEach { index, targetView in
-            guard let themeTintColor: ThemeValue = themeMap[index] else { return }
+            guard let actionInfo: ActionInfo = themeMap[index] else { return }
             
-            targetView.themeTintColor = themeTintColor
+            targetView.themeTintColor = actionInfo.themeTintColor
+            targetView.accessibilityIdentifier = actionInfo.accessibility?.identifier
         }
     }
     

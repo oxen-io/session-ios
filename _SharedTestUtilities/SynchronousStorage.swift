@@ -10,9 +10,10 @@ class SynchronousStorage: Storage {
         customWriter: DatabaseWriter? = nil,
         migrationTargets: [MigratableTarget.Type]? = nil,
         migrations: [Storage.KeyedMigration]? = nil,
+        using dependencies: Dependencies,
         initialData: ((Database) throws -> ())? = nil
     ) {
-        super.init(customWriter: customWriter)
+        super.init(customWriter: customWriter, using: dependencies)
         
         // Process any migration targets first
         if let migrationTargets: [MigratableTarget.Type] = migrationTargets {
@@ -21,7 +22,8 @@ class SynchronousStorage: Storage {
                 async: false,
                 onProgressUpdate: nil,
                 onMigrationRequirement: { _, _ in },
-                onComplete: { _, _ in }
+                onComplete: { _, _ in },
+                using: dependencies
             )
         }
         
@@ -32,7 +34,8 @@ class SynchronousStorage: Storage {
                 async: false,
                 onProgressUpdate: nil,
                 onMigrationRequirement: { _, _ in },
-                onComplete: { _, _ in }
+                onComplete: { _, _ in },
+                using: dependencies
             )
         }
         
@@ -100,14 +103,23 @@ class SynchronousStorage: Storage {
         using dependencies: Dependencies = Dependencies(),
         value: @escaping (Database) throws -> T
     ) -> AnyPublisher<T, Error> {
-        guard let result: T = self.read(fileName: fileName, functionName: functionName, lineNumber: lineNumber, using: dependencies, value) else {
+        guard isValid, let dbWriter: DatabaseWriter = testDbWriter else {
             return Fail(error: StorageError.generic)
                 .eraseToAnyPublisher()
         }
         
-        return Just(result)
-            .setFailureType(to: Error.self)
-            .eraseToAnyPublisher()
+        // If 'forceSynchronous' is true then it's likely that we will access the database in
+        // a reentrant way, the 'unsafeReentrant...' functions allow us to interact with the
+        // database without worrying about reentrant access during tests because we can be
+        // confident that the tests are running on the correct thread
+        guard !dependencies.forceSynchronous else {
+            return Just(())
+                .setFailureType(to: Error.self)
+                .tryMap { _ in try dbWriter.unsafeReentrantRead(value) }
+                .eraseToAnyPublisher()
+        }
+        
+        return super.readPublisher(fileName: fileName, functionName: functionName, lineNumber: lineNumber, using: dependencies, value: value)
     }
     
     override func writeAsync<T>(
@@ -134,13 +146,22 @@ class SynchronousStorage: Storage {
         using dependencies: Dependencies = Dependencies(),
         updates: @escaping (Database) throws -> T
     ) -> AnyPublisher<T, Error> {
-        guard let result: T = super.write(fileName: fileName, functionName: functionName, lineNumber: lineNumber, using: dependencies, updates: updates) else {
+        guard isValid, let dbWriter: DatabaseWriter = testDbWriter else {
             return Fail(error: StorageError.generic)
                 .eraseToAnyPublisher()
         }
         
-        return Just(result)
-            .setFailureType(to: Error.self)
-            .eraseToAnyPublisher()
+        // If 'forceSynchronous' is true then it's likely that we will access the database in
+        // a reentrant way, the 'unsafeReentrant...' functions allow us to interact with the
+        // database without worrying about reentrant access during tests because we can be
+        // confident that the tests are running on the correct thread
+        guard !dependencies.forceSynchronous else {
+            return Just(())
+                .setFailureType(to: Error.self)
+                .tryMap { _ in try dbWriter.unsafeReentrantWrite(updates) }
+                .eraseToAnyPublisher()
+        }
+        
+        return super.writePublisher(fileName: fileName, functionName: functionName, lineNumber: lineNumber, using: dependencies, updates: updates)
     }
 }

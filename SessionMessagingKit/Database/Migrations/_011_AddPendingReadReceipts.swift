@@ -14,7 +14,7 @@ enum _011_AddPendingReadReceipts: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [PendingReadReceipt.self]
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: PendingReadReceipt.self) { t in
             t.column(.threadId, .text)
                 .notNull()
@@ -31,6 +31,6 @@ enum _011_AddPendingReadReceipts: Migration {
             t.primaryKey([.threadId, .interactionTimestampMs])
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

@@ -85,7 +85,7 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         let registerButton = SessionButton(style: .filled, size: .large)
         registerButton.accessibilityLabel = "Continue with settings"
         registerButton.setTitle("continue_2".localized(), for: .normal)
-        registerButton.addTarget(self, action: #selector(register), for: UIControl.Event.touchUpInside)
+        registerButton.addTarget(self, action: #selector(registerTapped), for: UIControl.Event.touchUpInside)
         
         // Set up register button container
         let registerButtonContainer = UIView(wrapping: registerButton, withInsets: UIEdgeInsets(top: 0, leading: Values.massiveSpacing, bottom: 0, trailing: Values.massiveSpacing), shouldAdaptForIPadWithWidth: Values.iPadButtonWidth)
@@ -128,7 +128,9 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         optionViews.filter { $0 != optionView }.forEach { $0.isSelected = false }
     }
 
-    @objc private func register() {
+    @objc private func registerTapped() { register() }
+    
+    private func register(using dependencies: Dependencies = Dependencies()) {
         guard selectedOptionView != nil else {
             let modal: ConfirmationModal = ConfirmationModal(
                 targetView: self.view,
@@ -143,7 +145,7 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         }
         
         let useAPNS: Bool = (selectedOptionView == apnsOptionView)
-        UserDefaults.standard[.isUsingFullAPNs] = useAPNS
+        dependencies[defaults: .standard, key: .isUsingFullAPNs] = useAPNS
         
         // If we are registering then we can just continue on
         guard flow != .register else {
@@ -152,14 +154,13 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         
         // Check if we already have a profile name (ie. profile retrieval completed while waiting on
         // this screen)
-        let existingProfileName: String? = Storage.shared
-            .read { db in
-                try Profile
-                    .filter(id: getUserHexEncodedPublicKey(db))
-                    .select(.name)
-                    .asRequest(of: String.self)
-                    .fetchOne(db)
-            }
+        let existingProfileName: String? = dependencies[singleton: .storage].read { [dependencies] db in
+            try Profile
+                .filter(id: getUserSessionId(db, using: dependencies).hexString)
+                .select(.name)
+                .asRequest(of: String.self)
+                .fetchOne(db)
+        }
         
         guard existingProfileName?.isEmpty != false else {
             // If we have one then we can go straight to the home screen

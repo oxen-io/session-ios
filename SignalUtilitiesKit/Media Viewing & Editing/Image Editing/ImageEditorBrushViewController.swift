@@ -4,7 +4,6 @@ import UIKit
 import SessionUIKit
 import SignalCoreKit
 
-@objc
 public protocol ImageEditorBrushViewControllerDelegate: AnyObject {
     func brushDidComplete(currentColor: ImageEditorColor)
 }
@@ -12,7 +11,6 @@ public protocol ImageEditorBrushViewControllerDelegate: AnyObject {
 // MARK: -
 
 public class ImageEditorBrushViewController: OWSViewController {
-
     private weak var delegate: ImageEditorBrushViewControllerDelegate?
 
     private let model: ImageEditorModel
@@ -65,7 +63,7 @@ public class ImageEditorBrushViewController: OWSViewController {
         paletteView.delegate = self
         self.view.addSubview(paletteView)
         paletteView.center(.vertical, in: self.view, withInset: -(bottomInset / 2))
-        paletteView.autoPinEdge(toSuperviewEdge: .trailing, withInset: 0)
+        paletteView.pin(.trailing, to: .trailing, of: self.view)
 
         self.view.isUserInteractionEnabled = true
 

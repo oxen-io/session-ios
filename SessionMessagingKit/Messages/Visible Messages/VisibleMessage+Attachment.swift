@@ -20,7 +20,7 @@ public extension VisibleMessage {
         public var sizeInBytes: UInt?
         public var url: String?
 
-        public var isValid: Bool {
+        public func isValid(using dependencies: Dependencies) -> Bool {
             // key and digest can be nil for open group attachments
             contentType != nil && kind != nil && size != nil && sizeInBytes != nil && url != nil
         }
@@ -56,9 +56,9 @@ public extension VisibleMessage {
                 guard
                     let fileName: String = proto.fileName,
                     let fileExtension: String = URL(string: fileName)?.pathExtension
-                else { return OWSMimeTypeApplicationOctetStream }
+                else { return MimeTypeUtil.MimeType.applicationOctetStream }
                 
-                return (MIMETypeUtil.mimeType(forFileExtension: fileExtension) ?? OWSMimeTypeApplicationOctetStream)
+                return (MimeTypeUtil.mimeType(for: fileExtension) ?? MimeTypeUtil.MimeType.applicationOctetStream)
             }
             
             return VMAttachment(

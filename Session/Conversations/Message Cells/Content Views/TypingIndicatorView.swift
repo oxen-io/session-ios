@@ -42,10 +42,12 @@ import SessionUtilitiesKit
         self.spacing = kDotMaxHSpacing
         self.alignment = .center
 
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(didBecomeActive),
-                                               name: .sessionDidBecomeActive,
-                                               object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didBecomeActive),
+            name: .sessionDidBecomeActive,
+            object: nil
+        )
     }
 
     deinit {
@@ -121,8 +123,8 @@ import SessionUtilitiesKit
 
             super.init(frame: .zero)
 
-            autoSetDimension(.width, toSize: kMaxRadiusPt)
-            autoSetDimension(.height, toSize: kMaxRadiusPt)
+            set(.width, to: kMaxRadiusPt)
+            set(.height, to: kMaxRadiusPt)
 
             layer.addSublayer(shapeLayer)
             
@@ -144,9 +146,9 @@ import SessionUtilitiesKit
             var animationDuration: CFTimeInterval = 0
 
             let addDotKeyFrame = { (keyFrameTime: CFTimeInterval, progress: CGFloat) in
-                let dotColor = baseColor.withAlphaComponent(CGFloatLerp(0.4, 1.0, CGFloatClamp01(progress)))
+                let dotColor = baseColor.withAlphaComponent(progress.clamp01().lerp(0.4, 1.0))
                 colorValues.append(dotColor.cgColor)
-                let radius = CGFloatLerp(TypingIndicatorView.kMinRadiusPt, TypingIndicatorView.kMaxRadiusPt, CGFloatClamp01(progress))
+                let radius = progress.clamp01().lerp(TypingIndicatorView.kMinRadiusPt, TypingIndicatorView.kMaxRadiusPt)
                 let margin = (TypingIndicatorView.kMaxRadiusPt - radius) * 0.5
                 let bezierPath = UIBezierPath(ovalIn: CGRect(x: margin, y: margin, width: radius, height: radius))
                 pathValues.append(bezierPath.cgPath)

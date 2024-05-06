@@ -6,6 +6,7 @@ import SessionUtilitiesKit
 import SignalUtilitiesKit
 
 final class RestoreVC: BaseVC {
+    private let dependencies: Dependencies
     private var spacer1HeightConstraint: NSLayoutConstraint!
     private var spacer2HeightConstraint: NSLayoutConstraint!
     private var spacer3HeightConstraint: NSLayoutConstraint!
@@ -44,6 +45,18 @@ final class RestoreVC: BaseVC {
         
         return result
     }()
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - Lifecycle
     
@@ -131,7 +144,7 @@ final class RestoreVC: BaseVC {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        Onboarding.Flow.register.unregister()
+        Onboarding.Flow.register.unregister(using: dependencies)
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -208,7 +221,7 @@ final class RestoreVC: BaseVC {
             let mnemonic: String = (mnemonicTextView.text ?? "").lowercased()
             let hexEncodedSeed: String = try Mnemonic.decode(mnemonic: mnemonic)
             seed = Data(hex: hexEncodedSeed)
-            keyPairs = try Identity.generate(from: seed)
+            keyPairs = try Identity.generate(from: seed, using: dependencies)
         }
         catch let error {
             let error = error as? Mnemonic.DecodingError ?? Mnemonic.DecodingError.generic
@@ -221,7 +234,6 @@ final class RestoreVC: BaseVC {
         
         Onboarding.Flow.recover
             .preregister(
-                with: seed,
                 ed25519KeyPair: keyPairs.ed25519KeyPair,
                 x25519KeyPair: keyPairs.x25519KeyPair
             )

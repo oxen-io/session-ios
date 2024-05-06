@@ -6,9 +6,10 @@ import SessionUtilitiesKit
 // MARK: - Singleton
 
 public extension Singleton {
-    // FIXME: This will be reworked to be part of dependencies in the Groups Rebuild branch
-    fileprivate static var _appReadiness: Atomic<AppReadiness> = Atomic(AppReadiness())
-    static var appReadiness: AppReadiness { _appReadiness.wrappedValue }
+    static let appReadiness: SingletonConfig<AppReadiness> = Dependencies.create(
+        identifier: "appReadiness",
+        createInstance: { _ in AppReadiness() }
+    )
 }
 
 // MARK: - AppReadiness

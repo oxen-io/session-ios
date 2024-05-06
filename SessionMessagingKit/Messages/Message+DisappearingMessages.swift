@@ -62,7 +62,8 @@ extension Message {
         threadId: String,
         variant: Interaction.Variant,
         serverHash: String?,
-        expireInSeconds: TimeInterval?
+        expireInSeconds: TimeInterval?,
+        using dependencies: Dependencies
     ) {
         guard
             variant == .standardOutgoing,
@@ -73,9 +74,9 @@ extension Message {
             return
         }
         
-        let startedAtTimestampMs: Double = Double(SnodeAPI.currentOffsetTimestampMs())
+        let startedAtTimestampMs: Double = Double(SnodeAPI.currentOffsetTimestampMs(using: dependencies))
         
-        JobRunner.add(
+        dependencies[singleton: .jobRunner].add(
             db,
             job: Job(
                 variant: .getExpiration,
@@ -85,7 +86,9 @@ extension Message {
                     expirationInfo: [serverHash: expireInSeconds],
                     startedAtTimestampMs: startedAtTimestampMs
                 )
-            )
+            ),
+            canStartJob: true,
+            using: dependencies
         )
     }
     
@@ -94,7 +97,8 @@ extension Message {
         threadId: String,
         serverHash: String?,
         expiresInSeconds: TimeInterval?,
-        expiresStartedAtMs: Double?
+        expiresStartedAtMs: Double?,
+        using dependencies: Dependencies
     ) {
         guard
             let serverHash: String = serverHash,
@@ -105,7 +109,8 @@ extension Message {
         }
         
         let expirationTimestampMs: Int64 = Int64(expiresStartedAtMs + expiresInSeconds * 1000)
-        JobRunner.add(
+        
+        dependencies[singleton: .jobRunner].add(
             db,
             job: Job(
                 variant: .expirationUpdate,
@@ -115,7 +120,9 @@ extension Message {
                     serverHashes: [serverHash],
                     expirationTimestampMs: expirationTimestampMs
                 )
-            )
+            ),
+            canStartJob: true,
+            using: dependencies
         )
     }
 }

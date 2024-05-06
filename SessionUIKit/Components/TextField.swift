@@ -2,7 +2,6 @@
 
 import UIKit
 
-@objc(SNTextField)
 public final class TextField: UITextField {
     private let usesDefaultHeight: Bool
     private let height: CGFloat

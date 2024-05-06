@@ -1,6 +1,6 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 
-import Foundation
+import UIKit
 import SessionMessagingKit
 import SignalCoreKit
 
@@ -12,9 +12,9 @@ class AddMoreRailItem: GalleryRailItem {
         let iconView = UIImageView(image: #imageLiteral(resourceName: "ic_plus_24").withRenderingMode(.alwaysTemplate))
         iconView.themeTintColor = .textPrimary
         view.addSubview(iconView)
-        iconView.setCompressionResistanceHigh()
-        iconView.setContentHuggingHigh()
-        iconView.autoCenterInSuperview()
+        iconView.center(in: view)
+        iconView.setContentHugging(to: .required)
+        iconView.setCompressionResistance(to: .required)
 
         return view
     }

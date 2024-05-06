@@ -3,41 +3,41 @@
 import UIKit
 import SessionUIKit
 import SessionUtilitiesKit
-import SignalUtilitiesKit
 
 final class SeedVC: BaseVC {
-    public static func mnemonic() throws -> String {
-        let dbIsValid: Bool = Storage.shared.isValid
-        let dbHasRead: Bool = Storage.shared.hasSuccessfullyRead
-        let dbHasWritten: Bool = Storage.shared.hasSuccessfullyWritten
-        let dbIsSuspendedUnsafe: Bool = Storage.shared.isSuspendedUnsafe
-        
-        if let hexEncodedSeed: String = Identity.fetchHexEncodedSeed() {
-            return Mnemonic.encode(hexEncodedString: hexEncodedSeed)
-        }
-        
-        guard let legacyPrivateKey: String = Identity.fetchUserPrivateKey()?.toHexString() else {
-            let hasStoredPublicKey: Bool = (Identity.fetchUserPublicKey() != nil)
+    public static func mnemonic(using dependencies: Dependencies) throws -> String {
+        guard
+            let ed25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(using: dependencies),
+            let seedData: Data = dependencies[singleton: .crypto].generate(
+                .ed25519Seed(ed25519SecretKey: ed25519KeyPair.secretKey)
+            ),
+            seedData.count >= 16    // Just to be safe
+        else {
+            let dbIsValid: Bool = dependencies[singleton: .storage].isValid
+            let dbHasRead: Bool = dependencies[singleton: .storage].hasSuccessfullyRead
+            let dbHasWritten: Bool = dependencies[singleton: .storage].hasSuccessfullyWritten
+            let dbIsSuspendedUnsafe: Bool = dependencies[singleton: .storage].isSuspendedUnsafe
+            let hasStoredXKeyPair: Bool = (Identity.fetchUserKeyPair() != nil)
             let hasStoredEdKeyPair: Bool = (Identity.fetchUserEd25519KeyPair() != nil)
             let dbStates: [String] = [
                 "dbIsValid: \(dbIsValid)",                      // stringlint:disable
                 "dbHasRead: \(dbHasRead)",                      // stringlint:disable
                 "dbHasWritten: \(dbHasWritten)",                // stringlint:disable
                 "dbIsSuspendedUnsafe: \(dbIsSuspendedUnsafe)",  // stringlint:disable
-                "storedSeed: false",                            // stringlint:disable
-                "userPublicKey: \(hasStoredPublicKey)",         // stringlint:disable
-                "userPrivateKey: false",                        // stringlint:disable
+                "userXKeyPair: \(hasStoredXKeyPair)",           // stringlint:disable
                 "userEdKeyPair: \(hasStoredEdKeyPair)"          // stringlint:disable
             ]
-            
+
             SNLog("Failed to retrieve keys for mnemonic generation (\(dbStates.joined(separator: ", ")))")
             throw StorageError.objectNotFound
         }
-                
-        // Legacy account
-        return Mnemonic.encode(hexEncodedString: legacyPrivateKey)
+
+        // Our account is generated with a 16-byte seed where the second 16-bytes are just padding so
+        // only use the first 16 bytes to generate the mnemonic
+        return Mnemonic.encode(hexEncodedString: Data(seedData[0..<16]).toHexString())
     }
     
+    private let dependencies: Dependencies
     private let mnemonic: String
     
     private lazy var redactedMnemonic: String = {
@@ -50,8 +50,9 @@ final class SeedVC: BaseVC {
     
     // MARK: - Initialization
     
-    init(info: String? = nil) throws {
-        self.mnemonic = try SeedVC.mnemonic()
+    init(info: String? = nil, using dependencies: Dependencies) throws {
+        self.dependencies = dependencies
+        self.mnemonic = try SeedVC.mnemonic(using: dependencies)
         
         super.init(nibName: nil, bundle: nil)
     }
@@ -135,7 +136,7 @@ final class SeedVC: BaseVC {
         
         // Set up mnemonic label
         mnemonicLabel.text = redactedMnemonic
-        let mnemonicLabelGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(revealMnemonic))
+        let mnemonicLabelGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(revealMnemonicTapped))
         mnemonicLabel.addGestureRecognizer(mnemonicLabelGestureRecognizer)
         mnemonicLabel.isUserInteractionEnabled = true
         mnemonicLabel.isEnabled = true
@@ -155,7 +156,7 @@ final class SeedVC: BaseVC {
         callToActionLabel.themeTextColor = .textSecondary
         callToActionLabel.textAlignment = .center
         
-        let callToActionLabelGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(revealMnemonic))
+        let callToActionLabelGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(revealMnemonicTapped))
         callToActionLabel.addGestureRecognizer(callToActionLabelGestureRecognizer)
         callToActionLabel.isUserInteractionEnabled = true
         callToActionLabel.isEnabled = true
@@ -226,7 +227,9 @@ final class SeedVC: BaseVC {
         dismiss(animated: true, completion: nil)
     }
     
-    @objc private func revealMnemonic() {
+    @objc private func revealMnemonicTapped() { revealMnemonic() }
+    
+    private func revealMnemonic(using dependencies: Dependencies = Dependencies()) {
         UIView.transition(with: mnemonicLabel, duration: 0.25, options: .transitionCrossDissolve, animations: {
             self.mnemonicLabel.text = self.mnemonic
             self.mnemonicLabel.themeTextColor = .textPrimary
@@ -250,7 +253,7 @@ final class SeedVC: BaseVC {
         }, completion: nil)
         seedReminderView.setProgress(1, animated: true)
         
-        Storage.shared.writeAsync { db in db[.hasViewedSeed] = true }
+        dependencies[singleton: .storage].writeAsync { db in db[.hasViewedSeed] = true }
     }
     
     @objc private func copyMnemonic() {

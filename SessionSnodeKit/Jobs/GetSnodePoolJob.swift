@@ -23,18 +23,18 @@ public enum GetSnodePoolJob: JobExecutor {
         // but we want to succeed this job immediately (since it's marked as blocking), this allows us
         // to block if we have no Snode pool and prevent other jobs from failing but avoids having to
         // wait if we already have a potentially valid snode pool
-        guard !SnodeAPI.hasCachedSnodesIncludingExpired() else {
+        guard !SnodeAPI.hasCachedSnodesIncludingExpired(using: dependencies) else {
             SNLog("[GetSnodePoolJob] Has valid cached pool, running async instead")
             SnodeAPI
-                .getSnodePool()
-                .subscribe(on: DispatchQueue.global(qos: .default))
+                .getSnodePool(using: dependencies)
+                .subscribe(on: DispatchQueue.global(qos: .default), using: dependencies)
                 .sinkUntilComplete()
             return success(job, false, dependencies)
         }
         
         // If we don't have the snode pool cached then we should also try to build the path (this will
         // speed up the onboarding process for new users because it can run before the user is created)
-        SnodeAPI.getSnodePool()
+        SnodeAPI.getSnodePool(using: dependencies)
             .flatMap { _ in OnionRequestAPI.getPath(excluding: nil, using: dependencies) }
             .subscribe(on: queue)
             .receive(on: queue)
@@ -53,13 +53,13 @@ public enum GetSnodePoolJob: JobExecutor {
             )
     }
     
-    public static func run(using dependencies: Dependencies = Dependencies()) {
+    public static func run(onComplete: ((Bool) -> Void)? = nil, using dependencies: Dependencies) {
         GetSnodePoolJob.run(
             Job(variant: .getSnodePool),
             queue: .global(qos: .background),
-            success: { _, _, _ in },
-            failure: { _, _, _, _ in },
-            deferred: { _, _ in },
+            success: { _, _, _ in onComplete?(true) },
+            failure: { _, _, _, _ in onComplete?(false) },
+            deferred: { _, _ in onComplete?(false) },
             using: dependencies
         )
     }

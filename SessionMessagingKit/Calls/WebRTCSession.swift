@@ -129,21 +129,20 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
     ) throws -> AnyPublisher<Void, Error> {
         SNLog("[Calls] Sending pre-offer message.")
         
-        return MessageSender
-            .sendImmediate(
-                data: try MessageSender
-                    .preparedSendData(
-                        db,
-                        message: message,
-                        to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
-                        namespace: try Message.Destination
-                            .from(db, threadId: thread.id, threadVariant: thread.variant)
-                            .defaultNamespace,
-                        interactionId: interactionId,
-                        using: dependencies
-                    ),
+        return try MessageSender
+            .preparedSend(
+                db,
+                message: message,
+                to: try Message.Destination.from(db, threadId: thread.id, threadVariant: thread.variant),
+                namespace: try Message.Destination
+                    .from(db, threadId: thread.id, threadVariant: thread.variant)
+                    .defaultNamespace,
+                interactionId: interactionId,
+                fileIds: [],
                 using: dependencies
             )
+            .send(using: dependencies)
+            .map { _ in () }
             .handleEvents(receiveOutput: { _ in SNLog("[Calls] Pre-offer message has been sent.") })
             .eraseToAnyPublisher()
     }
@@ -161,7 +160,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
             Future<Void, Error> { [weak self] resolver in
                 self?.peerConnection?.offer(for: mediaConstraints) { sdp, error in
                     guard error == nil else { return }
-                    
+
                     guard let sdp: RTCSessionDescription = self?.correctSessionDescription(sdp: sdp) else {
                         preconditionFailure()
                     }
@@ -174,10 +173,10 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                         }
                     }
                     
-                    dependencies.storage
-                        .writePublisher { db in
+                    dependencies[singleton: .storage]
+                        .writePublisher { db -> HTTP.PreparedRequest<Void> in
                             try MessageSender
-                                .preparedSendData(
+                                .preparedSend(
                                     db,
                                     message: CallMessage(
                                         uuid: uuid,
@@ -195,10 +194,11 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                                         .from(db, threadId: thread.id, threadVariant: thread.variant)
                                         .defaultNamespace,
                                     interactionId: nil,
+                                    fileIds: [],
                                     using: dependencies
                                 )
                         }
-                        .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+                        .flatMap { $0.send(using: dependencies) }
                         .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                         .sinkUntilComplete(
                             receiveCompletion: { result in
@@ -222,7 +222,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         let uuid: String = self.uuid
         let mediaConstraints: RTCMediaConstraints = mediaConstraints(false)
         
-        return dependencies.storage
+        return dependencies[singleton: .storage]
             .readPublisher { db -> SessionThread in
                 guard let thread: SessionThread = try? SessionThread.fetchOne(db, id: sessionId) else {
                     throw WebRTCSessionError.noThread
@@ -249,10 +249,10 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                             }
                         }
                         
-                        dependencies.storage
-                            .writePublisher { db in
+                        dependencies[singleton: .storage]
+                            .writePublisher { db -> HTTP.PreparedRequest<Void> in
                                 try MessageSender
-                                    .preparedSendData(
+                                    .preparedSend(
                                         db,
                                         message: CallMessage(
                                             uuid: uuid,
@@ -269,10 +269,11 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                                             .from(db, threadId: thread.id, threadVariant: thread.variant)
                                             .defaultNamespace,
                                         interactionId: nil,
+                                        fileIds: [],
                                         using: dependencies
                                     )
                             }
-                            .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+                            .flatMap { $0.send(using: dependencies) }
                             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                             .sinkUntilComplete(
                                 receiveCompletion: { result in
@@ -306,8 +307,8 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         // Empty the queue
         self.queuedICECandidates.removeAll()
         
-        dependencies.storage
-            .writePublisher { db in
+        dependencies[singleton: .storage]
+            .writePublisher { db -> HTTP.PreparedRequest<Void> in
                 guard let thread: SessionThread = try SessionThread.fetchOne(db, id: contactSessionId) else {
                     throw WebRTCSessionError.noThread
                 }
@@ -315,7 +316,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                 SNLog("[Calls] Batch sending \(candidates.count) ICE candidates.")
                 
                 return try MessageSender
-                    .preparedSendData(
+                    .preparedSend(
                         db,
                         message: CallMessage(
                             uuid: uuid,
@@ -335,11 +336,12 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                             .from(db, threadId: thread.id, threadVariant: thread.variant)
                             .defaultNamespace,
                         interactionId: nil,
+                        fileIds: [],
                         using: dependencies
                     )
             }
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
+            .flatMap { $0.send(using: dependencies) }
             .sinkUntilComplete()
     }
     
@@ -352,8 +354,8 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         
         SNLog("[Calls] Sending end call message.")
         
-        let preparedSendData: MessageSender.PreparedSendData = try MessageSender
-            .preparedSendData(
+        try MessageSender
+            .preparedSend(
                 db,
                 message: CallMessage(
                     uuid: self.uuid,
@@ -369,12 +371,11 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
                     .from(db, threadId: thread.id, threadVariant: thread.variant)
                     .defaultNamespace,
                 interactionId: nil,
+                fileIds: [],
                 using: dependencies
             )
-        
-        MessageSender
-            .sendImmediate(data: preparedSendData, using: dependencies)
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .send(using: dependencies)
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
             .sinkUntilComplete()
     }
     
@@ -449,8 +450,8 @@ extension WebRTCSession {
         let audioSession = RTCAudioSession.sharedInstance()
         audioSession.lockForConfiguration()
         do {
-            try audioSession.setCategory(AVAudioSession.Category.playAndRecord.rawValue)
-            try audioSession.setMode(AVAudioSession.Mode.voiceChat.rawValue)
+            try audioSession.setCategory(AVAudioSession.Category.playAndRecord)
+            try audioSession.setMode(AVAudioSession.Mode.voiceChat)
             try audioSession.overrideOutputAudioPort(outputAudioPort)
             try audioSession.setActive(true)
         } catch let error {

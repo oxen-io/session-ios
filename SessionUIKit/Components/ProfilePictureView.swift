@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import GRDB
 import YYImage
 
 public final class ProfilePictureView: UIView {
@@ -76,6 +75,7 @@ public final class ProfilePictureView: UIView {
         case none
         case crown
         case rightPlus
+        case letter(Character)
         
         func iconVerticalInset(for size: Size) -> CGFloat {
             switch (self, size) {
@@ -85,6 +85,13 @@ public final class ProfilePictureView: UIView {
                     
                 case (.rightPlus, _): return 3
                 default: return 0
+            }
+        }
+        
+        var isLeadingAligned: Bool {
+            switch self {
+                case .none, .crown, .letter: return true
+                case .rightPlus: return false
             }
         }
     }
@@ -100,6 +107,8 @@ public final class ProfilePictureView: UIView {
             
             profileIconBackgroundView.layer.cornerRadius = (size.iconSize / 2)
             additionalProfileIconBackgroundView.layer.cornerRadius = (size.iconSize / 2)
+            profileIconLabel.font = .boldSystemFont(ofSize: floor(size.iconSize * 0.75))
+            additionalProfileIconLabel.font = .boldSystemFont(ofSize: floor(size.iconSize * 0.75))
         }
     }
     public var customWidth: CGFloat? {
@@ -139,15 +148,16 @@ public final class ProfilePictureView: UIView {
     private var additionalImageViewWidthConstraint: NSLayoutConstraint!
     private var additionalImageViewHeightConstraint: NSLayoutConstraint!
     private var profileIconTopConstraint: NSLayoutConstraint!
+    private var profileIconLeadingConstraint: NSLayoutConstraint!
     private var profileIconBottomConstraint: NSLayoutConstraint!
-    private var profileIconBackgroundLeftAlignConstraint: NSLayoutConstraint!
-    private var profileIconBackgroundRightAlignConstraint: NSLayoutConstraint!
+    private var profileIconBackgroundLeadingAlignConstraint: NSLayoutConstraint!
+    private var profileIconBackgroundTrailingAlignConstraint: NSLayoutConstraint!
     private var profileIconBackgroundWidthConstraint: NSLayoutConstraint!
     private var profileIconBackgroundHeightConstraint: NSLayoutConstraint!
     private var additionalProfileIconTopConstraint: NSLayoutConstraint!
     private var additionalProfileIconBottomConstraint: NSLayoutConstraint!
-    private var additionalProfileIconBackgroundLeftAlignConstraint: NSLayoutConstraint!
-    private var additionalProfileIconBackgroundRightAlignConstraint: NSLayoutConstraint!
+    private var additionalProfileIconBackgroundLeadingAlignConstraint: NSLayoutConstraint!
+    private var additionalProfileIconBackgroundTrailingAlignConstraint: NSLayoutConstraint!
     private var additionalProfileIconBackgroundWidthConstraint: NSLayoutConstraint!
     private var additionalProfileIconBackgroundHeightConstraint: NSLayoutConstraint!
     private lazy var imageEdgeConstraints: [NSLayoutConstraint] = [ // MUST be in 'top, left, bottom, right' order
@@ -241,6 +251,17 @@ public final class ProfilePictureView: UIView {
     private lazy var profileIconImageView: UIImageView = {
         let result: UIImageView = UIImageView()
         result.contentMode = .scaleAspectFit
+        result.isHidden = true
+        
+        return result
+    }()
+    
+    private lazy var profileIconLabel: UILabel = {
+        let result: UILabel = UILabel()
+        result.font = .boldSystemFont(ofSize: 6)
+        result.textAlignment = .center
+        result.themeTextColor = .backgroundPrimary
+        result.isHidden = true
         
         return result
     }()
@@ -255,6 +276,16 @@ public final class ProfilePictureView: UIView {
     private lazy var additionalProfileIconImageView: UIImageView = {
         let result: UIImageView = UIImageView()
         result.contentMode = .scaleAspectFit
+        
+        return result
+    }()
+    
+    private lazy var additionalProfileIconLabel: UILabel = {
+        let result: UILabel = UILabel()
+        result.font = .boldSystemFont(ofSize: 6)
+        result.textAlignment = .center
+        result.themeTextColor = .backgroundPrimary
+        result.isHidden = true
         
         return result
     }()
@@ -281,7 +312,9 @@ public final class ProfilePictureView: UIView {
         addSubview(additionalProfileIconBackgroundView)
         
         profileIconBackgroundView.addSubview(profileIconImageView)
+        profileIconBackgroundView.addSubview(profileIconLabel)
         additionalProfileIconBackgroundView.addSubview(additionalProfileIconImageView)
+        additionalProfileIconBackgroundView.addSubview(additionalProfileIconLabel)
         
         widthConstraint = self.set(.width, to: self.size.viewSize)
         heightConstraint = self.set(.height, to: self.size.viewSize)
@@ -322,13 +355,14 @@ public final class ProfilePictureView: UIView {
             of: profileIconBackgroundView,
             withInset: 0
         )
-        profileIconBackgroundLeftAlignConstraint = profileIconBackgroundView.pin(.leading, to: .leading, of: imageContainerView)
-        profileIconBackgroundRightAlignConstraint = profileIconBackgroundView.pin(.trailing, to: .trailing, of: imageContainerView)
+        profileIconLabel.pin(to: profileIconBackgroundView)
+        profileIconBackgroundLeadingAlignConstraint = profileIconBackgroundView.pin(.leading, to: .leading, of: imageContainerView)
+        profileIconBackgroundTrailingAlignConstraint = profileIconBackgroundView.pin(.trailing, to: .trailing, of: imageContainerView)
         profileIconBackgroundView.pin(.bottom, to: .bottom, of: imageContainerView)
         profileIconBackgroundWidthConstraint = profileIconBackgroundView.set(.width, to: size.iconSize)
         profileIconBackgroundHeightConstraint = profileIconBackgroundView.set(.height, to: size.iconSize)
-        profileIconBackgroundLeftAlignConstraint.isActive = false
-        profileIconBackgroundRightAlignConstraint.isActive = false
+        profileIconBackgroundLeadingAlignConstraint.isActive = false
+        profileIconBackgroundTrailingAlignConstraint.isActive = false
         
         additionalProfileIconTopConstraint = additionalProfileIconImageView.pin(
             .top,
@@ -344,13 +378,14 @@ public final class ProfilePictureView: UIView {
             of: additionalProfileIconBackgroundView,
             withInset: 0
         )
-        additionalProfileIconBackgroundLeftAlignConstraint = additionalProfileIconBackgroundView.pin(.leading, to: .leading, of: additionalImageContainerView)
-        additionalProfileIconBackgroundRightAlignConstraint = additionalProfileIconBackgroundView.pin(.trailing, to: .trailing, of: additionalImageContainerView)
+        additionalProfileIconLabel.pin(to: additionalProfileIconBackgroundView)
+        additionalProfileIconBackgroundLeadingAlignConstraint = additionalProfileIconBackgroundView.pin(.leading, to: .leading, of: additionalImageContainerView)
+        additionalProfileIconBackgroundTrailingAlignConstraint = additionalProfileIconBackgroundView.pin(.trailing, to: .trailing, of: additionalImageContainerView)
         additionalProfileIconBackgroundView.pin(.bottom, to: .bottom, of: additionalImageContainerView)
         additionalProfileIconBackgroundWidthConstraint = additionalProfileIconBackgroundView.set(.width, to: size.iconSize)
         additionalProfileIconBackgroundHeightConstraint = additionalProfileIconBackgroundView.set(.height, to: size.iconSize)
-        additionalProfileIconBackgroundLeftAlignConstraint.isActive = false
-        additionalProfileIconBackgroundRightAlignConstraint.isActive = false
+        additionalProfileIconBackgroundLeadingAlignConstraint.isActive = false
+        additionalProfileIconBackgroundTrailingAlignConstraint.isActive = false
     }
     
     // MARK: - Content
@@ -358,29 +393,30 @@ public final class ProfilePictureView: UIView {
     private func updateIconView(
         icon: ProfileIcon,
         imageView: UIImageView,
+        label: UILabel,
         backgroundView: UIView,
         topConstraint: NSLayoutConstraint,
-        leftAlignConstraint: NSLayoutConstraint,
-        rightAlignConstraint: NSLayoutConstraint,
+        leadingAlignConstraint: NSLayoutConstraint,
+        trailingAlignConstraint: NSLayoutConstraint,
         bottomConstraint: NSLayoutConstraint
     ) {
         backgroundView.isHidden = (icon == .none)
-        leftAlignConstraint.isActive = (
-            icon == .none ||
-            icon == .crown
-        )
-        rightAlignConstraint.isActive = (
-            icon == .rightPlus
-        )
+        leadingAlignConstraint.isActive = icon.isLeadingAligned
+        trailingAlignConstraint.isActive = !icon.isLeadingAligned
         topConstraint.constant = icon.iconVerticalInset(for: size)
         bottomConstraint.constant = -icon.iconVerticalInset(for: size)
         
         switch icon {
-            case .none: imageView.image = nil
+            case .none:
+                imageView.image = nil
+                imageView.isHidden = true
+                label.isHidden = true
             
             case .crown:
                 imageView.image = UIImage(systemName: "crown.fill")
                 backgroundView.themeBackgroundColor = .profileIcon_background
+                imageView.isHidden = false
+                label.isHidden = true
                 
                 ThemeManager.onThemeChange(observer: imageView) { [weak imageView] _, primaryColor in
                     let targetColor: ThemeValue = (primaryColor == .green ?
@@ -400,6 +436,14 @@ public final class ProfilePictureView: UIView {
                 )
                 imageView.themeTintColor = .black
                 backgroundView.themeBackgroundColor = .primary
+                imageView.isHidden = false
+                label.isHidden = true
+                
+            case .letter(let character):
+                label.themeTextColor = .backgroundPrimary
+                backgroundView.themeBackgroundColor = .textPrimary
+                label.isHidden = false
+                label.text = "\(character)"
         }
     }
     
@@ -425,11 +469,15 @@ public final class ProfilePictureView: UIView {
         imageViewCenterXConstraint.isActive = true
         imageViewCenterYConstraint.isActive = true
         profileIconBackgroundView.isHidden = true
-        profileIconBackgroundLeftAlignConstraint.isActive = false
-        profileIconBackgroundRightAlignConstraint.isActive = false
+        profileIconBackgroundLeadingAlignConstraint.isActive = false
+        profileIconBackgroundTrailingAlignConstraint.isActive = false
+        profileIconImageView.isHidden = true
+        profileIconLabel.isHidden = true
         additionalProfileIconBackgroundView.isHidden = true
-        additionalProfileIconBackgroundLeftAlignConstraint.isActive = false
-        additionalProfileIconBackgroundRightAlignConstraint.isActive = false
+        additionalProfileIconBackgroundLeadingAlignConstraint.isActive = false
+        additionalProfileIconBackgroundTrailingAlignConstraint.isActive = false
+        additionalProfileIconImageView.isHidden = true
+        additionalProfileIconLabel.isHidden = true
         imageEdgeConstraints.forEach { $0.constant = 0 }
         additionalImageEdgeConstraints.forEach { $0.constant = 0 }
     }
@@ -444,10 +492,11 @@ public final class ProfilePictureView: UIView {
         updateIconView(
             icon: info.icon,
             imageView: profileIconImageView,
+            label: profileIconLabel,
             backgroundView: profileIconBackgroundView,
             topConstraint: profileIconTopConstraint,
-            leftAlignConstraint: profileIconBackgroundLeftAlignConstraint,
-            rightAlignConstraint: profileIconBackgroundRightAlignConstraint,
+            leadingAlignConstraint: profileIconBackgroundLeadingAlignConstraint,
+            trailingAlignConstraint: profileIconBackgroundTrailingAlignConstraint,
             bottomConstraint: profileIconBottomConstraint
         )
         
@@ -492,10 +541,11 @@ public final class ProfilePictureView: UIView {
         updateIconView(
             icon: additionalInfo.icon,
             imageView: additionalProfileIconImageView,
+            label: additionalProfileIconLabel,
             backgroundView: additionalProfileIconBackgroundView,
             topConstraint: additionalProfileIconTopConstraint,
-            leftAlignConstraint: additionalProfileIconBackgroundLeftAlignConstraint,
-            rightAlignConstraint: additionalProfileIconBackgroundRightAlignConstraint,
+            leadingAlignConstraint: additionalProfileIconBackgroundLeadingAlignConstraint,
+            trailingAlignConstraint: additionalProfileIconBackgroundTrailingAlignConstraint,
             bottomConstraint: additionalProfileIconBottomConstraint
         )
         

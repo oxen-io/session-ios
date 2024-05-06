@@ -7,11 +7,11 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 public enum Configuration {
-    public static func performMainSetup() {
+    public static func performMainSetup(using dependencies: Dependencies) {
         // Need to do this first to ensure the legacy database exists
-        SNUtilitiesKit.configure(maxFileSize: UInt(FileServerAPI.maxFileSize))
-        SNMessagingKit.configure()
-        SNSnodeKit.configure()
+        SNUtilitiesKit.configure(maxFileSize: UInt(FileSystem.maxFileSize), using: dependencies)
+        SNMessagingKit.configure(using: dependencies)
+        SNSnodeKit.configure(using: dependencies)
         SNUIKit.configure()
     }
 }

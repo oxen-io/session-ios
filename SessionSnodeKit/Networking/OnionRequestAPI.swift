@@ -33,27 +33,6 @@ public extension Network.RequestType {
 
 /// See the "Onion Requests" section of [The Session Whitepaper](https://arxiv.org/pdf/2002.04609.pdf) for more information.
 public enum OnionRequestAPI {
-    private static var buildPathsPublisher: Atomic<AnyPublisher<[[Snode]], Error>?> = Atomic(nil)
-    private static var pathFailureCount: Atomic<[[Snode]: UInt]> = Atomic([:])
-    private static var snodeFailureCount: Atomic<[Snode: UInt]> = Atomic([:])
-    public static var guardSnodes: Atomic<Set<Snode>> = Atomic([])
-    
-    // Not a set to ensure we consistently show the same path to the user
-    private static var _paths: Atomic<[[Snode]]?> = Atomic(nil)
-    public static var paths: [[Snode]] {
-        get {
-            if let paths: [[Snode]] = _paths.wrappedValue { return paths }
-            
-            let results: [[Snode]]? = Storage.shared.read { db in
-                try? Snode.fetchAllOnionRequestPaths(db)
-            }
-            
-            if results?.isEmpty == false { _paths.mutate { $0 = results } }
-            return (results ?? [])
-        }
-        set { _paths.mutate { $0 = newValue } }
-    }
-
     // MARK: - Settings
     
     public static let maxRequestSize = 10_000_000 // 10 MB
@@ -71,7 +50,11 @@ public enum OnionRequestAPI {
     
     // MARK: - Onion Building Result
     
-    private typealias OnionBuildingResult = (guardSnode: Snode, finalEncryptionResult: AES.GCM.EncryptionResult, destinationSymmetricKey: Data)
+    internal typealias PreparedOnionRequest = (
+        guardSnode: Snode,
+        payload: Data,
+        finalX25519KeyPair: KeyPair
+    )
 
     // MARK: - Private API
     
@@ -98,17 +81,18 @@ public enum OnionRequestAPI {
     /// `Error.insufficientSnodes` if not enough (reliable) snodes are available.
     private static func getGuardSnodes(
         reusing reusableGuardSnodes: [Snode],
+        cache: ORAPICacheType,
         using dependencies: Dependencies
     ) -> AnyPublisher<Set<Snode>, Error> {
-        guard guardSnodes.wrappedValue.count < targetGuardSnodeCount else {
-            return Just(guardSnodes.wrappedValue)
+        guard cache.guardSnodes.count < targetGuardSnodeCount else {
+            return Just(cache.guardSnodes)
                 .setFailureType(to: Error.self)
                 .eraseToAnyPublisher()
         }
         
         SNLog("Populating guard snode cache.")
         // Sync on LokiAPI.workQueue
-        var unusedSnodes = SnodeAPI.snodePool.wrappedValue.subtracting(reusableGuardSnodes)
+        var unusedSnodes: Set<Snode> = dependencies[cache: .snodeAPI].snodePool.subtracting(reusableGuardSnodes)
         let reusableGuardSnodeCount = UInt(reusableGuardSnodes.count)
         
         guard unusedSnodes.count >= (targetGuardSnodeCount - reusableGuardSnodeCount) else {
@@ -147,7 +131,7 @@ public enum OnionRequestAPI {
             .map { output in Set(output) }
             .handleEvents(
                 receiveOutput: { output in
-                    OnionRequestAPI.guardSnodes.mutate { $0 = output }
+                    dependencies.mutate(cache: .onionRequestAPI) { $0.guardSnodes = output }
                 }
             )
             .eraseToAnyPublisher()
@@ -160,29 +144,29 @@ public enum OnionRequestAPI {
         reusing reusablePaths: [[Snode]],
         using dependencies: Dependencies
     ) -> AnyPublisher<[[Snode]], Error> {
-        if let existingBuildPathsPublisher = buildPathsPublisher.wrappedValue {
+        if let existingBuildPathsPublisher = dependencies[cache: .onionRequestAPI].buildPathsPublisher {
             return existingBuildPathsPublisher
         }
         
-        return buildPathsPublisher.mutate { result in
+        return dependencies.mutate(cache: .onionRequestAPI) { cache in
             /// It was possible for multiple threads to call this at the same time resulting in duplicate promises getting created, while
             /// this should no longer be possible (as the `wrappedValue` should now properly be blocked) this is a sanity check
             /// to make sure we don't create an additional promise when one already exists
-            if let previouslyBlockedPublisher: AnyPublisher<[[Snode]], Error> = result {
+            if let previouslyBlockedPublisher: AnyPublisher<[[Snode]], Error> = cache.buildPathsPublisher {
                 return previouslyBlockedPublisher
             }
             
             SNLog("Building onion request paths.")
             DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .buildingPaths, object: nil)
+                dependencies.notifyObservers(for: .networkLayers, with: .buildingPaths)
             }
             
             /// Need to include the post-request code and a `shareReplay` within the publisher otherwise it can still be executed
             /// multiple times as a result of multiple subscribers
             let reusableGuardSnodes = reusablePaths.map { $0[0] }
-            let publisher: AnyPublisher<[[Snode]], Error> = getGuardSnodes(reusing: reusableGuardSnodes, using: dependencies)
+            let publisher: AnyPublisher<[[Snode]], Error> = getGuardSnodes(reusing: reusableGuardSnodes, cache: cache, using: dependencies)
                 .flatMap { (guardSnodes: Set<Snode>) -> AnyPublisher<[[Snode]], Error> in
-                    var unusedSnodes: Set<Snode> = SnodeAPI.snodePool.wrappedValue
+                    var unusedSnodes: Set<Snode> = dependencies[cache: .snodeAPI].snodePool
                         .subtracting(guardSnodes)
                         .subtracting(reusablePaths.flatMap { $0 })
                     let reusableGuardSnodeCount: UInt = UInt(reusableGuardSnodes.count)
@@ -219,24 +203,26 @@ public enum OnionRequestAPI {
                 }
                 .handleEvents(
                     receiveOutput: { output in
-                        OnionRequestAPI.paths = (output + reusablePaths)
+                        dependencies.mutate(cache: .onionRequestAPI) { $0.paths = (output + reusablePaths) }
                         
-                        Storage.shared.write { db in
+                        dependencies[singleton: .storage].write { db in
                             SNLog("Persisting onion request paths to database.")
-                            try? output.save(db)
+                            try? output.upsert(db)
                         }
                         
                         DispatchQueue.main.async {
-                            NotificationCenter.default.post(name: .pathsBuilt, object: nil)
+                            dependencies.notifyObservers(for: .networkLayers, with: .pathsBuilt)
                         }
                     },
-                    receiveCompletion: { _ in buildPathsPublisher.mutate { $0 = nil } }
+                    receiveCompletion: { _ in
+                        dependencies.mutate(cache: .onionRequestAPI) { $0.buildPathsPublisher = nil }
+                    }
                 )
                 .shareReplay(1)
                 .eraseToAnyPublisher()
             
             /// Actually assign the atomic value
-            result = publisher
+            cache.buildPathsPublisher = publisher
             
             return publisher
         }
@@ -249,15 +235,15 @@ public enum OnionRequestAPI {
     ) -> AnyPublisher<[Snode], Error> {
         guard pathSize >= 1 else { preconditionFailure("Can't build path of size zero.") }
         
-        let paths: [[Snode]] = OnionRequestAPI.paths
+        let paths: [[Snode]] = dependencies[cache: .onionRequestAPI].paths
         var cancellable: [AnyCancellable] = []
         
         if !paths.isEmpty {
-            guardSnodes.mutate {
-                $0.formUnion([ paths[0][0] ])
+            dependencies.mutate(cache: .onionRequestAPI) { cache in
+                cache.guardSnodes.formUnion([ paths[0][0] ])
                 
                 if paths.count >= 2 {
-                    $0.formUnion([ paths[1][0] ])
+                    cache.guardSnodes.formUnion([ paths[1][0] ])
                 }
             }
         }
@@ -343,43 +329,45 @@ public enum OnionRequestAPI {
         }
     }
 
-    private static func dropGuardSnode(_ snode: Snode) {
-        guardSnodes.mutate { snodes in snodes = snodes.filter { $0 != snode } }
+    private static func dropGuardSnode(_ snode: Snode, using dependencies: Dependencies) {
+        dependencies.mutate(cache: .onionRequestAPI) { cache in
+            cache.guardSnodes = cache.guardSnodes.filter { $0 != snode }
+        }
     }
 
-    private static func drop(_ snode: Snode) throws {
+    private static func drop(_ snode: Snode, using dependencies: Dependencies) throws {
         // We repair the path here because we can do it sync. In the case where we drop a whole
         // path we leave the re-building up to getPath(excluding:using:) because re-building the path
         // in that case is async.
-        OnionRequestAPI.snodeFailureCount.mutate { $0[snode] = 0 }
-        var oldPaths = paths
+        dependencies.mutate(cache: .onionRequestAPI) { $0.snodeFailureCount[snode] = 0 }
+        var oldPaths = dependencies[cache: .onionRequestAPI].paths
         guard let pathIndex = oldPaths.firstIndex(where: { $0.contains(snode) }) else { return }
         var path = oldPaths[pathIndex]
         guard let snodeIndex = path.firstIndex(of: snode) else { return }
         path.remove(at: snodeIndex)
-        let unusedSnodes = SnodeAPI.snodePool.wrappedValue.subtracting(oldPaths.flatMap { $0 })
+        let unusedSnodes = dependencies[cache: .snodeAPI].snodePool.subtracting(oldPaths.flatMap { $0 })
         guard !unusedSnodes.isEmpty else { throw OnionRequestAPIError.insufficientSnodes }
         // randomElement() uses the system's default random generator, which is cryptographically secure
         path.append(unusedSnodes.randomElement()!)
         // Don't test the new snode as this would reveal the user's IP
         oldPaths.remove(at: pathIndex)
         let newPaths = oldPaths + [ path ]
-        paths = newPaths
+        dependencies.mutate(cache: .onionRequestAPI) { $0.paths = newPaths }
         
-        Storage.shared.write { db in
+        dependencies[singleton: .storage].write { db in
             SNLog("Persisting onion request paths to database.")
-            try? newPaths.save(db)
+            try? newPaths.upsert(db)
         }
     }
 
-    private static func drop(_ path: [Snode]) {
-        OnionRequestAPI.pathFailureCount.mutate { $0[path] = 0 }
-        var paths = OnionRequestAPI.paths
+    private static func drop(_ path: [Snode], using dependencies: Dependencies) {
+        dependencies.mutate(cache: .onionRequestAPI) { $0.pathFailureCount[path] = 0 }
+        var paths = dependencies[cache: .onionRequestAPI].paths
         guard let pathIndex = paths.firstIndex(of: path) else { return }
         paths.remove(at: pathIndex)
-        OnionRequestAPI.paths = paths
+        dependencies.mutate(cache: .onionRequestAPI) { $0.paths = paths }
         
-        Storage.shared.write { db in
+        dependencies[singleton: .storage].write { db in
             guard !paths.isEmpty else {
                 SNLog("Clearing onion request paths.")
                 try? Snode.clearOnionRequestPaths(db)
@@ -387,7 +375,7 @@ public enum OnionRequestAPI {
             }
             
             SNLog("Persisting onion request paths to database.")
-            try? paths.save(db)
+            try? paths.upsert(db)
         }
     }
     
@@ -396,51 +384,24 @@ public enum OnionRequestAPI {
         around payload: Data,
         targetedAt destination: OnionRequestAPIDestination,
         using dependencies: Dependencies
-    ) -> AnyPublisher<OnionBuildingResult, Error> {
-        var guardSnode: Snode!
-        var targetSnodeSymmetricKey: Data! // Needed by invoke(_:on:with:) to decrypt the response sent back by the destination
-        var encryptionResult: AES.GCM.EncryptionResult!
-        var snodeToExclude: Snode?
-        
-        if case .snode(let snode) = destination { snodeToExclude = snode }
+    ) -> AnyPublisher<PreparedOnionRequest, Error> {
+        let snodeToExclude: Snode? = {
+            switch destination {
+                case .snode(let snode): return snode
+                default: return nil
+            }
+        }()
         
         return getPath(excluding: snodeToExclude, using: dependencies)
-            .flatMap { path -> AnyPublisher<AES.GCM.EncryptionResult, Error> in
-                guardSnode = path.first!
-                
-                // Encrypt in reverse order, i.e. the destination first
-                return encrypt(payload, for: destination)
-                    .flatMap { r -> AnyPublisher<AES.GCM.EncryptionResult, Error> in
-                        targetSnodeSymmetricKey = r.symmetricKey
-                        
-                        // Recursively encrypt the layers of the onion (again in reverse order)
-                        encryptionResult = r
-                        var path = path
-                        var rhs = destination
-                        
-                        func addLayer() -> AnyPublisher<AES.GCM.EncryptionResult, Error> {
-                            guard !path.isEmpty else {
-                                return Just(encryptionResult)
-                                    .setFailureType(to: Error.self)
-                                    .eraseToAnyPublisher()
-                            }
-                            
-                            let lhs = OnionRequestAPIDestination.snode(path.removeLast())
-                            return OnionRequestAPI
-                                .encryptHop(from: lhs, to: rhs, using: encryptionResult)
-                                .flatMap { r -> AnyPublisher<AES.GCM.EncryptionResult, Error> in
-                                    encryptionResult = r
-                                    rhs = lhs
-                                    return addLayer()
-                                }
-                                .eraseToAnyPublisher()
-                        }
-                        
-                        return addLayer()
-                    }
-                    .eraseToAnyPublisher()
+            .tryMap { path -> PreparedOnionRequest in
+                try dependencies[singleton: .crypto].tryGenerate(
+                    .onionRequestPayload(
+                        payload: payload,
+                        destination: destination,
+                        path: path
+                    )
+                )
             }
-            .map { _ in (guardSnode, encryptionResult, targetSnodeSymmetricKey) }
             .eraseToAnyPublisher()
     }
 
@@ -516,28 +477,18 @@ public enum OnionRequestAPI {
         var guardSnode: Snode?
         
         return buildOnion(around: payload, targetedAt: destination, using: dependencies)
-            .flatMap { intermediate -> AnyPublisher<(ResponseInfoType, Data?), Error> in
-                guardSnode = intermediate.guardSnode
-                let url = "\(guardSnode!.address):\(guardSnode!.port)/onion_req/v2"
-                let finalEncryptionResult = intermediate.finalEncryptionResult
-                let onion = finalEncryptionResult.ciphertext
-                if case OnionRequestAPIDestination.server = destination, Double(onion.count) > 0.75 * Double(maxRequestSize) {
-                    SNLog("Approaching request size limit: ~\(onion.count) bytes.")
-                }
-                let parameters: JSON = [
-                    "ephemeral_key" : finalEncryptionResult.ephemeralPublicKey.toHexString()
-                ]
-                let destinationSymmetricKey = intermediate.destinationSymmetricKey
+            .tryFlatMap { preparedRequest -> AnyPublisher<(ResponseInfoType, Data?), Error> in
+                let url: String = "\(preparedRequest.guardSnode.address):\(preparedRequest.guardSnode.port)/onion_req/v2"
+                guardSnode = preparedRequest.guardSnode
                 
-                // TODO: Replace 'json' with a codable typed
-                return encode(ciphertext: onion, json: parameters)
-                    .flatMap { body in HTTP.execute(.post, url, body: body, timeout: timeout) }
+                return HTTP.execute(.post, url, body: preparedRequest.payload, timeout: timeout)
                     .flatMap { responseData in
                         handleResponse(
                             responseData: responseData,
-                            destinationSymmetricKey: destinationSymmetricKey,
+                            finalX25519KeyPair: preparedRequest.finalX25519KeyPair,
                             version: version,
-                            destination: destination
+                            destination: destination,
+                            using: dependencies
                         )
                     }
                     .eraseToAnyPublisher()
@@ -552,24 +503,32 @@ public enum OnionRequestAPI {
                             }
                             guard case HTTPError.httpRequestFailed(let statusCode, let data) = error else { return }
                             
-                            let path = paths.first { $0.contains(guardSnode) }
+                            let path = dependencies[cache: .onionRequestAPI].paths
+                                .first { $0.contains(guardSnode) }
                             
                             func handleUnspecificError() {
                                 guard let path = path else { return }
                                 
-                                var pathFailureCount: UInt = (OnionRequestAPI.pathFailureCount.wrappedValue[path] ?? 0)
+                                var pathFailureCount: UInt = (dependencies[cache: .onionRequestAPI].pathFailureCount[path] ?? 0)
                                 pathFailureCount += 1
                                 
                                 if pathFailureCount >= pathFailureThreshold {
-                                    dropGuardSnode(guardSnode)
+                                    dropGuardSnode(guardSnode, using: dependencies)
                                     path.forEach { snode in
-                                        SnodeAPI.handleError(withStatusCode: statusCode, data: data, forSnode: snode) // Intentionally don't throw
+                                        SnodeAPI.handleError(
+                                            withStatusCode: statusCode,
+                                            data: data,
+                                            forSnode: snode,
+                                            using: dependencies
+                                        ) // Intentionally don't throw
                                     }
                                     
-                                    drop(path)
+                                    drop(path, using: dependencies)
                                 }
                                 else {
-                                    OnionRequestAPI.pathFailureCount.mutate { $0[path] = pathFailureCount }
+                                    dependencies.mutate(cache: .onionRequestAPI) {
+                                        $0.pathFailureCount[path] = pathFailureCount
+                                    }
                                 }
                             }
                             
@@ -590,21 +549,24 @@ public enum OnionRequestAPI {
                                 let ed25519PublicKey = message[message.index(message.startIndex, offsetBy: prefix.count)..<message.endIndex]
                                 
                                 if let path = path, let snode = path.first(where: { $0.ed25519PublicKey == ed25519PublicKey }) {
-                                    var snodeFailureCount: UInt = (OnionRequestAPI.snodeFailureCount.wrappedValue[snode] ?? 0)
+                                    var snodeFailureCount: UInt = (dependencies[cache: .onionRequestAPI].snodeFailureCount[snode] ?? 0)
                                     snodeFailureCount += 1
                                     
                                     if snodeFailureCount >= snodeFailureThreshold {
-                                        SnodeAPI.handleError(withStatusCode: statusCode, data: data, forSnode: snode) // Intentionally don't throw
-                                        do {
-                                            try drop(snode)
-                                        }
-                                        catch {
-                                            handleUnspecificError()
-                                        }
+                                        SnodeAPI.handleError(
+                                            withStatusCode: statusCode,
+                                            data: data,
+                                            forSnode: snode,
+                                            using: dependencies
+                                        ) // Intentionally don't throw
+                                        
+                                        do { try drop(snode, using: dependencies) }
+                                        catch { handleUnspecificError() }
                                     }
                                     else {
-                                        OnionRequestAPI.snodeFailureCount
-                                            .mutate { $0[snode] = snodeFailureCount }
+                                        dependencies.mutate(cache: .onionRequestAPI) {
+                                            $0.snodeFailureCount[snode] = snodeFailureCount
+                                        }
                                     }
                                 } else {
                                     // Do nothing
@@ -669,9 +631,10 @@ public enum OnionRequestAPI {
     
     private static func handleResponse(
         responseData: Data,
-        destinationSymmetricKey: Data,
+        finalX25519KeyPair: KeyPair,
         version: OnionRequestAPIVersion,
-        destination: OnionRequestAPIDestination
+        destination: OnionRequestAPIDestination,
+        using dependencies: Dependencies
     ) -> AnyPublisher<(ResponseInfoType, Data?), Error> {
         switch version {
             // V2 and V3 Onion Requests have the same structure for responses
@@ -689,13 +652,22 @@ public enum OnionRequestAPI {
                         .eraseToAnyPublisher()
                 }
                 
-                guard let base64EncodedIVAndCiphertext = json["result"] as? String, let ivAndCiphertext = Data(base64Encoded: base64EncodedIVAndCiphertext), ivAndCiphertext.count >= AES.GCM.ivSize else {
+                guard
+                    let base64EncodedIVAndCiphertext = json["result"] as? String,
+                    let ivAndCiphertext = Data(base64Encoded: base64EncodedIVAndCiphertext)
+                else {
                     return Fail(error: HTTPError.invalidJSON)
                         .eraseToAnyPublisher()
                 }
                 
                 do {
-                    let data = try AES.GCM.decrypt(ivAndCiphertext, with: destinationSymmetricKey)
+                    let data: Data = try dependencies[singleton: .crypto].tryGenerate(
+                        .onionRequestResponse(
+                            responseData: ivAndCiphertext,
+                            destination: destination,
+                            finalX25519KeyPair: finalX25519KeyPair
+                        )
+                    )
                     
                     guard let json = try JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON, let statusCode = json["status_code"] as? Int ?? json["status"] as? Int else {
                         return Fail(error: HTTPError.invalidJSON)
@@ -709,8 +681,8 @@ public enum OnionRequestAPI {
                     }
                     
                     if statusCode == 401 { // Signature verification failed
-                        SNLog("Failed to verify the signature.")
-                        return Fail(error: SnodeAPIError.signatureVerificationFailed)
+                        SNLog("Failed due to unauthorised error (potentially due to failed signature verification).")
+                        return Fail(error: SnodeAPIError.unauthorised)
                             .eraseToAnyPublisher()
                     }
                     
@@ -731,7 +703,7 @@ public enum OnionRequestAPI {
                         
                         if let timestamp = body["t"] as? Int64 {
                             let offset = timestamp - Int64(floor(Date().timeIntervalSince1970 * 1000))
-                            SnodeAPI.clockOffsetMs.mutate { $0 = offset }
+                            dependencies.mutate(cache: .snodeAPI) { $0.clockOffsetMs = offset }
                         }
                         
                         guard 200...299 ~= statusCode else {
@@ -770,16 +742,17 @@ public enum OnionRequestAPI {
                 
             // V4 Onion Requests have a very different structure for responses
             case .v4:
-                guard responseData.count >= AES.GCM.ivSize else {
-                    return Fail(error: HTTPError.invalidResponse)
-                        .eraseToAnyPublisher()
-                }
-                
                 do {
-                    let data: Data = try AES.GCM.decrypt(responseData, with: destinationSymmetricKey)
+                    let data: Data = try dependencies[singleton: .crypto].tryGenerate(
+                        .onionRequestResponse(
+                            responseData: responseData,
+                            destination: destination,
+                            finalX25519KeyPair: finalX25519KeyPair
+                        )
+                    )
                     
                     // Process the bencoded response
-                    guard let processedResponse: (info: ResponseInfoType, body: Data?) = process(bencodedData: data) else {
+                    guard let processedResponse: (info: ResponseInfoType, body: Data?) = process(bencodedData: data, using: dependencies) else {
                         return Fail(error: HTTPError.invalidResponse)
                             .eraseToAnyPublisher()
                     }
@@ -793,8 +766,8 @@ public enum OnionRequestAPI {
                     }
                     
                     guard processedResponse.info.code != 401 else { // Signature verification failed
-                        SNLog("Failed to verify the signature.")
-                        return Fail(error: SnodeAPIError.signatureVerificationFailed)
+                        SNLog("Failed due to unauthorised error (potentially due to failed signature verification).")
+                        return Fail(error: SnodeAPIError.unauthorised)
                             .eraseToAnyPublisher()
                     }
                     
@@ -818,10 +791,14 @@ public enum OnionRequestAPI {
         }
     }
     
-    public static func process(bencodedData data: Data) -> (info: ResponseInfoType, body: Data?)? {
-        guard let response: BencodeResponse<HTTP.ResponseInfo> = try? Bencode.decodeResponse(from: data) else {
-            return nil
-        }
+    public static func process(
+        bencodedData data: Data,
+        using dependencies: Dependencies = Dependencies()
+    ) -> (info: ResponseInfoType, body: Data?)? {
+        guard
+            let response: BencodeResponse<HTTP.ResponseInfo> = try? BencodeDecoder(using: dependencies)
+                .decode(BencodeResponse<HTTP.ResponseInfo>.self, from: data)
+        else { return nil }
         
         // Custom handle a clock out of sync error (v4 returns '425' but included the '406' just
         // in case)
@@ -830,4 +807,69 @@ public enum OnionRequestAPI {
         
         return (response.info, response.data)
     }
+}
+
+// MARK: - OnionRequestAPI Cache
+
+public extension OnionRequestAPI {
+    class Cache: ORAPICacheType {
+        private let dependencies: Dependencies
+        
+        // MARK: - ORAPICacheType
+        
+        public var buildPathsPublisher: AnyPublisher<[[Snode]], Error>? = nil
+        public var pathFailureCount: [[Snode]: UInt] = [:]
+        public var snodeFailureCount: [Snode: UInt] = [:]
+        public var guardSnodes: Set<Snode> = []
+        
+        // Not a set to ensure we consistently show the same path to the user
+        private var _paths: [[Snode]]? = nil
+        public var paths: [[Snode]] {
+            get {
+                if let paths: [[Snode]] = _paths { return paths }
+                
+                let results: [[Snode]]? = dependencies[singleton: .storage].read { db in
+                    try? Snode.fetchAllOnionRequestPaths(db)
+                }
+                
+                if results?.isEmpty == false { _paths = results }
+                return (results ?? [])
+            }
+            set { _paths = newValue }
+        }
+        
+        // MARK: - Initialization
+        
+        init(using dependencies: Dependencies) {
+            self.dependencies = dependencies
+        }
+    }
+}
+
+public extension Cache {
+    static let onionRequestAPI: CacheConfig<ORAPICacheType, ORAPIImmutableCacheType> = Dependencies.create(
+        identifier: "onionRequestAPI",
+        createInstance: { dependencies in OnionRequestAPI.Cache(using: dependencies) },
+        mutableInstance: { $0 },
+        immutableInstance: { $0 }
+    )
+}
+
+// MARK: - OGMCacheType
+
+/// This is a read-only version of the Cache designed to avoid unintentionally mutating the instance in a non-thread-safe way
+public protocol ORAPIImmutableCacheType: ImmutableCacheType {
+    var buildPathsPublisher: AnyPublisher<[[Snode]], Error>? { get }
+    var pathFailureCount: [[Snode]: UInt] { get }
+    var snodeFailureCount: [Snode: UInt] { get }
+    var guardSnodes: Set<Snode> { get }
+    var paths: [[Snode]] { get }
+}
+
+public protocol ORAPICacheType: ORAPIImmutableCacheType, MutableCacheType {
+    var buildPathsPublisher: AnyPublisher<[[Snode]], Error>? { get set }
+    var pathFailureCount: [[Snode]: UInt] { get set }
+    var snodeFailureCount: [Snode: UInt] { get set }
+    var guardSnodes: Set<Snode> { get set }
+    var paths: [[Snode]] { get set }
 }

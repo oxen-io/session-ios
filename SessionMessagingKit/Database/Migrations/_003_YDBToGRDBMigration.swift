@@ -12,11 +12,11 @@ enum _003_YDBToGRDBMigration: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [Identity.self]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         guard
             !SNUtilitiesKit.isRunningTests &&
             Identity.userExists(db)
-        else { return Storage.update(progress: 1, for: self, in: target) }
+        else { return Storage.update(progress: 1, for: self, in: target, using: dependencies) }
         
         SNLogNotTests("[Migration Error] Attempted to perform legacy migation")
         throw StorageError.migrationNoLongerSupported

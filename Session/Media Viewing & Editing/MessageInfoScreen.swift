@@ -15,6 +15,7 @@ struct MessageInfoScreen: View {
     
     var actions: [ContextMenuVC.Action]
     var messageViewModel: MessageViewModel
+    let dependencies: Dependencies
     var isMessageFailed: Bool {
         return [.failed, .failedToSync].contains(messageViewModel.state)
     }
@@ -237,7 +238,7 @@ struct MessageInfoScreen: View {
                                         size: .message,
                                         publicKey: messageViewModel.authorId,
                                         threadVariant: .contact,    // Always show the display picture in 'contact' mode
-                                        customImageData: nil,
+                                        displayPictureFilename: nil,
                                         profile: messageViewModel.profile,
                                         profileIcon: (messageViewModel.isSenderOpenGroupModerator ? .crown : .none)
                                     )
@@ -355,7 +356,8 @@ struct MessageInfoScreen: View {
             interactionId: messageViewModel.id,
             selectedAttachmentId: attachment.id,
             options: [ .sliderEnabled ],
-            useTransitioningDelegate: false
+            useTransitioningDelegate: false,
+            using: dependencies
         ) {
             self.host.controller?.present(mediaGalleryView, animated: true)
         }
@@ -421,9 +423,9 @@ struct MessageBubble: View {
                                         authorId: quote.authorId,
                                         quotedText: quote.body,
                                         threadVariant: messageViewModel.threadVariant,
-                                        currentUserPublicKey: messageViewModel.currentUserPublicKey,
-                                        currentUserBlinded15PublicKey: messageViewModel.currentUserBlinded15PublicKey,
-                                        currentUserBlinded25PublicKey: messageViewModel.currentUserBlinded25PublicKey,
+                                        currentUserSessionId: messageViewModel.currentUserSessionId,
+                                        currentUserBlinded15SessionId: messageViewModel.currentUserBlinded15SessionId,
+                                        currentUserBlinded25SessionId: messageViewModel.currentUserBlinded25SessionId,
                                         direction: (messageViewModel.variant == .standardOutgoing ? .outgoing : .incoming),
                                         attachment: messageViewModel.quoteAttachment
                                     )
@@ -531,10 +533,15 @@ struct InfoBlock<Content>: View where Content: View {
 }
 
 final class MessageInfoViewController: SessionHostingViewController<MessageInfoScreen> {
-    init(actions: [ContextMenuVC.Action], messageViewModel: MessageViewModel) {
+    init(
+        actions: [ContextMenuVC.Action],
+        messageViewModel: MessageViewModel,
+        using dependencies: Dependencies
+    ) {
         let messageInfoView = MessageInfoScreen(
             actions: actions,
-            messageViewModel: messageViewModel
+            messageViewModel: messageViewModel,
+            dependencies: dependencies
         )
         
         super.init(rootView: messageInfoView)
@@ -585,16 +592,17 @@ struct MessageInfoView_Previews: PreviewProvider {
     
     static var actions: [ContextMenuVC.Action] {
         return [
-            .reply(messageViewModel, nil, using: Dependencies()),
-            .retry(messageViewModel, nil, using: Dependencies()),
-            .delete(messageViewModel, nil, using: Dependencies())
+            .reply(messageViewModel, nil),
+            .retry(messageViewModel, nil),
+            .delete(messageViewModel, nil)
         ]
     }
     
     static var previews: some View {
         MessageInfoScreen(
             actions: actions,
-            messageViewModel: messageViewModel
+            messageViewModel: messageViewModel,
+            dependencies: Dependencies()
         )
     }
 }

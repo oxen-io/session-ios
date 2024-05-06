@@ -55,9 +55,8 @@ public class MediaAlbumView: UIStackView {
         let backgroundView: UIView = UIView()
         backgroundView.themeBackgroundColor = .backgroundPrimary
         addSubview(backgroundView)
-        
-        backgroundView.setContentHuggingLow()
-        backgroundView.setCompressionResistanceLow()
+        backgroundView.setContentHugging(to: .defaultLow)
+        backgroundView.setCompressionResistance(to: .defaultLow)
         backgroundView.pin(to: backgroundView)
         
         switch itemViews.count {
@@ -70,7 +69,7 @@ public class MediaAlbumView: UIStackView {
                     return
                 }
                 addSubview(itemView)
-                itemView.autoPinEdgesToSuperviewEdges()
+                itemView.pin(to: self)
                 
             case 2:
                 // X X
@@ -120,7 +119,7 @@ public class MediaAlbumView: UIStackView {
                     let tintView = UIView()
                     tintView.themeBackgroundColor = .messageBubble_overlay
                     lastView.addSubview(tintView)
-                    tintView.autoPinEdgesToSuperviewEdges()
+                    tintView.pin(to: self)
 
                     let moreCount = max(1, items.count - MediaAlbumView.kMaxItems)
                     let moreText = String(
@@ -133,7 +132,7 @@ public class MediaAlbumView: UIStackView {
                     moreLabel.text = moreText
                     moreLabel.themeTextColor = .white
                     lastView.addSubview(moreLabel)
-                    moreLabel.autoCenterInSuperview()
+                    moreLabel.center(in: lastView)
                 }
         }
 
@@ -161,8 +160,8 @@ public class MediaAlbumView: UIStackView {
             let iconView = UIImageView(image: icon)
             itemView.addSubview(iconView)
             itemView.layoutMargins = .zero
-            iconView.autoPinTopToSuperviewMargin(withInset: 6)
-            iconView.autoPinLeadingToSuperviewMargin(withInset: 6)
+            iconView.pin(.top, to: .top, of: itemView.layoutMarginsGuide, withInset: 6)
+            iconView.pin(.leading, to: .leading, of: itemView.layoutMarginsGuide, withInset: 6)
         }
     }
 
@@ -171,7 +170,8 @@ public class MediaAlbumView: UIStackView {
         ofViews views: [MediaView]
     ) {
         for itemView in views {
-            itemView.autoSetDimensions(to: CGSize(width: viewSize, height: viewSize))
+            itemView.set(.width, to: viewSize)
+            itemView.set(.height, to: viewSize)
         }
     }
 
@@ -250,7 +250,7 @@ public class MediaAlbumView: UIStackView {
         var bestDistance: CGFloat = 0
         for itemView in itemViews {
             let itemCenter = convert(itemView.center, from: itemView.superview)
-            let distance = CGPointDistance(location, itemCenter)
+            let distance = location.distance(to: itemCenter)
             if bestMediaView != nil && distance > bestDistance {
                 continue
             }

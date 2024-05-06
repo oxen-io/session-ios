@@ -52,26 +52,39 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
     @discardableResult
     func updateAllAndConfig(
         _ db: Database,
-        calledFromConfig: Bool = false,
-        _ assignments: ConfigColumnAssignment...
+        _ assignments: ConfigColumnAssignment...,
+        calledFromConfig configTriggeringChange: ConfigDump.Variant?,
+        using dependencies: Dependencies
     ) throws -> Int {
-        return try updateAllAndConfig(db, calledFromConfig: calledFromConfig, assignments)
+        return try updateAllAndConfig(
+            db,
+            assignments,
+            calledFromConfig: configTriggeringChange,
+            using: dependencies
+        )
     }
     
     @discardableResult
     func updateAllAndConfig(
         _ db: Database,
-        calledFromConfig: Bool = false,
-        _ assignments: [ConfigColumnAssignment]
+        _ assignments: [ConfigColumnAssignment],
+        calledFromConfig configTriggeringChange: ConfigDump.Variant?,
+        using dependencies: Dependencies
     ) throws -> Int {
         let targetAssignments: [ColumnAssignment] = assignments.map { $0.assignment }
         
         // Before we do anything custom make sure the changes actually do need to be synced
-        guard SessionUtil.assignmentsRequireConfigUpdate(assignments) else {
-            return try self.updateAll(db, targetAssignments)
-        }
+        guard
+            configTriggeringChange == nil &&
+            SessionUtil.assignmentsRequireConfigUpdate(assignments)
+        else { return try self.updateAll(db, targetAssignments) }
         
-        return try self.updateAndFetchAllAndUpdateConfig(db, calledFromConfig: calledFromConfig, assignments).count
+        return try self.updateAndFetchAllAndUpdateConfig(
+            db,
+            assignments,
+            calledFromConfig: configTriggeringChange,
+            using: dependencies
+        ).count
     }
     
     // MARK: -- updateAndFetchAll
@@ -79,24 +92,31 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
     @discardableResult
     func updateAndFetchAllAndUpdateConfig(
         _ db: Database,
-        calledFromConfig: Bool = false,
-        _ assignments: ConfigColumnAssignment...
+        _ assignments: ConfigColumnAssignment...,
+        calledFromConfig configTriggeringChange: ConfigDump.Variant?,
+        using dependencies: Dependencies
     ) throws -> [RowDecoder] {
-        return try updateAndFetchAllAndUpdateConfig(db, calledFromConfig: calledFromConfig, assignments)
+        return try updateAndFetchAllAndUpdateConfig(
+            db,
+            assignments,
+            calledFromConfig: configTriggeringChange,
+            using: dependencies
+        )
     }
     
     @discardableResult
     func updateAndFetchAllAndUpdateConfig(
         _ db: Database,
-        calledFromConfig: Bool = false,
-        _ assignments: [ConfigColumnAssignment]
+        _ assignments: [ConfigColumnAssignment],
+        calledFromConfig configTriggeringChange: ConfigDump.Variant?,
+        using dependencies: Dependencies
     ) throws -> [RowDecoder] {
         // First perform the actual updates
         let updatedData: [RowDecoder] = try self.updateAndFetchAll(db, assignments.map { $0.assignment })
         
         // Then check if any of the changes could affect the config
         guard
-            !calledFromConfig &&
+            configTriggeringChange == nil &&
             SessionUtil.assignmentsRequireConfigUpdate(assignments)
         else { return updatedData }
         
@@ -104,23 +124,38 @@ public extension QueryInterfaceRequest where RowDecoder: FetchableRecord & Table
             // If we changed a column that requires a config update then we may as well automatically
             // enqueue a new config sync job once the transaction completes (but only enqueue it once
             // per transaction - doing it more than once is pointless)
-            let userPublicKey: String = getUserHexEncodedPublicKey(db)
+            let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
             
-            db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(userPublicKey)) { db in
-                ConfigurationSyncJob.enqueue(db, publicKey: userPublicKey)
+            db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(userSessionId.hexString)) { db in
+                ConfigurationSyncJob.enqueue(db, sessionIdHexString: userSessionId.hexString)
             }
         }
         
         // Update the config dump state where needed
         switch self {
             case is QueryInterfaceRequest<Contact>:
-                return try SessionUtil.updatingContacts(db, updatedData)
+                return try SessionUtil.updatingContacts(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<Profile>:
-                return try SessionUtil.updatingProfiles(db, updatedData)
+                return try SessionUtil.updatingProfiles(db, updatedData, using: dependencies)
                 
             case is QueryInterfaceRequest<SessionThread>:
-                return try SessionUtil.updatingThreads(db, updatedData)
+                return try SessionUtil.updatingThreads(db, updatedData, using: dependencies)
+            
+            case is QueryInterfaceRequest<ClosedGroup>:
+                // Group data is stored both in the `USER_GROUPS` config and it's own `GROUP_INFO` config so we
+                // need to update both
+                try SessionUtil.updatingGroups(db, updatedData, using: dependencies)
+                return try SessionUtil.updatingGroupInfo(db, updatedData, using: dependencies)
+                
+            case is QueryInterfaceRequest<GroupMember>:
+                return try SessionUtil.updatingGroupMembers(db, updatedData, using: dependencies)
+                
+            case is QueryInterfaceRequest<DisappearingMessagesConfiguration>:
+                let oneToOneUpdates: [RowDecoder] = try SessionUtil.updatingDisappearingConfigsOneToOne(db, updatedData, using: dependencies)
+                let groupUpdates: [RowDecoder] = try SessionUtil.updatingDisappearingConfigsGroups(db, updatedData, using: dependencies)
+                
+                return (oneToOneUpdates + groupUpdates)
                 
             default: return updatedData
         }

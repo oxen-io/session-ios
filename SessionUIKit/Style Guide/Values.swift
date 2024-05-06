@@ -55,4 +55,47 @@ public final class Values : NSObject {
     @objc public static let iPadButtonWidth = CGFloat(240)
     @objc public static let iPadButtonSpacing = CGFloat(32)
     @objc public static let iPadUserSessionIdContainerWidth = iPadButtonWidth * 2 + iPadButtonSpacing
+    
+    // MARK: - Auto Scaling
+
+    static let iPhone5ScreenWidth: CGFloat = 320
+    static let iPhone7PlusScreenWidth: CGFloat = 414
+
+    static var screenShortDimension: CGFloat {
+        return min(UIScreen.main.bounds.size.width, UIScreen.main.bounds.size.height)
+    }
+
+    public static func scaleFromIPhone5To7Plus(_ iPhone5Value: CGFloat, _ iPhone7PlusValue: CGFloat) -> CGFloat {
+        return screenShortDimension
+            .inverseLerp(iPhone5ScreenWidth, iPhone7PlusScreenWidth)
+            .clamp01()
+            .lerp(iPhone5Value, iPhone7PlusValue)
+            .rounded()
+    }
+
+    public static func scaleFromIPhone5(_ iPhone5Value: CGFloat) -> CGFloat {
+        round(iPhone5Value * screenShortDimension / iPhone5ScreenWidth)
+    }
+}
+
+/// These extensions are duplicate here from `SessionUtilitiesKit.CGFloat+Utilities` to avoid creating a
+/// dependency on `SessionUtilitiesKit`
+private extension CGFloat {
+    func clamp(_ minValue: CGFloat, _ maxValue: CGFloat) -> CGFloat {
+        return Swift.max(minValue, Swift.min(maxValue, self))
+    }
+    
+    func clamp01() -> CGFloat {
+        return clamp(0, 1)
+    }
+    
+    func lerp(_ minValue: CGFloat, _ maxValue: CGFloat) -> CGFloat {
+        return (minValue * (1 - self)) + (maxValue * self)
+    }
+    
+    func inverseLerp(_ minValue: CGFloat, _ maxValue: CGFloat, shouldClamp: Bool = false) -> CGFloat {
+        let result: CGFloat = ((self - minValue) / (maxValue - minValue))
+        
+        return (shouldClamp ? result.clamp01() : result)
+    }
 }

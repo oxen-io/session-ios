@@ -17,7 +17,7 @@ public final class MessageRequestResponse: ControlMessage {
     
     public init(
         isApproved: Bool,
-        profile: VisibleMessage.VMProfile? = nil,
+        profile: VisibleMessage.VMProfile? = nil,   // Added when sending via the `MessageWithProfile` protocol
         sentTimestampMs: UInt64? = nil
     ) {
         self.isApproved = isApproved

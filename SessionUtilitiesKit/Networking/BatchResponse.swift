@@ -4,57 +4,84 @@ import Foundation
 import Combine
 
 public extension HTTP {
-    // MARK: - BatchResponse
-    
-    struct BatchResponse {
-        public let info: ResponseInfoType
-        public let responses: [Decodable]
+    // MARK: - HTTP.BatchResponse
+
+    struct BatchResponse: Decodable, Collection {
+        public let data: [Any]
         
-        public static func decodingResponses(
-            from data: Data?,
-            as types: [Decodable.Type],
-            requireAllResults: Bool,
-            using dependencies: Dependencies = Dependencies()
-        ) throws -> [Decodable] {
-            // Need to split the data into an array of data so each item can be Decoded correctly
-            guard let data: Data = data else { throw HTTPError.parsingFailed }
-            guard let jsonObject: Any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-                throw HTTPError.parsingFailed
-            }
+        // MARK: - Collection Conformance
+        
+        public var startIndex: Int { data.startIndex }
+        public var endIndex: Int { data.endIndex }
+        public var count: Int { data.count }
+        
+        public subscript(index: Int) -> Any { data[index] }
+        public func index(after i: Int) -> Int { return data.index(after: i) }
+        
+        // MARK: - Initialization
+        
+        init(data: [Any]) {
+            self.data = data
+        }
+        
+        public init(from decoder: Decoder) throws {
+#if DEBUG
+            preconditionFailure("The `HTTP.BatchResponse` type cannot be decoded directly, this is simply here to allow for `PreparedSendData<HTTP.BatchResponse>` support")
+#else
+            data = []
+#endif
+        }
+    }
+    
+    // MARK: - BatchResponseMap<E>
+    
+    struct BatchResponseMap<E: EndpointType>: Decodable, ErasedBatchResponseMap {
+        public let data: [E: Any]
+        
+        public subscript(position: E) -> Any? {
+            get { return data[position] }
+        }
+        
+        public var count: Int { data.count }
+        public var keys: Dictionary<E, Any>.Keys { data.keys }
+        public var values: Dictionary<E, Any>.Values { data.values }
+        
+        // MARK: - Initialization
+        
+        init(data: [E: Any]) {
+            self.data = data
+        }
+        
+        public init(from decoder: Decoder) throws {
+#if DEBUG
+            preconditionFailure("The `HTTP.BatchResponseMap` type cannot be decoded directly, this is simply here to allow for `PreparedSendData<HTTP.BatchResponseMap>` support")
+#else
+            data = [:]
+#endif
+        }
+        
+        // MARK: - ErasedBatchResponseMap
+        
+        public static func from(
+            batchEndpoints: [any EndpointType],
+            response: HTTP.BatchResponse
+        ) throws -> Self {
+            let convertedEndpoints: [E] = batchEndpoints.compactMap { $0 as? E }
             
-            let dataArray: [Data]
+            guard convertedEndpoints.count == response.data.count else { throw HTTPError.parsingFailed }
             
-            switch jsonObject {
-                case let anyArray as [Any]:
-                    dataArray = anyArray.compactMap { try? JSONSerialization.data(withJSONObject: $0) }
-                    
-                    guard !requireAllResults || dataArray.count == types.count else {
-                        throw HTTPError.parsingFailed
+            return BatchResponseMap(
+                data: zip(convertedEndpoints, response.data)
+                    .reduce(into: [:]) { result, next in
+                        result[next.0] = next.1
                     }
-                    
-                case let anyDict as [String: Any]:
-                    guard
-                        let resultsArray: [Data] = (anyDict["results"] as? [Any])?
-                            .compactMap({ try? JSONSerialization.data(withJSONObject: $0) }),
-                        (
-                            !requireAllResults ||
-                            resultsArray.count == types.count
-                        )
-                    else { throw HTTPError.parsingFailed }
-                    
-                    dataArray = resultsArray
-                    
-                default: throw HTTPError.parsingFailed
-            }
-            
-            return try zip(dataArray, types)
-                .map { data, type in try type.decoded(from: data, using: dependencies) }
+            )
         }
     }
     
     // MARK: - BatchSubResponse<T>
     
-    struct BatchSubResponse<T: Decodable>: BatchSubResponseType {
+    struct BatchSubResponse<T>: ErasedBatchSubResponse {
         public enum CodingKeys: String, CodingKey {
             case code
             case headers
@@ -69,6 +96,8 @@ public extension HTTP {
         
         /// The body of the request; will be plain json if content-type is `application/json`, otherwise it will be base64 encoded data
         public let body: T?
+        
+        var erasedBody: Any? { body }
         
         /// A flag to indicate that there was a body but it failed to parse
         public let failedToParseBody: Bool
@@ -87,22 +116,22 @@ public extension HTTP {
     }
 }
 
-public protocol BatchSubResponseType: Decodable {
-    var code: Int { get }
-    var headers: [String: String] { get }
-    var failedToParseBody: Bool { get }
+// MARK: - ErasedBatchResponseMap
+
+public protocol ErasedBatchResponseMap {
+    static func from(
+        batchEndpoints: [any EndpointType],
+        response: HTTP.BatchResponse
+    ) throws -> Self
 }
 
-extension BatchSubResponseType {
-    public var responseInfo: ResponseInfoType { HTTP.ResponseInfo(code: code, headers: headers) }
-}
+// MARK: - BatchSubResponse<T> Coding
 
 extension HTTP.BatchSubResponse: Encodable where T: Encodable {}
-
-public extension HTTP.BatchSubResponse {
-    init(from decoder: Decoder) throws {
+extension HTTP.BatchSubResponse: Decodable {
+    public init(from decoder: Decoder) throws {
         let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
-        let body: T? = try? container.decode(T.self, forKey: .body)
+        let body: T? = ((try? (T.self as? Decodable.Type)?.decoded(with: container, forKey: .body)) as? T)
         
         self = HTTP.BatchSubResponse(
             code: try container.decode(Int.self, forKey: .code),
@@ -117,32 +146,55 @@ public extension HTTP.BatchSubResponse {
     }
 }
 
-// MARK: - Convenience
+// MARK: - ErasedBatchSubResponse
 
-public extension Decodable {
-    static func decoded(from data: Data, using dependencies: Dependencies = Dependencies()) throws -> Self {
-        return try data.decoded(as: Self.self, using: dependencies)
-    }
+protocol ErasedBatchSubResponse: ResponseInfoType {
+    var erasedBody: Any? { get }
 }
 
-public extension Publisher where Output == (ResponseInfoType, Data?), Failure == Error {
-    func decoded(
+// MARK: - Convenience
+
+internal extension HTTP.BatchResponse {
+    static func decodingResponses(
+        from data: Data?,
         as types: [Decodable.Type],
-        requireAllResults: Bool = true,
+        requireAllResults: Bool,
         using dependencies: Dependencies = Dependencies()
-    ) -> AnyPublisher<HTTP.BatchResponse, Error> {
-        self
-            .tryMap { responseInfo, maybeData -> HTTP.BatchResponse in
-                HTTP.BatchResponse(
-                    info: responseInfo,
-                    responses: try HTTP.BatchResponse.decodingResponses(
-                        from: maybeData,
-                        as: types,
-                        requireAllResults: requireAllResults,
-                        using: dependencies
+    ) throws -> HTTP.BatchResponse {
+        // Need to split the data into an array of data so each item can be Decoded correctly
+        guard let data: Data = data else { throw HTTPError.parsingFailed }
+        guard let jsonObject: Any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            throw HTTPError.parsingFailed
+        }
+        
+        let dataArray: [Data]
+        
+        switch jsonObject {
+            case let anyArray as [Any]:
+                dataArray = anyArray.compactMap { try? JSONSerialization.data(withJSONObject: $0) }
+                
+                guard !requireAllResults || dataArray.count == types.count else {
+                    throw HTTPError.parsingFailed
+                }
+                
+            case let anyDict as [String: Any]:
+                guard
+                    let resultsArray: [Data] = (anyDict["results"] as? [Any])?   // stringlint:disable
+                        .compactMap({ try? JSONSerialization.data(withJSONObject: $0) }),
+                    (
+                        !requireAllResults ||
+                        resultsArray.count == types.count
                     )
-                )
-            }
-            .eraseToAnyPublisher()
+                else { throw HTTPError.parsingFailed }
+                
+                dataArray = resultsArray
+                
+            default: throw HTTPError.parsingFailed
+        }
+        
+        return HTTP.BatchResponse(
+            data: try zip(dataArray, types)
+                .map { data, type in try type.decoded(from: data, using: dependencies) }
+        )
     }
 }

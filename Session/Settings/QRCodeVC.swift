@@ -7,6 +7,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 final class QRCodeVC : BaseVC, UIPageViewControllerDataSource, UIPageViewControllerDelegate, QRScannerDelegate {
+    private let dependencies: Dependencies
     private let pageVC = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: nil)
     private var pages: [UIViewController] = []
     private var targetVCIndex: Int?
@@ -35,7 +36,7 @@ final class QRCodeVC : BaseVC, UIPageViewControllerDataSource, UIPageViewControl
     }()
     
     private lazy var scanQRCodePlaceholderVC: ScanQRCodePlaceholderVC = {
-        let result = ScanQRCodePlaceholderVC()
+        let result = ScanQRCodePlaceholderVC(using: dependencies)
         result.qrCodeVC = self
         
         return result
@@ -48,6 +49,18 @@ final class QRCodeVC : BaseVC, UIPageViewControllerDataSource, UIPageViewControl
         
         return result
     }()
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - Lifecycle
     
@@ -143,7 +156,8 @@ final class QRCodeVC : BaseVC, UIPageViewControllerDataSource, UIPageViewControl
                 for: hexEncodedPublicKey,
                 variant: .contact,
                 dismissing: presentingViewController,
-                animated: false
+                animated: false,
+                using: dependencies
             )
         }
     }
@@ -170,7 +184,7 @@ private final class ViewMyQRCodeVC : UIViewController {
         
         // Set up QR code image view
         let qrCodeImageView = UIImageView(
-            image: QRCode.generate(for: getUserHexEncodedPublicKey(), hasBackground: false)
+            image: QRCode.generate(for: getUserSessionId().hexString, hasBackground: false)
                 .withRenderingMode(.alwaysTemplate)
         )
         qrCodeImageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
@@ -272,7 +286,7 @@ private final class ViewMyQRCodeVC : UIViewController {
     // MARK: - Interaction
     
     @objc private func shareQRCode() {
-        let qrCode = QRCode.generate(for: getUserHexEncodedPublicKey(), hasBackground: true)
+        let qrCode = QRCode.generate(for: getUserSessionId().hexString, hasBackground: true)
         let shareVC = UIActivityViewController(activityItems: [ qrCode ], applicationActivities: nil)
         if UIDevice.current.isIPad {
             shareVC.excludedActivityTypes = []
@@ -285,7 +299,22 @@ private final class ViewMyQRCodeVC : UIViewController {
 }
 
 private final class ScanQRCodePlaceholderVC : UIViewController {
+    private let dependencies: Dependencies
     weak var qrCodeVC: QRCodeVC!
+
+    // MARK: - Init
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Lifecycle
     
     override func viewDidLoad() {
         // Remove background color
@@ -321,7 +350,7 @@ private final class ScanQRCodePlaceholderVC : UIViewController {
     }
     
     @objc private func requestCameraAccess() {
-        Permissions.requestCameraPermissionIfNeeded { [weak self] in
+        Permissions.requestCameraPermissionIfNeeded(using: dependencies) { [weak self] in
             self?.qrCodeVC.handleCameraAccessGranted()
         }
     }

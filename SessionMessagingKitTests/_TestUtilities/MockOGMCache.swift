@@ -8,41 +8,41 @@ import SessionUtilitiesKit
 
 class MockOGMCache: Mock<OGMCacheType>, OGMCacheType {
     var defaultRoomsPublisher: AnyPublisher<[OpenGroupManager.DefaultRoomInfo], Error>? {
-        get { return accept() as? AnyPublisher<[OpenGroupManager.DefaultRoomInfo], Error> }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var groupImagePublishers: [String: AnyPublisher<Data, Error>] {
-        get { return accept() as! [String: AnyPublisher<Data, Error>] }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var pollers: [String: OpenGroupAPI.Poller] {
-        get { return accept() as! [String: OpenGroupAPI.Poller] }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var isPolling: Bool {
-        get { return accept() as! Bool }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var hasPerformedInitialPoll: [String: Bool] {
-        get { return accept() as! [String: Bool] }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var timeSinceLastPoll: [String: TimeInterval] {
-        get { return accept() as! [String: TimeInterval] }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var pendingChanges: [OpenGroupAPI.PendingChange] {
-        get { return accept() as! [OpenGroupAPI.PendingChange] }
-        set { accept(args: [newValue]) }
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     func getTimeSinceLastOpen(using dependencies: Dependencies) -> TimeInterval {
-        return accept(args: [dependencies]) as! TimeInterval
+        return mock(args: [dependencies])
     }
 }

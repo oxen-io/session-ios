@@ -5,6 +5,8 @@ import GRDB
 import SessionUtilitiesKit
 
 public enum SNUIKit: MigratableTarget {
+    internal static let mainWindow: Atomic<UIWindow?> = Atomic(nil)
+    
     public static func migrations() -> TargetMigrations {
         return TargetMigrations(
             identifier: .uiKit,
@@ -24,5 +26,9 @@ public enum SNUIKit: MigratableTarget {
     }
     
     public static func configure() {
+    }
+    
+    public static func setMainWindow(_ mainWindow: UIWindow) {
+        SNUIKit.mainWindow.mutate { $0 = mainWindow }
     }
 }

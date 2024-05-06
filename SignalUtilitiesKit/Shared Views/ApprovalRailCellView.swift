@@ -33,9 +33,8 @@ public class ApprovalRailCellView: GalleryRailCellView {
         button.layer.shadowRadius = 2
         button.layer.shadowOpacity = 0.66
         button.layer.shadowOffset = .zero
-
-        let kButtonWidth: CGFloat = 24
-        button.autoSetDimensions(to: CGSize(width: kButtonWidth, height: kButtonWidth))
+        button.set(.width, to: 24)
+        button.set(.height, to: 24)
 
         return button
     }()
@@ -60,8 +59,8 @@ public class ApprovalRailCellView: GalleryRailCellView {
                 approvalRailCellDelegate.canRemoveApprovalRailCellView(self) {
 
                 addSubview(deleteButton)
-                deleteButton.autoPinEdge(toSuperviewEdge: .top, withInset: cellBorderWidth)
-                deleteButton.autoPinEdge(toSuperviewEdge: .trailing, withInset: cellBorderWidth + 4)
+                deleteButton.pin(.top, to: .top, of: self, withInset: cellBorderWidth)
+                deleteButton.pin(.trailing, to: .trailing, of: self, withInset: -(cellBorderWidth + 4))
             }
         } else {
             deleteButton.removeFromSuperview()
@@ -83,8 +82,8 @@ public class ApprovalRailCellView: GalleryRailCellView {
         if hasCaption {
             addSubview(captionIndicator)
 
-            captionIndicator.autoPinEdge(toSuperviewEdge: .top, withInset: cellBorderWidth)
-            captionIndicator.autoPinEdge(toSuperviewEdge: .leading, withInset: cellBorderWidth + 4)
+            captionIndicator.pin(.top, to: .top, of: self, withInset: cellBorderWidth)
+            captionIndicator.pin(.leading, to: .leading, of: self, withInset: cellBorderWidth + 4)
         } else {
             captionIndicator.removeFromSuperview()
         }

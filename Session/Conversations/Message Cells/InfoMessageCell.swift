@@ -3,6 +3,7 @@
 import UIKit
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 final class InfoMessageCell: MessageCell {
     private static let iconSize: CGFloat = 12
@@ -93,12 +94,14 @@ final class InfoMessageCell: MessageCell {
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
         guard cellViewModel.variant.isInfoMessage else { return }
         
         self.accessibilityIdentifier = "Control message"
         self.isAccessibilityElement = true
+        self.dependencies = dependencies
         self.viewModel = cellViewModel
         
         self.actionLabel.isHidden = true
@@ -119,50 +122,57 @@ final class InfoMessageCell: MessageCell {
             iconImageView.image = icon.withRenderingMode(.alwaysTemplate)
             iconImageView.themeTintColor = .textSecondary
         }
-        
-        if cellViewModel.variant == .infoDisappearingMessagesUpdate, let body: String = cellViewModel.body {
-            self.label.attributedText = NSAttributedString(string: body)
-                .adding(
-                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
-                    range: (body as NSString).range(of: cellViewModel.authorName)
-                )
-                .adding(
-                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
-                    range: (body as NSString).range(of: "vc_path_device_row_title".localized())
-                )
-                .adding(
-                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
-                    range: (body as NSString).range(of: floor(cellViewModel.expiresInSeconds ?? 0).formatted(format: .long))
-                )
-                .adding(
-                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
-                    range: (body as NSString).range(of: "DISAPPEARING_MESSAGE_STATE_READ".localized())
-                )
-                .adding(
-                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
-                    range: (body as NSString).range(of: "DISAPPEARING_MESSAGE_STATE_SENT".localized())
-                )
-                .adding(
-                    attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
-                    range: (body as NSString).range(of: "DISAPPEARING_MESSAGES_OFF".localized().lowercased())
-                )
-            
-            if cellViewModel.canDoFollowingSetting() {
-                self.actionLabel.isHidden = false
-                self.actionLabel.text = "FOLLOW_SETTING_TITLE".localized()
-            }
-        } else {
-            self.label.text = cellViewModel.body
+        // TODO: Need to update this to be cleaner (after strings?)
+        // TODO: Need to check this has the correct behaviour/strings for updated groups
+        switch (cellViewModel.variant, cellViewModel.threadVariant, cellViewModel.body, cellViewModel.attributedBody(using: dependencies)) {
+            case (.infoDisappearingMessagesUpdate, .contact, .some(let body), _), (.infoDisappearingMessagesUpdate, .legacyGroup, .some(let body), _):
+                self.label.attributedText = NSAttributedString(string: body)
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
+                        range: (body as NSString).range(of: cellViewModel.authorName)
+                    )
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
+                        range: (body as NSString).range(of: "vc_path_device_row_title".localized())
+                    )
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
+                        range: (body as NSString).range(of: floor(cellViewModel.expiresInSeconds ?? 0).formatted(format: .long))
+                    )
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
+                        range: (body as NSString).range(of: "DISAPPEARING_MESSAGE_STATE_READ".localized())
+                    )
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
+                        range: (body as NSString).range(of: "DISAPPEARING_MESSAGE_STATE_SENT".localized())
+                    )
+                    .adding(
+                        attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize) ],
+                        range: (body as NSString).range(of: "DISAPPEARING_MESSAGES_OFF".localized().lowercased())
+                    )
+                
+                if cellViewModel.canDoFollowingSetting() {
+                    self.actionLabel.isHidden = false
+                    self.actionLabel.text = "FOLLOW_SETTING_TITLE".localized()
+                }
+                
+            case (_, _, _, .some(let attrText)): self.label.attributedText = attrText
+            case (_, _, _, .none): self.label.text = cellViewModel.body
         }
         
-        self.label.themeTextColor = (cellViewModel.variant == .infoClosedGroupCurrentUserErrorLeaving) ? .danger : .textSecondary
+        self.label.themeTextColor = (cellViewModel.variant == .infoGroupCurrentUserErrorLeaving ?
+            .danger :
+            .textSecondary
+        )
 
         let shouldShowIcon: Bool = (icon != nil) || ((cellViewModel.expiresInSeconds ?? 0) > 0)
         
-        iconContainerViewWidthConstraint.constant = shouldShowIcon ? InfoMessageCell.iconSize : 0
-        iconContainerViewHeightConstraint.constant = shouldShowIcon ? InfoMessageCell.iconSize : 0
+        iconContainerViewWidthConstraint.constant = (shouldShowIcon ? InfoMessageCell.iconSize : 0)
+        iconContainerViewHeightConstraint.constant = (shouldShowIcon ? InfoMessageCell.iconSize : 0)
         
         guard shouldShowIcon else { return }
+        
         // Timer
         if
             let expiresStartedAtMs: Double = cellViewModel.expiresStartedAtMs,

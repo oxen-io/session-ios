@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import SessionSnodeKit
 import SessionUtilitiesKit
 
 extension OpenGroupAPI {
@@ -69,35 +70,32 @@ extension OpenGroupAPI.Message {
             guard let sender: String = maybeSender, let data = Data(base64Encoded: base64EncodedData), let signature = Data(base64Encoded: base64EncodedSignature) else {
                 throw HTTPError.parsingFailed
             }
-            guard let dependencies: Dependencies = decoder.userInfo[Dependencies.userInfoKey] as? Dependencies else {
-                throw HTTPError.parsingFailed
-            }
             
             // Verify the signature based on the SessionId.Prefix type
-            let publicKey: Data = Data(hex: sender.removingIdPrefixIfNeeded())
+            let maybeSenderSessionId: SessionId? = try? SessionId(from: sender)
             
-            switch SessionId.Prefix(from: sender) {
-                case .blinded15, .blinded25:
+            switch (maybeSenderSessionId, maybeSenderSessionId?.prefix) {
+                case (.some(let sessionId), .blinded15), (.some(let sessionId), .blinded25):
                     guard
-                        dependencies.crypto.verify(
-                            .signature(message: data.bytes, publicKey: publicKey.bytes, signature: signature.bytes)
+                        decoder.dependencies[singleton: .crypto].verify(
+                            .signature(message: data.bytes, publicKey: sessionId.publicKey, signature: signature.bytes)
                         )
                     else {
                         SNLog("Ignoring message with invalid signature.")
                         throw HTTPError.parsingFailed
                     }
                     
-                case .standard, .unblinded:
+                case (.some(let sessionId), .standard), (.some(let sessionId), .unblinded):
                     guard
-                        dependencies.crypto.verify(
-                            .signatureEd25519(signature, publicKey: publicKey, data: data)
+                        decoder.dependencies[singleton: .crypto].verify(
+                            .signatureXed25519(signature, curve25519PublicKey: sessionId.publicKey, data: data)
                         )
                     else {
                         SNLog("Ignoring message with invalid signature.")
                         throw HTTPError.parsingFailed
                     }
                     
-                case .none, .group:
+                case (.some, .none), (.none, _), (_, .group):
                     SNLog("Ignoring message with invalid sender.")
                     throw HTTPError.parsingFailed
             }

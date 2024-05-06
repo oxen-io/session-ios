@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -10,36 +9,45 @@ import SessionSnodeKit
 // MARK: - Size Restrictions
 
 public extension SessionUtil {
-    static var libSessionMaxGroupNameByteLength: Int { GROUP_NAME_MAX_LENGTH }
-    static var libSessionMaxGroupBaseUrlByteLength: Int { COMMUNITY_BASE_URL_MAX_LENGTH }
-    static var libSessionMaxGroupFullUrlByteLength: Int { COMMUNITY_FULL_URL_MAX_LENGTH }
-    static var libSessionMaxCommunityRoomByteLength: Int { COMMUNITY_ROOM_MAX_LENGTH }
+    static var sizeMaxGroupNameBytes: Int { GROUP_NAME_MAX_LENGTH }
+    static var sizeMaxCommunityBaseUrlBytes: Int { COMMUNITY_BASE_URL_MAX_LENGTH }
+    static var sizeMaxCommunityFullUrlBytes: Int { COMMUNITY_FULL_URL_MAX_LENGTH }
+    static var sizeMaxCommunityRoomBytes: Int { COMMUNITY_ROOM_MAX_LENGTH }
+ 
+    static var sizeCommunityPubkeyBytes: Int { 32 }
+    static var sizeLegacyGroupPubkeyBytes: Int { 32 }
+    static var sizeLegacyGroupSecretKeyBytes: Int { 32 }
+    static var sizeGroupSecretKeyBytes: Int { 64 }
+    static var sizeGroupAuthDataBytes: Int { 100 }
 }
 
 // MARK: - UserGroups Handling
 
 internal extension SessionUtil {
     static let columnsRelatedToUserGroups: [ColumnExpression] = [
-        ClosedGroup.Columns.name
+        ClosedGroup.Columns.name,
+        ClosedGroup.Columns.authData,
+        ClosedGroup.Columns.groupIdentityPrivateKey
     ]
     
     // MARK: - Incoming Changes
     
-    static func handleGroupsUpdate(
+    static func handleUserGroupsUpdate(
         _ db: Database,
-        in conf: UnsafeMutablePointer<config_object>?,
-        mergeNeedsDump: Bool,
-        latestConfigSentTimestampMs: Int64,
-        using dependencies: Dependencies = Dependencies()
+        in config: Config?,
+        serverTimestampMs: Int64,
+        using dependencies: Dependencies
     ) throws {
-        guard mergeNeedsDump else { return }
-        guard conf != nil else { throw SessionUtilError.nilConfigObject }
+        guard config.needsDump(using: dependencies) else { return }
+        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
         
         var infiniteLoopGuard: Int = 0
         var communities: [PrioritisedData<OpenGroupUrlInfo>] = []
         var legacyGroups: [LegacyGroupInfo] = []
+        var groups: [GroupInfo] = []
         var community: ugroups_community_info = ugroups_community_info()
         var legacyGroup: ugroups_legacy_group_info = ugroups_legacy_group_info()
+        var group: ugroups_group_info = ugroups_group_info()
         let groupsIterator: OpaquePointer = user_groups_iterator_new(conf)
         
         while !user_groups_iterator_done(groupsIterator) {
@@ -57,7 +65,7 @@ internal extension SessionUtil {
                             roomToken: roomToken,
                             publicKey: Data(
                                 libSessionVal: community.pubkey,
-                                count: OpenGroup.pubkeyByteLength
+                                count: SessionUtil.sizeCommunityPubkeyBytes
                             ).toHexString()
                         ),
                         priority: community.priority
@@ -76,13 +84,15 @@ internal extension SessionUtil {
                             threadId: groupId,
                             publicKey: Data(
                                 libSessionVal: legacyGroup.enc_pubkey,
-                                count: ClosedGroup.pubkeyByteLength
+                                count: SessionUtil.sizeLegacyGroupPubkeyBytes
                             ),
                             secretKey: Data(
                                 libSessionVal: legacyGroup.enc_seckey,
-                                count: ClosedGroup.secretKeyByteLength
+                                count: SessionUtil.sizeLegacyGroupSecretKeyBytes
                             ),
-                            receivedTimestamp: (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000)
+                            receivedTimestamp: TimeInterval(
+                                (Double(SnodeAPI.currentOffsetTimestampMs(using: dependencies)) / 1000)
+                            )
                         ),
                         disappearingConfig: DisappearingMessagesConfiguration
                             .defaultWith(groupId)
@@ -98,6 +108,7 @@ internal extension SessionUtil {
                                     groupId: groupId,
                                     profileId: memberId,
                                     role: .standard,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
@@ -108,16 +119,45 @@ internal extension SessionUtil {
                                     groupId: groupId,
                                     profileId: memberId,
                                     role: .admin,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
                         priority: legacyGroup.priority,
-                        joinedAt: legacyGroup.joined_at
+                        joinedAt: TimeInterval(legacyGroup.joined_at)
+                    )
+                )
+            }
+            else if user_groups_it_is_group(groupsIterator, &group) {
+                let groupSessionId: String = String(libSessionVal: group.id)
+                
+                groups.append(
+                    GroupInfo(
+                        groupSessionId: groupSessionId,
+                        groupIdentityPrivateKey: (!group.have_secretkey ? nil :
+                            Data(
+                                libSessionVal: group.secretkey,
+                                count: SessionUtil.sizeGroupSecretKeyBytes,
+                                nullIfEmpty: true
+                            )
+                        ),
+                        name: String(libSessionVal: group.name),
+                        authData: (!group.have_auth_data ? nil :
+                            Data(
+                                libSessionVal: group.auth_data,
+                                count: SessionUtil.sizeGroupAuthDataBytes,
+                                nullIfEmpty: true
+                            )
+                        ),
+                        priority: group.priority,
+                        joinedAt: TimeInterval(group.joined_at),
+                        invited: group.invited,
+                        wasKickedFromGroup: ugroups_group_is_kicked(&group)
                     )
                 )
             }
             else {
-                SNLog("Ignoring unknown conversation type when iterating through volatile conversation info update")
+                SNLog("[SessionUtil] Ignoring unknown conversation type when iterating through volatile conversation info update")
             }
             
             user_groups_iterator_advance(groupsIterator)
@@ -149,7 +189,8 @@ internal extension SessionUtil {
                     roomToken: community.data.roomToken,
                     server: community.data.server,
                     publicKey: community.data.publicKey,
-                    calledFromConfigHandling: true
+                    calledFromConfig: .userGroups,
+                    using: dependencies
                 )
             
             if successfullyAddedGroup {
@@ -159,7 +200,8 @@ internal extension SessionUtil {
                         roomToken: community.data.roomToken,
                         server: community.data.server,
                         publicKey: community.data.publicKey,
-                        calledFromConfigHandling: false
+                        calledFromConfig: nil,   // Happens after the transaction so don't provide
+                        using: dependencies
                     )
                     .subscribe(on: OpenGroupAPI.workQueue)
                     .sinkUntilComplete()
@@ -171,9 +213,11 @@ internal extension SessionUtil {
             if existingThreadInfo[community.data.threadId]?.pinnedPriority != community.priority {
                 _ = try? SessionThread
                     .filter(id: community.data.threadId)
-                    .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                    .updateAllAndConfig(
                         db,
-                        SessionThread.Columns.pinnedPriority.set(to: community.priority)
+                        SessionThread.Columns.pinnedPriority.set(to: community.priority),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
                     )
             }
         }
@@ -185,7 +229,7 @@ internal extension SessionUtil {
             .subtracting(communities.map { $0.data.threadId })
         
         if !communityIdsToRemove.isEmpty {
-            SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove))
+            SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(
@@ -193,7 +237,8 @@ internal extension SessionUtil {
                     threadIds: Array(communityIdsToRemove),
                     threadVariant: .community,
                     groupLeaveType: .forced,
-                    calledFromConfigHandling: true
+                    calledFromConfig: .userGroups,
+                    using: dependencies
                 )
         }
         
@@ -218,14 +263,14 @@ internal extension SessionUtil {
                 let lastKeyPair: ClosedGroupKeyPair = group.lastKeyPair,
                 let members: [GroupMember] = group.groupMembers,
                 let updatedAdmins: Set<GroupMember> = group.groupAdmins?.asSet(),
-                let joinedAt: Int64 = group.joinedAt
+                let joinedAt: TimeInterval = group.joinedAt
             else { return }
             
             if !existingLegacyGroupIds.contains(group.id) {
                 // Add a new group if it doesn't already exist
-                try MessageReceiver.handleNewClosedGroup(
+                try MessageReceiver.handleNewLegacyClosedGroup(
                     db,
-                    groupPublicKey: group.id,
+                    legacyGroupSessionId: group.id,
                     name: name,
                     encryptionKeyPair: KeyPair(
                         publicKey: lastKeyPair.publicKey.bytes,
@@ -237,8 +282,8 @@ internal extension SessionUtil {
                         .map { $0.profileId },
                     admins: updatedAdmins.map { $0.profileId },
                     expirationTimer: UInt32(group.disappearingConfig?.durationSeconds ?? 0),
-                    formationTimestampMs: UInt64((group.joinedAt.map { $0 * 1000 } ?? latestConfigSentTimestampMs)),
-                    calledFromConfigHandling: true,
+                    formationTimestamp: TimeInterval((group.joinedAt ?? (Double(serverTimestampMs) / 1000))),
+                    calledFromConfig: .userGroups,
                     using: dependencies
                 )
             }
@@ -257,9 +302,11 @@ internal extension SessionUtil {
                 if !groupChanges.isEmpty {
                     _ = try? ClosedGroup
                         .filter(id: group.id)
-                        .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                        .updateAllAndConfig(
                             db,
-                            groupChanges
+                            groupChanges,
+                            calledFromConfig: .userGroups,
+                            using: dependencies
                         )
                 }
                 
@@ -282,7 +329,8 @@ internal extension SessionUtil {
                         .saved(db)
                         .clearUnrelatedControlMessages(
                             db,
-                            threadVariant: .legacyGroup
+                            threadVariant: .legacyGroup,
+                            using: dependencies
                         )
                 }
                 
@@ -294,6 +342,7 @@ internal extension SessionUtil {
                                 groupId: admin.groupId,
                                 profileId: admin.profileId,
                                 role: .standard,
+                                roleStatus: .accepted,  // Legacy group members don't have role statuses
                                 isHidden: false
                             )
                         }
@@ -307,7 +356,7 @@ internal extension SessionUtil {
                     existingMembers != updatedMembers
                 {
                     // Add in any new members and remove any removed members
-                    try updatedMembers.forEach { try $0.save(db) }
+                    try updatedMembers.forEach { try $0.upsert(db) }
                     try existingMembers
                         .filter { !updatedMembers.contains($0) }
                         .forEach { member in
@@ -330,7 +379,7 @@ internal extension SessionUtil {
                     existingAdmins != updatedAdmins
                 {
                     // Add in any new admins and remove any removed admins
-                    try updatedAdmins.forEach { try $0.save(db) }
+                    try updatedAdmins.forEach { try $0.upsert(db) }
                     try existingAdmins
                         .filter { !updatedAdmins.contains($0) }
                         .forEach { member in
@@ -349,9 +398,11 @@ internal extension SessionUtil {
             if existingThreadInfo[group.id]?.pinnedPriority != group.priority {
                 _ = try? SessionThread
                     .filter(id: group.id)
-                    .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                    .updateAllAndConfig(
                         db,
-                        SessionThread.Columns.pinnedPriority.set(to: group.priority)
+                        SessionThread.Columns.pinnedPriority.set(to: group.priority),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
                     )
             }
         }
@@ -361,7 +412,7 @@ internal extension SessionUtil {
             .subtracting(legacyGroups.map { $0.id })
         
         if !legacyGroupIdsToRemove.isEmpty {
-            SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: Array(legacyGroupIdsToRemove))
+            SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: Array(legacyGroupIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(
@@ -369,12 +420,135 @@ internal extension SessionUtil {
                     threadIds: Array(legacyGroupIdsToRemove),
                     threadVariant: .legacyGroup,
                     groupLeaveType: .forced,
-                    calledFromConfigHandling: true
+                    calledFromConfig: .userGroups,
+                    using: dependencies
                 )
         }
         
         // MARK: -- Handle Group Changes
         
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
+        let existingGroupSessionIds: Set<String> = Set(existingThreadInfo
+            .filter { $0.value.variant == .group }
+            .keys)
+        let existingGroups: [String: ClosedGroup] = (try? ClosedGroup
+            .fetchAll(db, ids: existingGroupSessionIds))
+            .defaulting(to: [])
+            .reduce(into: [:]) { result, next in result[next.id] = next }
+        
+        try groups.forEach { group in
+            switch (existingGroups[group.groupSessionId], existingGroupSessionIds.contains(group.groupSessionId)) {
+                case (.none, _), (_, false):
+                    // Add a new group if it doesn't already exist
+                    try MessageReceiver.handleNewGroup(
+                        db,
+                        groupSessionId: group.groupSessionId,
+                        groupIdentityPrivateKey: group.groupIdentityPrivateKey,
+                        name: group.name,
+                        authData: group.authData,
+                        joinedAt: TimeInterval(group.joinedAt ?? (Double(serverTimestampMs) / 1000)),
+                        invited: (group.invited == true),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
+                    )
+                    
+                    /// If the thread didn't already exist, or the user had previously been kicked but has since been re-added to the group, then insert
+                    /// a fallback 'invited' info message
+                    if existingGroups[group.groupSessionId] == nil || group.wasKickedFromGroup == true {
+                        _ = try Interaction(
+                            threadId: group.groupSessionId,
+                            authorId: group.groupSessionId,
+                            variant: .infoGroupInfoInvited,
+                            body: ClosedGroup.MessageInfo
+                                .invitedFallback(group.name ?? "GROUP_TITLE_FALLBACK".localized())
+                                .infoString(using: dependencies),
+                            timestampMs: (group.joinedAt.map { Int64(Double($0 * 1000)) } ?? serverTimestampMs),
+                            wasRead: SessionUtil.timestampAlreadyRead(
+                                threadId: group.groupSessionId,
+                                threadVariant: .group,
+                                timestampMs: (group.joinedAt.map { Int64(Double($0 * 1000)) } ?? serverTimestampMs),
+                                userSessionId: userSessionId,
+                                openGroup: nil,
+                                using: dependencies
+                            )
+                        ).inserted(db)
+                    }
+                    
+                case (.some(let existingGroup), _):
+                    let joinedAt: TimeInterval = (
+                        group.joinedAt.map { TimeInterval($0) } ??
+                        existingGroup.formationTimestamp
+                    )
+                    
+                    /// Otherwise update the existing group
+                    ///
+                    /// **Note:** We ignore the `name` value here as if it's an existing group then assume we will get the
+                    /// proper name by polling for the `GROUP_INFO` instead of via syncing the `USER_GROUPS` data
+                    let groupChanges: [ConfigColumnAssignment] = [
+                        (existingGroup.formationTimestamp == joinedAt ? nil :
+                            ClosedGroup.Columns.formationTimestamp.set(to: TimeInterval(joinedAt))
+                        ),
+                        (existingGroup.authData == group.authData ? nil :
+                            ClosedGroup.Columns.authData.set(to: group.authData)
+                        ),
+                        (existingGroup.groupIdentityPrivateKey == group.groupIdentityPrivateKey ? nil :
+                            ClosedGroup.Columns.groupIdentityPrivateKey.set(to: group.groupIdentityPrivateKey)
+                        ),
+                        (existingGroup.invited == group.invited ? nil :
+                            ClosedGroup.Columns.invited.set(to: (group.invited ?? false))
+                        )
+                    ].compactMap { $0 }
+
+                    // Apply any group changes
+                    if !groupChanges.isEmpty {
+                        _ = try? ClosedGroup
+                            .filter(id: group.groupSessionId)
+                            .updateAllAndConfig(
+                                db,
+                                groupChanges,
+                                calledFromConfig: .userGroups,
+                                using: dependencies
+                            )
+                    }
+            }
+
+            // Make any thread-specific changes if needed
+            if existingThreadInfo[group.groupSessionId]?.pinnedPriority != group.priority {
+                _ = try? SessionThread
+                    .filter(id: group.groupSessionId)
+                    .updateAllAndConfig(
+                        db,
+                        SessionThread.Columns.pinnedPriority.set(to: group.priority),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
+                    )
+            }
+        }
+        
+        // Remove any groups which are no longer in the config
+        let groupSessionIdsToRemove: Set<String> = existingGroupSessionIds
+            .subtracting(groups.map { $0.groupSessionId })
+        
+        if !groupSessionIdsToRemove.isEmpty {
+            SessionUtil.kickFromConversationUIIfNeeded(removedThreadIds: Array(groupSessionIdsToRemove), using: dependencies)
+            
+            try SessionThread
+                .deleteOrLeave(
+                    db,
+                    threadIds: Array(groupSessionIdsToRemove),
+                    threadVariant: .group,
+                    groupLeaveType: .forced,
+                    calledFromConfig: .userGroups
+                )
+            
+            groupSessionIdsToRemove.forEach { groupSessionId in
+                SessionUtil.removeGroupStateIfNeeded(
+                    db,
+                    groupSessionId: SessionId(.group, hex: groupSessionId),
+                    using: dependencies
+                )
+            }
+        }
     }
     
     fileprivate static func memberInfo(in legacyGroup: UnsafeMutablePointer<ugroups_legacy_group_info>) -> [String: Bool] {
@@ -398,9 +572,10 @@ internal extension SessionUtil {
     
     static func upsert(
         legacyGroups: [LegacyGroupInfo],
-        in conf: UnsafeMutablePointer<config_object>?
+        in config: Config?,
+        using dependencies: Dependencies
     ) throws {
-        guard conf != nil else { throw SessionUtilError.nilConfigObject }
+        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
         guard !legacyGroups.isEmpty else { return }
         
         try legacyGroups
@@ -409,7 +584,7 @@ internal extension SessionUtil {
                 guard let userGroup: UnsafeMutablePointer<ugroups_legacy_group_info> = user_groups_get_or_construct_legacy_group(conf, &cGroupId) else {
                     /// It looks like there are some situations where this object might not get created correctly (and
                     /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                    SNLog("Unable to upsert legacy group conversation to SessionUtil: \(SessionUtil.lastError(conf))")
+                    SNLog("Unable to upsert legacy group conversation to SessionUtil: \(config.lastError)")
                     throw SessionUtilError.getOrConstructFailedUnexpectedly
                 }
                 
@@ -491,7 +666,7 @@ internal extension SessionUtil {
                     }
                 }
                 
-                if let joinedAt: Int64 = legacyGroup.joinedAt {
+                if let joinedAt: Int64 = legacyGroup.joinedAt.map({ Int64($0) }) {
                     userGroup.pointee.joined_at = joinedAt
                 }
                 
@@ -504,10 +679,65 @@ internal extension SessionUtil {
     }
     
     static func upsert(
-        communities: [CommunityInfo],
-        in conf: UnsafeMutablePointer<config_object>?
+        groups: [GroupInfo],
+        in config: Config?,
+        using dependencies: Dependencies
     ) throws {
-        guard conf != nil else { throw SessionUtilError.nilConfigObject }
+        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+        guard !groups.isEmpty else { return }
+        
+        try groups
+            .forEach { group in
+                var cGroupSessionId: [CChar] = group.groupSessionId.cArray.nullTerminated()
+                var userGroup: ugroups_group_info = ugroups_group_info()
+                
+                guard user_groups_get_or_construct_group(conf, &userGroup, &cGroupSessionId) else {
+                    /// It looks like there are some situations where this object might not get created correctly (and
+                    /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+                    SNLog("Unable to upsert group conversation to SessionUtil: \(String(describing: config.lastError))")
+                    throw SessionUtilError.getOrConstructFailedUnexpectedly
+                }
+                
+                /// Assign the non-admin auth data (if it exists)
+                if let authData: Data = group.authData {
+                    userGroup.auth_data = authData.toLibSession()
+                    userGroup.have_auth_data = true
+                }
+
+                /// Assign the admin key (if it exists)
+                ///
+                /// **Note:** We do this after assigning the `auth_data` as generally the values are mutually
+                /// exclusive and if we have a `groupIdentityPrivateKey` we want that to take priority
+                if let privateKey: Data = group.groupIdentityPrivateKey {
+                    userGroup.secretkey = privateKey.toLibSession()
+                    userGroup.have_secretkey = true
+
+                    // Store the updated group (needs to happen before variables go out of scope)
+                    user_groups_set_group(conf, &userGroup)
+                }
+                
+                /// Assign the group name
+                if let name: String = group.name {
+                    userGroup.name = name.toLibSession()
+                    
+                    // Store the updated group (needs to happen before variables go out of scope)
+                    user_groups_set_group(conf, &userGroup)
+                }
+
+                // Store the updated group (can't be sure if we made any changes above)
+                userGroup.invited = (group.invited ?? userGroup.invited)
+                userGroup.joined_at = (group.joinedAt.map { Int64($0) } ?? userGroup.joined_at)
+                userGroup.priority = (group.priority ?? userGroup.priority)
+                user_groups_set_group(conf, &userGroup)
+            }
+    }
+    
+    static func upsert(
+        communities: [CommunityInfo],
+        in config: Config?,
+        using dependencies: Dependencies
+    ) throws {
+        guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
         guard !communities.isEmpty else { return }
         
         try communities
@@ -520,13 +750,52 @@ internal extension SessionUtil {
                 guard user_groups_get_or_construct_community(conf, &userCommunity, &cBaseUrl, &cRoom, &cPubkey) else {
                     /// It looks like there are some situations where this object might not get created correctly (and
                     /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
-                    SNLog("Unable to upsert community conversation to SessionUtil: \(SessionUtil.lastError(conf))")
+                    SNLog("Unable to upsert community conversation to SessionUtil: \(String(describing: config.lastError))")
                     throw SessionUtilError.getOrConstructFailedUnexpectedly
                 }
                 
                 userCommunity.priority = (community.priority ?? userCommunity.priority)
                 user_groups_set_community(conf, &userCommunity)
             }
+    }
+    
+    @discardableResult static func updatingGroups<T>(
+        _ db: Database,
+        _ updated: [T],
+        using dependencies: Dependencies
+    ) throws -> [T] {
+        guard let updatedGroups: [ClosedGroup] = updated as? [ClosedGroup] else { throw StorageError.generic }
+        
+        // Exclude legacy groups as they aren't managed via SessionUtil
+        let targetGroups: [ClosedGroup] = updatedGroups
+            .filter { (try? SessionId(from: $0.id))?.prefix == .group }
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
+        
+        // If we only updated the current user contact then no need to continue
+        guard !targetGroups.isEmpty else { return updated }
+        
+        // Apply the changes
+        try SessionUtil.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: userSessionId,
+            using: dependencies
+        ) { config in
+            try upsert(
+                groups: targetGroups.map { group -> GroupInfo in
+                    GroupInfo(
+                        groupSessionId: group.threadId,
+                        groupIdentityPrivateKey: group.groupIdentityPrivateKey,
+                        name: group.name,
+                        authData: group.authData
+                    )
+                },
+                in: config,
+                using: dependencies
+            )
+        }
+        
+        return updated
     }
 }
 
@@ -540,13 +809,15 @@ public extension SessionUtil {
         _ db: Database,
         server: String,
         rootToken: String,
-        publicKey: String
+        publicKey: String,
+        using dependencies: Dependencies
     ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
             try SessionUtil.upsert(
                 communities: [
                     CommunityInfo(
@@ -558,17 +829,26 @@ public extension SessionUtil {
                         )
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
-    static func remove(_ db: Database, server: String, roomToken: String) throws {
+    static func remove(
+        _ db: Database,
+        server: String,
+        roomToken: String,
+        using dependencies: Dependencies
+    ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
             var cBaseUrl: [CChar] = server.cArray.nullTerminated()
             var cRoom: [CChar] = roomToken.cArray.nullTerminated()
             
@@ -586,7 +866,8 @@ public extension SessionUtil {
                     roomToken: roomToken,
                     publicKey: ""
                 )
-            ]
+            ],
+            using: dependencies
         )
     }
     
@@ -594,24 +875,27 @@ public extension SessionUtil {
     
     static func add(
         _ db: Database,
-        groupPublicKey: String,
+        legacyGroupSessionId: String,
         name: String,
         latestKeyPairPublicKey: Data,
         latestKeyPairSecretKey: Data,
         latestKeyPairReceivedTimestamp: TimeInterval,
         disappearingConfig: DisappearingMessagesConfiguration,
         members: Set<String>,
-        admins: Set<String>
+        admins: Set<String>,
+        formationTimestamp: TimeInterval,
+        using dependencies: Dependencies
     ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
-            guard conf != nil else { throw SessionUtilError.nilConfigObject }
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
             
-            var cGroupId: [CChar] = groupPublicKey.cArray.nullTerminated()
-            let userGroup: UnsafeMutablePointer<ugroups_legacy_group_info>? = user_groups_get_legacy_group(conf, &cGroupId)
+            var cGroupSessionId: [CChar] = legacyGroupSessionId.cArray.nullTerminated()
+            let userGroup: UnsafeMutablePointer<ugroups_legacy_group_info>? = user_groups_get_legacy_group(conf, &cGroupSessionId)
             
             // Need to make sure the group doesn't already exist (otherwise we will end up overriding the
             // content which could revert newer changes since this can be triggered from other 'NEW' messages
@@ -624,10 +908,10 @@ public extension SessionUtil {
             try SessionUtil.upsert(
                 legacyGroups: [
                     LegacyGroupInfo(
-                        id: groupPublicKey,
+                        id: legacyGroupSessionId,
                         name: name,
                         lastKeyPair: ClosedGroupKeyPair(
-                            threadId: groupPublicKey,
+                            threadId: legacyGroupSessionId,
                             publicKey: latestKeyPairPublicKey,
                             secretKey: latestKeyPairSecretKey,
                             receivedTimestamp: latestKeyPairReceivedTimestamp
@@ -636,83 +920,94 @@ public extension SessionUtil {
                         groupMembers: members
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .standard,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
                         groupAdmins: admins
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .admin,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
-                            }
+                            },
+                        joinedAt: formationTimestamp
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
     static func update(
         _ db: Database,
-        groupPublicKey: String,
+        legacyGroupSessionId: String,
         name: String? = nil,
         latestKeyPair: ClosedGroupKeyPair? = nil,
         disappearingConfig: DisappearingMessagesConfiguration? = nil,
         members: Set<String>? = nil,
-        admins: Set<String>? = nil
+        admins: Set<String>? = nil,
+        using dependencies: Dependencies
     ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
             try SessionUtil.upsert(
                 legacyGroups: [
                     LegacyGroupInfo(
-                        id: groupPublicKey,
+                        id: legacyGroupSessionId,
                         name: name,
                         lastKeyPair: latestKeyPair,
                         disappearingConfig: disappearingConfig,
                         groupMembers: members?
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .standard,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
                         groupAdmins: admins?
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .admin,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             }
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
     static func batchUpdate(
         _ db: Database,
-        disappearingConfigs: [DisappearingMessagesConfiguration]
+        disappearingConfigs: [DisappearingMessagesConfiguration],
+        using dependencies: Dependencies
     ) throws {
         try SessionUtil.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
             try SessionUtil.upsert(
                 legacyGroups: disappearingConfigs.map {
                     LegacyGroupInfo(
@@ -720,19 +1015,27 @@ public extension SessionUtil {
                         disappearingConfig: $0
                     )
                 },
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
-    static func remove(_ db: Database, legacyGroupIds: [String]) throws {
+    static func remove(
+        _ db: Database,
+        legacyGroupIds: [String],
+        using dependencies: Dependencies
+    ) throws {
         guard !legacyGroupIds.isEmpty else { return }
         
         try SessionUtil.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
             legacyGroupIds.forEach { threadId in
                 var cGroupId: [CChar] = threadId.cArray.nullTerminated()
                 
@@ -742,14 +1045,148 @@ public extension SessionUtil {
         }
         
         // Remove the volatile info as well
-        try SessionUtil.remove(db, volatileLegacyGroupIds: legacyGroupIds)
+        try SessionUtil.remove(db, volatileLegacyGroupIds: legacyGroupIds, using: dependencies)
     }
     
     // MARK: -- Group Changes
     
-    static func remove(_ db: Database, groupIds: [String]) throws {
-        guard !groupIds.isEmpty else { return }
+    static func add(
+        _ db: Database,
+        groupSessionId: String,
+        groupIdentityPrivateKey: Data?,
+        name: String?,
+        authData: Data?,
+        joinedAt: TimeInterval,
+        invited: Bool,
+        using dependencies: Dependencies
+    ) throws {
+        try SessionUtil.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            try SessionUtil.upsert(
+                groups: [
+                    GroupInfo(
+                        groupSessionId: groupSessionId,
+                        groupIdentityPrivateKey: groupIdentityPrivateKey,
+                        name: name,
+                        authData: authData,
+                        joinedAt: joinedAt,
+                        invited: invited
+                    )
+                ],
+                in: config,
+                using: dependencies
+            )
+        }
+    }
+    
+    static func update(
+        _ db: Database,
+        groupSessionId: String,
+        groupIdentityPrivateKey: Data? = nil,
+        name: String? = nil,
+        authData: Data? = nil,
+        invited: Bool? = nil,
+        using dependencies: Dependencies
+    ) throws {
+        try SessionUtil.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            try SessionUtil.upsert(
+                groups: [
+                    GroupInfo(
+                        groupSessionId: groupSessionId,
+                        groupIdentityPrivateKey: groupIdentityPrivateKey,
+                        name: name,
+                        authData: authData,
+                        invited: invited
+                    )
+                ],
+                in: config,
+                using: dependencies
+            )
+        }
+    }
+    
+    static func markAsKicked(
+        _ db: Database,
+        groupSessionIds: [String],
+        using dependencies: Dependencies
+    ) throws {
+        guard !groupSessionIds.isEmpty else { return }
         
+        try SessionUtil.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
+            groupSessionIds.forEach { groupSessionId in
+                var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
+                var userGroup: ugroups_group_info = ugroups_group_info()
+                
+                guard user_groups_get_group(conf, &userGroup, &cGroupSessionId) else { return }
+                
+                ugroups_group_set_kicked(&userGroup)
+                user_groups_set_group(conf, &userGroup)
+            }
+        }
+    }
+    
+    static func wasKickedFromGroup(
+        groupSessionId: SessionId,
+        using dependencies: Dependencies = Dependencies()
+    ) -> Bool {
+        return (try? dependencies[cache: .sessionUtil]
+            .config(for: .userGroups, sessionId: getUserSessionId(using: dependencies))
+            .wrappedValue
+            .map { config in
+                guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+                
+                var cGroupId: [CChar] = groupSessionId.hexString.cArray.nullTerminated()
+                var userGroup: ugroups_group_info = ugroups_group_info()
+                
+                // If the group doesn't exist then assume the user hasn't been kicked
+                guard user_groups_get_group(conf, &userGroup, &cGroupId) else { return false }
+                
+                return ugroups_group_is_kicked(&userGroup)
+            })
+            .defaulting(to: false)
+    }
+    
+    static func remove(
+        _ db: Database,
+        groupSessionIds: [String],
+        using dependencies: Dependencies
+    ) throws {
+        guard !groupSessionIds.isEmpty else { return }
+        
+        try SessionUtil.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: getUserSessionId(db, using: dependencies),
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw SessionUtilError.invalidConfigObject }
+            
+            groupSessionIds.forEach { groupSessionId in
+                var cGroupSessionId: [CChar] = groupSessionId.cArray.nullTerminated()
+
+                // Don't care if the group doesn't exist
+                user_groups_erase_group(conf, &cGroupSessionId)
+            }
+        }
+        
+        // Remove the volatile info as well
+        try SessionUtil.remove(db, volatileGroupSessionIds: groupSessionIds, using: dependencies)
     }
 }
 
@@ -757,13 +1194,6 @@ public extension SessionUtil {
 
 extension SessionUtil {
     struct LegacyGroupInfo: Decodable, FetchableRecord, ColumnExpressible {
-        private static let threadIdKey: SQL = SQL(stringLiteral: CodingKeys.threadId.stringValue)
-        private static let nameKey: SQL = SQL(stringLiteral: CodingKeys.name.stringValue)
-        private static let lastKeyPairKey: SQL = SQL(stringLiteral: CodingKeys.lastKeyPair.stringValue)
-        private static let disappearingConfigKey: SQL = SQL(stringLiteral: CodingKeys.disappearingConfig.stringValue)
-        private static let priorityKey: SQL = SQL(stringLiteral: CodingKeys.priority.stringValue)
-        private static let joinedAtKey: SQL = SQL(stringLiteral: CodingKeys.joinedAt.stringValue)
-        
         typealias Columns = CodingKeys
         enum CodingKeys: String, CodingKey, ColumnExpression, CaseIterable {
             case threadId
@@ -785,7 +1215,7 @@ extension SessionUtil {
         let groupMembers: [GroupMember]?
         let groupAdmins: [GroupMember]?
         let priority: Int32?
-        let joinedAt: Int64?
+        let joinedAt: TimeInterval?
         
         init(
             id: String,
@@ -795,7 +1225,7 @@ extension SessionUtil {
             groupMembers: [GroupMember]? = nil,
             groupAdmins: [GroupMember]? = nil,
             priority: Int32? = nil,
-            joinedAt: Int64? = nil
+            joinedAt: TimeInterval? = nil
         ) {
             self.threadId = id
             self.name = name
@@ -810,15 +1240,11 @@ extension SessionUtil {
         static func fetchAll(_ db: Database) throws -> [LegacyGroupInfo] {
             let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
-            let keyPair: TypedTableAlias<ClosedGroupKeyPair> = TypedTableAlias()
-            
-            let prefixLiteral: SQL = SQL(stringLiteral: "\(SessionId.Prefix.standard.rawValue)%")
-            let keyPairThreadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroupKeyPair.Columns.threadId.name)
-            let receivedTimestampColumnLiteral: SQL = SQL(stringLiteral: ClosedGroupKeyPair.Columns.receivedTimestamp.name)
-            let threadIdColumnLiteral: SQL = SQL(stringLiteral: DisappearingMessagesConfiguration.Columns.threadId.name)
+            let lastKeyPair: TypedTableAlias<ClosedGroupKeyPair> = TypedTableAlias(LegacyGroupInfo.self, column: .lastKeyPair)
+            let disappearingConfig: TypedTableAlias<DisappearingMessagesConfiguration> = TypedTableAlias(LegacyGroupInfo.self, column: .disappearingConfig)
             
             /// **Note:** The `numColumnsBeforeTypes` value **MUST** match the number of fields before
-            /// the `LegacyGroupInfo.lastKeyPairKey` entry below otherwise the query will fail to
+            /// the `lastKeyPair` entry below otherwise the query will fail to
             /// parse and might throw
             ///
             /// Explicitly set default values for the fields ignored for search results
@@ -826,28 +1252,28 @@ extension SessionUtil {
             
             let request: SQLRequest<LegacyGroupInfo> = """
                 SELECT
-                    \(closedGroup[.threadId]) AS \(LegacyGroupInfo.threadIdKey),
-                    \(closedGroup[.name]) AS \(LegacyGroupInfo.nameKey),
-                    \(closedGroup[.formationTimestamp]) AS \(LegacyGroupInfo.joinedAtKey),
-                    \(thread[.pinnedPriority]) AS \(LegacyGroupInfo.priorityKey),
-                    \(LegacyGroupInfo.lastKeyPairKey).*,
-                    \(LegacyGroupInfo.disappearingConfigKey).*
+                    \(closedGroup[.threadId]) AS \(LegacyGroupInfo.Columns.threadId),
+                    \(closedGroup[.name]) AS \(LegacyGroupInfo.Columns.name),
+                    \(closedGroup[.formationTimestamp]) AS \(LegacyGroupInfo.Columns.joinedAt),
+                    \(thread[.pinnedPriority]) AS \(LegacyGroupInfo.Columns.priority),
+                    \(lastKeyPair.allColumns),
+                    \(disappearingConfig.allColumns)
                 
                 FROM \(ClosedGroup.self)
                 JOIN \(SessionThread.self) ON \(thread[.id]) = \(closedGroup[.threadId])
                 LEFT JOIN (
                     SELECT
-                        \(keyPair[.threadId]),
-                        \(keyPair[.publicKey]),
-                        \(keyPair[.secretKey]),
-                        MAX(\(keyPair[.receivedTimestamp])) AS \(receivedTimestampColumnLiteral),
-                        \(keyPair[.threadKeyPairHash])
-                    FROM \(ClosedGroupKeyPair.self)
-                    GROUP BY \(keyPair[.threadId])
-                ) AS \(LegacyGroupInfo.lastKeyPairKey) ON \(LegacyGroupInfo.lastKeyPairKey).\(keyPairThreadIdColumnLiteral) = \(closedGroup[.threadId])
-                LEFT JOIN \(DisappearingMessagesConfiguration.self) AS \(LegacyGroupInfo.disappearingConfigKey) ON \(LegacyGroupInfo.disappearingConfigKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
+                        \(lastKeyPair[.threadId]),
+                        \(lastKeyPair[.publicKey]),
+                        \(lastKeyPair[.secretKey]),
+                        MAX(\(lastKeyPair[.receivedTimestamp])) AS \(ClosedGroupKeyPair.Columns.receivedTimestamp),
+                        \(lastKeyPair[.threadKeyPairHash])
+                    FROM \(lastKeyPair)
+                    GROUP BY \(lastKeyPair[.threadId])
+                ) \(lastKeyPair, asSubquery: true) ON \(lastKeyPair[.threadId]) = \(closedGroup[.threadId])
+                LEFT JOIN \(disappearingConfig) ON \(disappearingConfig[.threadId]) = \(closedGroup[.threadId])
                 
-                WHERE \(SQL("\(closedGroup[.threadId]) LIKE '\(prefixLiteral)'"))
+                WHERE \(closedGroup[.threadId]) LIKE '\(SessionId.Prefix.standard)%'
             """
             
             let legacyGroupInfoNoMembers: [LegacyGroupInfo] = try request
@@ -858,9 +1284,9 @@ extension SessionUtil {
                         DisappearingMessagesConfiguration.numberOfSelectedColumns(db)
                     ])
                     
-                    return ScopeAdapter([
-                        CodingKeys.lastKeyPair.stringValue: adapters[1],
-                        CodingKeys.disappearingConfig.stringValue: adapters[2]
+                    return ScopeAdapter.with(LegacyGroupInfo.self, [
+                        .lastKeyPair: adapters[1],
+                        .disappearingConfig: adapters[2]
                     ])
                 }
                 .fetchAll(db)
@@ -887,7 +1313,46 @@ extension SessionUtil {
                 }
         }
     }
-    
+}
+
+// MARK: - GroupInfo
+
+extension SessionUtil {
+    struct GroupInfo {
+        let groupSessionId: String
+        let groupIdentityPrivateKey: Data?
+        let name: String?
+        let authData: Data?
+        let priority: Int32?
+        let joinedAt: TimeInterval?
+        let invited: Bool?
+        let wasKickedFromGroup: Bool?
+        
+        init(
+            groupSessionId: String,
+            groupIdentityPrivateKey: Data? = nil,
+            name: String? = nil,
+            authData: Data? = nil,
+            priority: Int32? = nil,
+            joinedAt: TimeInterval? = nil,
+            invited: Bool? = nil,
+            wasKickedFromGroup: Bool? = nil
+        ) {
+            self.groupSessionId = groupSessionId
+            self.groupIdentityPrivateKey = groupIdentityPrivateKey
+            self.name = name
+            self.authData = authData
+            self.priority = priority
+            self.joinedAt = joinedAt
+            self.invited = invited
+            self.wasKickedFromGroup = wasKickedFromGroup
+        }
+    }
+}
+
+// MARK: - CommunityInfo
+
+extension SessionUtil {
     struct CommunityInfo {
         let urlInfo: OpenGroupUrlInfo
         let priority: Int32?
@@ -900,13 +1365,21 @@ extension SessionUtil {
             self.priority = priority
         }
     }
-    
+}
+
+// MARK: - GroupThreadData
+
+extension SessionUtil {
     fileprivate struct GroupThreadData {
         let communities: [PrioritisedData<SessionUtil.OpenGroupUrlInfo>]
         let legacyGroups: [PrioritisedData<LegacyGroupInfo>]
-        let groups: [PrioritisedData<String>]
+        let groups: [PrioritisedData<GroupInfo>]
     }
-    
+}
+
+// MARK: - PrioritisedData
+
+extension SessionUtil {
     fileprivate struct PrioritisedData<T> {
         let data: T
         let priority: Int32

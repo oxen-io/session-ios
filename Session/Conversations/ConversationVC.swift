@@ -95,7 +95,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         return margin <= ConversationVC.scrollToBottomMargin
     }
 
-    lazy var mnemonic: String = { ((try? SeedVC.mnemonic()) ?? "") }()
+    lazy var mnemonic: String = { ((try? SeedVC.mnemonic(using: viewModel.dependencies)) ?? "") }()
 
     // FIXME: Would be good to create a Swift-based cache and replace this
     lazy var mediaCache: NSCache<NSString, AnyObject> = {
@@ -122,10 +122,9 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     var scrollButtonMessageRequestsBottomConstraint: NSLayoutConstraint?
     var messageRequestsViewBotomConstraint: NSLayoutConstraint?
     var messageRequestDescriptionLabelBottomConstraint: NSLayoutConstraint?
-    var emptyStateLabelTopConstraint: NSLayoutConstraint?
     
     lazy var titleView: ConversationTitleView = {
-        let result: ConversationTitleView = ConversationTitleView()
+        let result: ConversationTitleView = ConversationTitleView(using: viewModel.dependencies)
         let tapGestureRecognizer = UITapGestureRecognizer(
             target: self,
             action: #selector(handleTitleViewTapped)
@@ -168,7 +167,8 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
 
     lazy var snInputView: InputView = InputView(
         threadVariant: self.viewModel.initialThreadVariant,
-        delegate: self
+        delegate: self,
+        using: self.viewModel.dependencies
     )
 
     lazy var unreadCountView: UIView = {
@@ -194,7 +194,13 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     }()
     
     lazy var stateStackView: UIStackView = {
-        let result: UIStackView = UIStackView(arrangedSubviews: [ outdatedClientBanner, emptyStateLabelContainer ])
+        let result: UIStackView = UIStackView(arrangedSubviews: [
+            outdatedClientBanner,
+            legacyGroupsBanner,
+            blockedBanner,
+            emptyStatePaddingView,
+            emptyStateLabelContainer
+        ])
         result.axis = .vertical
         result.spacing = Values.smallSpacing
         result.alignment = .fill
@@ -203,35 +209,70 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     }()
     
     lazy var outdatedClientBanner: InfoBanner = {
-        let info: InfoBanner.Info = InfoBanner.Info(
-            message: String(format: "DISAPPEARING_MESSAGES_OUTDATED_CLIENT_BANNER".localized(), self.viewModel.threadData.displayName),
-            backgroundColor: .primary,
-            messageFont: .systemFont(ofSize: Values.verySmallFontSize),
-            messageTintColor: .messageBubble_outgoingText,
-            messageLabelAccessibilityLabel: "Outdated client banner text",
-            height: 40
+        let result: InfoBanner = InfoBanner(
+            info: InfoBanner.Info(
+                font: .systemFont(ofSize: Values.verySmallFontSize),
+                message: String(
+                    format: "DISAPPEARING_MESSAGES_OUTDATED_CLIENT_BANNER".localized(),
+                    self.viewModel.threadData.displayName
+                ),
+                icon: .close,
+                tintColor: .messageBubble_outgoingText,
+                backgroundColor: .primary,
+                accessibility: Accessibility(label: "Outdated client banner"),
+                labelAccessibility: Accessibility(label: "Outdated client banner text"),
+                height: 40,
+                onTap: { [weak self] in self?.removeOutdatedClientBanner() }
+            )
         )
-        let result: InfoBanner = InfoBanner(info: info, dismiss: self.removeOutdatedClientBanner)
-        result.accessibilityLabel = "Outdated client banner"
-        result.isAccessibilityElement = true
+        
+        return result
+    }()
+
+    lazy var legacyGroupsBanner: InfoBanner = {
+        let result: InfoBanner = InfoBanner(
+            info: InfoBanner.Info(
+                font: .systemFont(ofSize: Values.miniFontSize),
+                message: String(
+                    format: "LEGACY_GROUPS_DEPRECATED_BANNER".localized(),
+                    Features.legacyGroupDepricationDate.formattedForBanner
+                ),
+                icon: .link,
+                tintColor: .messageBubble_outgoingText,
+                backgroundColor: .primary,
+                accessibility: Accessibility(label: "Legacy group banner"),
+                labelAccessibility: Accessibility(label: "Legacy group banner text"),
+                height: nil,
+                onTap: { [weak self] in self?.openUrl("https://getsession.org/faq") }
+            )
+        )
+        result.isHidden = (self.viewModel.threadData.threadVariant != .legacyGroup)
         
         return result
     }()
 
     lazy var blockedBanner: InfoBanner = {
-        let info: InfoBanner.Info = InfoBanner.Info(
-            message: self.viewModel.blockedBannerMessage,
-            backgroundColor: .danger,
-            messageFont: .boldSystemFont(ofSize: Values.smallFontSize),
-            messageTintColor: .textPrimary,
-            messageLabelAccessibilityLabel: "Blocked banner text",
-            height: 54
+        let result: InfoBanner = InfoBanner(
+            info: InfoBanner.Info(
+                font: .boldSystemFont(ofSize: Values.smallFontSize),
+                message: self.viewModel.blockedBannerMessage,
+                icon: .none,
+                tintColor: .textPrimary,
+                backgroundColor: .danger,
+                accessibility: Accessibility(label: "Blocked banner"),
+                labelAccessibility: Accessibility(label: "Blocked banner text"),
+                height: 54,
+                onTap: { [weak self] in self?.unblock() }
+            )
         )
-        let result: InfoBanner = InfoBanner(info: info)
-        result.accessibilityLabel = "Blocked banner"
-        result.isAccessibilityElement = true
-        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(unblock))
-        result.addGestureRecognizer(tapGestureRecognizer)
+        result.isHidden = true
+        
+        return result
+    }()
+    
+    private lazy var emptyStatePaddingView: UIView = {
+        let result: UIView = UIView()
+        result.set(.height, to: Values.largeSpacing)
         
         return result
     }()
@@ -246,11 +287,10 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     }()
     
     private lazy var emptyStateLabel: UILabel = {
-        let text: String = emptyStateText(for: viewModel.threadData)
+        let text: String = viewModel.threadData.emptyStateText(using: viewModel.dependencies)
         let result: UILabel = UILabel()
         result.isAccessibilityElement = true
-        result.accessibilityIdentifier = "Empty state label"
-        result.accessibilityLabel = "Empty state label"
+        result.accessibilityIdentifier = "Control message"
         result.translatesAutoresizingMaskIntoConstraints = false
         result.font = .systemFont(ofSize: Values.verySmallFontSize)
         result.attributedText = NSAttributedString(string: text)
@@ -331,10 +371,14 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         result.translatesAutoresizingMaskIntoConstraints = false
         result.setContentCompressionResistancePriority(.required, for: .vertical)
         result.font = UIFont.systemFont(ofSize: 12)
-        result.text = (self.viewModel.threadData.threadRequiresApproval == false ?
-            "MESSAGE_REQUESTS_INFO".localized() :
-            "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
-        )
+        result.text = {
+            switch (self.viewModel.threadData.threadVariant, self.viewModel.threadData.threadRequiresApproval) {
+                case (.contact, false): return "MESSAGE_REQUESTS_INFO".localized()
+                case (.contact, true): return "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
+                case (.group, _): return "GROUP_MESSAGE_REQUEST_INFO".localized()
+                default: return nil
+            }
+        }()
         result.themeTextColor = .textSecondary
         result.textAlignment = .center
         result.numberOfLines = 0
@@ -377,6 +421,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     
     private lazy var messageRequestBlockButton: UIButton = {
         let result: UIButton = UIButton()
+        result.accessibilityIdentifier = "Block"
         result.accessibilityLabel = "Block message request"
         result.translatesAutoresizingMaskIntoConstraints = false
         result.clipsToBounds = true
@@ -405,10 +450,20 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
 
     // MARK: - Initialization
     
-    init(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionInfo: Interaction.TimestampInfo? = nil) {
-        self.viewModel = ConversationViewModel(threadId: threadId, threadVariant: threadVariant, focusedInteractionInfo: focusedInteractionInfo)
+    init(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedInteractionInfo: Interaction.TimestampInfo? = nil,
+        using dependencies: Dependencies
+    ) {
+        self.viewModel = ConversationViewModel(
+            threadId: threadId,
+            threadVariant: threadVariant,
+            focusedInteractionInfo: focusedInteractionInfo,
+            using: dependencies
+        )
         
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
         
         super.init(nibName: nil, bundle: nil)
     }
@@ -440,7 +495,8 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         )
         titleView.initialSetup(
             with: self.viewModel.initialThreadVariant,
-            isNoteToSelf: self.viewModel.threadData.threadIsNoteToSelf
+            isNoteToSelf: self.viewModel.threadData.threadIsNoteToSelf,
+            isMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true)
         )
         
         // Constraints
@@ -456,7 +512,6 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         stateStackView.pin(.top, to: .top, of: view, withInset: 0)
         stateStackView.pin(.leading, to: .leading, of: view, withInset: 0)
         stateStackView.pin(.trailing, to: .trailing, of: view, withInset: 0)
-        self.emptyStateLabelTopConstraint = emptyStateLabel.pin(.top, to: .top, of: emptyStateLabelContainer, withInset: Values.largeSpacing)
         
         messageRequestStackView.addArrangedSubview(messageRequestBlockButton)
         messageRequestStackView.addArrangedSubview(messageRequestDescriptionContainerView)
@@ -622,10 +677,11 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             !SessionUtil.conversationInConfig(
                 threadId: threadId,
                 threadVariant: viewModel.threadData.threadVariant,
-                visibleOnly: false
+                visibleOnly: false,
+                using: viewModel.dependencies
             )
         {
-            Storage.shared.writeAsync { db in
+            viewModel.dependencies[singleton: .storage].writeAsync { db in
                 _ = try SessionThread   // Intentionally use `deleteAll` here instead of `deleteOrLeave`
                     .filter(id: threadId)
                     .deleteAll(db)
@@ -660,20 +716,20 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     private func startObservingChanges(didReturnFromBackground: Bool = false) {
         guard dataChangeObservable == nil else { return }
         
-        dataChangeObservable = Storage.shared.start(
+        dataChangeObservable = viewModel.dependencies[singleton: .storage].start(
             viewModel.observableThreadData,
             onError:  { _ in },
-            onChange: { [weak self] maybeThreadData in
+            onChange: { [weak self, dependencies = viewModel.dependencies] maybeThreadData in
                 guard let threadData: SessionThreadViewModel = maybeThreadData else {
                     // If the thread data is null and the id was blinded then we just unblinded the thread
                     // and need to swap over to the new one
                     guard
                         let sessionId: String = self?.viewModel.threadData.threadId,
                         (
-                            SessionId.Prefix(from: sessionId) == .blinded15 ||
-                            SessionId.Prefix(from: sessionId) == .blinded25
+                            (try? SessionId.Prefix(from: sessionId)) == .blinded15 ||
+                            (try? SessionId.Prefix(from: sessionId)) == .blinded25
                         ),
-                        let blindedLookup: BlindedIdLookup = Storage.shared.read({ db in
+                        let blindedLookup: BlindedIdLookup = dependencies[singleton: .storage].read({ db in
                             try BlindedIdLookup
                                 .filter(id: sessionId)
                                 .fetchOne(db)
@@ -697,14 +753,14 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                     
                     // Stop observing changes
                     self?.stopObservingChanges()
-                    Storage.shared.removeObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].removeObserver(self?.viewModel.pagedDataObserver)
                     
                     // Swap the observing to the updated thread
                     let newestVisibleMessageId: Int64? = self?.fullyVisibleCellViewModels()?.last?.id
                     self?.viewModel.swapToThread(updatedThreadId: unblindedId, focussedMessageId: newestVisibleMessageId)
                     
                     // Start observing changes again
-                    Storage.shared.addObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].addObserver(self?.viewModel.pagedDataObserver)
                     self?.startObservingChanges()
                     return
                 }
@@ -735,24 +791,6 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     func stopObservingChanges() {
         self.dataChangeObservable = nil
         self.viewModel.onInteractionChange = nil
-    }
-    
-    private func emptyStateText(for threadData: SessionThreadViewModel) -> String {
-        return String(
-            format: {
-                switch (threadData.threadIsNoteToSelf, threadData.canWrite) {
-                    case (true, _): return "CONVERSATION_EMPTY_STATE_NOTE_TO_SELF".localized()
-                    case (_, false):
-                        return (threadData.profile?.blocksCommunityMessageRequests == true ?
-                            "COMMUNITY_MESSAGE_REQUEST_DISABLED_EMPTY_STATE".localized() :
-                            "CONVERSATION_EMPTY_STATE_READ_ONLY".localized()
-                        )
-                       
-                    default: return "CONVERSATION_EMPTY_STATE".localized()
-                }
-            }(),
-            threadData.displayName
-        )
     }
     
     private func handleThreadUpdates(_ updatedThreadData: SessionThreadViewModel, initialLoad: Bool = false) {
@@ -789,6 +827,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             titleView.update(
                 with: updatedThreadData.displayName,
                 isNoteToSelf: updatedThreadData.threadIsNoteToSelf,
+                isMessageRequest: (updatedThreadData.threadIsMessageRequest == true),
                 threadVariant: updatedThreadData.threadVariant,
                 mutedUntilTimestamp: updatedThreadData.threadMutedUntilTimestamp,
                 onlyNotifyForMentions: (updatedThreadData.threadOnlyNotifyForMentions == true),
@@ -797,7 +836,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             )
             
             // Update the empty state
-            let text: String = emptyStateText(for: updatedThreadData)
+            let text: String = updatedThreadData.emptyStateText(using: viewModel.dependencies)
             emptyStateLabel.attributedText = NSAttributedString(string: text)
                 .adding(
                     attributes: [.font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize)],
@@ -822,10 +861,14 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 initialIsBlocked: (viewModel.threadData.threadIsBlocked == true)
             )
             
-            messageRequestDescriptionLabel.text = (updatedThreadData.threadRequiresApproval == false ?
-                "MESSAGE_REQUESTS_INFO".localized() :
-                "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
-            )
+            messageRequestDescriptionLabel.text = {
+                switch (updatedThreadData.threadVariant, updatedThreadData.threadRequiresApproval) {
+                    case (.contact, false): return "MESSAGE_REQUESTS_INFO".localized()
+                    case (.contact, true): return "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
+                    case (.group, _): return "GROUP_MESSAGE_REQUEST_INFO".localized()
+                    default: return nil
+                }
+            }()
             
             let messageRequestsViewWasVisible: Bool = (
                 messageRequestStackView.isHidden == false
@@ -833,7 +876,10 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             
             UIView.animate(withDuration: 0.3) { [weak self] in
                 self?.messageRequestBlockButton.isHidden = (
-                    self?.viewModel.threadData.threadVariant != .contact ||
+                    (
+                        self?.viewModel.threadData.threadVariant != .contact &&
+                        self?.viewModel.threadData.threadVariant != .group
+                    ) ||
                     updatedThreadData.threadRequiresApproval == true
                 )
                 self?.messageRequestActionStackView.isHidden = (
@@ -902,10 +948,12 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         }
         
         // Now we have done all the needed diffs update the viewModel with the latest data
+        let oldCanWrite: Bool = viewModel.threadData.canWrite
         self.viewModel.updateThreadData(updatedThreadData)
         
-        /// **Note:** This needs to happen **after** we have update the viewModel's thread data
-        if initialLoad || viewModel.threadData.currentUserIsClosedGroupMember != updatedThreadData.currentUserIsClosedGroupMember {
+        /// **Note:** This needs to happen **after** we have update the viewModel's thread data (otherwise the `inputAccessoryView`
+        /// won't be generated correctly)
+        if initialLoad || oldCanWrite != updatedThreadData.canWrite {
             if !self.isFirstResponder {
                 self.becomeFirstResponder()
             }
@@ -1394,7 +1442,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                     profilePictureView.update(
                         publicKey: threadData.threadId,  // Contact thread uses the contactId
                         threadVariant: threadData.threadVariant,
-                        customImageData: nil,
+                        displayPictureFilename: nil,
                         profile: threadData.profile,
                         additionalProfile: nil
                     )
@@ -1533,12 +1581,15 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     ) {
         let currentDisappearingMessagesConfiguration: DisappearingMessagesConfiguration? = disappearingMessagesConfiguration ?? self.viewModel.threadData.disappearingMessagesConfiguration
         // Do not show the banner until the new disappearing messages is enabled
-        guard 
-            Features.useNewDisappearingMessagesConfig &&
+        guard
+            viewModel.dependencies[feature: .updatedDisappearingMessages] &&
             currentDisappearingMessagesConfiguration?.isEnabled == true
         else {
             self.outdatedClientBanner.isHidden = true
-            self.emptyStateLabelTopConstraint?.constant = Values.largeSpacing
+            self.emptyStatePaddingView.isHidden = (stateStackView
+                .arrangedSubviews
+                .filter { !$0.isHidden }
+                .count > 1)
             return
         }
         
@@ -1551,7 +1602,11 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 completion: { [weak self] _ in
                     self?.outdatedClientBanner.isHidden = true
                     self?.outdatedClientBanner.alpha = 1
-                    self?.emptyStateLabelTopConstraint?.constant = Values.largeSpacing
+                    self?.emptyStatePaddingView.isHidden = ((self?.stateStackView
+                        .arrangedSubviews
+                        .filter { !$0.isHidden })
+                        .defaulting(to: [])
+                        .count > 1)
                 }
             )
             return
@@ -1562,16 +1617,20 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 format: "DISAPPEARING_MESSAGES_OUTDATED_CLIENT_BANNER".localized(),
                 Profile.displayName(id: outdatedMemberId, threadVariant: self.viewModel.threadData.threadVariant)
             ),
-            dismiss: self.removeOutdatedClientBanner
+            onTap: { [weak self] in self?.removeOutdatedClientBanner() }
         )
 
         self.outdatedClientBanner.isHidden = false
-        self.emptyStateLabelTopConstraint?.constant = 0
+        self.emptyStatePaddingView.isHidden = (stateStackView
+            .arrangedSubviews
+            .filter { !$0.isHidden }
+            .count > 1)
     }
     
     private func removeOutdatedClientBanner() {
         guard let outdatedMemberId: String = self.viewModel.threadData.outdatedMemberId else { return }
-        Storage.shared.writeAsync { db in
+        
+        viewModel.dependencies[singleton: .storage].writeAsync { db in
             try Contact
                 .filter(id: outdatedMemberId)
                 .updateAll(db, Contact.Columns.lastKnownClientVersion.set(to: nil))
@@ -1587,14 +1646,22 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 },
                 completion: { [weak self] _ in
                     self?.blockedBanner.alpha = 1
-                    self?.blockedBanner.removeFromSuperview()
+                    self?.blockedBanner.isHidden = true
+                    self?.emptyStatePaddingView.isHidden = ((self?.stateStackView
+                        .arrangedSubviews
+                        .filter { !$0.isHidden })
+                        .defaulting(to: [])
+                        .count > 1)
                 }
             )
             return
         }
 
-        self.view.addSubview(self.blockedBanner)
-        self.blockedBanner.pin([ UIView.HorizontalEdge.left, UIView.VerticalEdge.top, UIView.HorizontalEdge.right ], to: self.view)
+        self.blockedBanner.isHidden = false
+        self.emptyStatePaddingView.isHidden = (stateStackView
+            .arrangedSubviews
+            .filter { !$0.isHidden }
+            .count > 1)
     }
     
     func recoverInputView(completion: (() -> ())? = nil) {
@@ -1649,7 +1716,8 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                     },
                     showExpandedReactions: viewModel.reactionExpandedInteractionIds
                         .contains(cellViewModel.id),
-                    lastSearchText: viewModel.lastSearchedText
+                    lastSearchText: viewModel.lastSearchedText,
+                    using: viewModel.dependencies
                 )
                 cell.delegate = self
                 
@@ -1873,12 +1941,14 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             ipadCancelButton.setThemeTitleColor(.textPrimary, for: .normal)
             searchBarContainer.addSubview(ipadCancelButton)
             ipadCancelButton.pin(.trailing, to: .trailing, of: searchBarContainer)
-            ipadCancelButton.autoVCenterInSuperview()
-            searchBar.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets.zero, excludingEdge: .trailing)
+            ipadCancelButton.center(.vertical, in: searchBarContainer)
+            searchBar.pin(.top, to: .top, of: searchBar)
+            searchBar.pin(.leading, to: .leading, of: searchBar)
             searchBar.pin(.trailing, to: .leading, of: ipadCancelButton, withInset: -Values.smallSpacing)
+            searchBar.pin(.bottom, to: .bottom, of: searchBar)
         }
         else {
-            searchBar.autoPinEdgesToSuperviewMargins()
+            searchBar.pin(toMarginsOf: searchBarContainer)
         }
         
         // Nav bar buttons
@@ -1938,6 +2008,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         hideSearchUI()
     }
     
+    func conversationSearchControllerDependencies() -> Dependencies { return viewModel.dependencies }
     func currentVisibleIds() -> [Int64] { return (fullyVisibleCellViewModels() ?? []).map { $0.id } }
     
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Interaction.TimestampInfo]?, searchText: String?) {

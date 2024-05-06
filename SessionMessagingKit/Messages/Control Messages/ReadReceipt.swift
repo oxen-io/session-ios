@@ -21,8 +21,8 @@ public final class ReadReceipt: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies) else { return false }
         if let timestamps = timestamps, !timestamps.isEmpty { return true }
         return false
     }

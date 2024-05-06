@@ -9,8 +9,8 @@ final class SeedModal: Modal {
     
     // MARK: - Initialization
     
-    init() throws {
-        self.mnemonic = try SeedVC.mnemonic()
+    init(using dependencies: Dependencies) throws {
+        self.mnemonic = try SeedVC.mnemonic(using: dependencies)
         
         super.init(targetView: nil, dismissType: .recursive, afterClosed: nil)
         
@@ -122,7 +122,7 @@ final class SeedModal: Modal {
         mnemonicLabel.pin(to: mnemonicLabelContainer, withInset: isIPhone6OrSmaller ? 4 : Values.smallSpacing)
         
         // Mark seed as viewed
-        Storage.shared.writeAsync { db in db[.hasViewedSeed] = true }
+        Dependencies()[singleton: .storage].writeAsync { db in db[.hasViewedSeed] = true }
     }
     
     // MARK: - Interaction

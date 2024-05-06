@@ -2,7 +2,7 @@
 
 import Foundation
 
-public protocol ResponseInfoType: Codable {
+public protocol ResponseInfoType: Decodable {
     var code: Int { get }
     var headers: [String: String] { get }
 }
@@ -18,4 +18,3 @@ public extension HTTP {
         }
     }
 }
-

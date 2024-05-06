@@ -10,7 +10,7 @@ struct ViewControllerHolder {
 
 struct ViewControllerKey: EnvironmentKey {
     static var defaultValue: ViewControllerHolder {
-        return ViewControllerHolder(value: Singleton.appContext.mainWindow?.rootViewController)
+        return ViewControllerHolder(value: SNUIKit.mainWindow.wrappedValue?.rootViewController)
     }
 }
 

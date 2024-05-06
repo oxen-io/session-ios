@@ -27,7 +27,7 @@ extension ProjectState {
         "_SharedTestUtilities/",    // Exclude shared test directory
         "external/"                 // External dependencies
     ]
-    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", "null" ]
+    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", ".", "/", "\\n", "null" ]
     static let excludedUnlocalisedStringLineMatching: Set<MatchType> = [
         .contains(ProjectState.lintSuppression, caseSensitive: false),
         .prefix("#import", caseSensitive: false),
@@ -77,7 +77,15 @@ extension ProjectState {
         .regex("Logger\\..*\\("),
         .regex("OWSLogger\\..*\\("),
         .regex("case .* = "),
-        .regex("Error.*\\(")
+        .regex("Error.*\\("),
+        .regex("Crypto.*\\(id:"),
+        .containsAnd("id:", caseSensitive: false, .previousLine(numEarlier: 1, .regex("Crypto.*\\("))),
+        .regex(".*\\.like\\(\".*%\""),
+        .containsAnd(
+            "identifier:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Dependencies.create", caseSensitive: false))
+        )
     ]
 }
 

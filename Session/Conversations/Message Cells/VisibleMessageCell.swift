@@ -113,13 +113,6 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         result.image = UIImage(named: "ic_reply")?.withRenderingMode(.alwaysTemplate)
         result.themeTintColor = .textPrimary
         
-        // Flip horizontally for RTL languages
-        result.transform = CGAffineTransform.identity
-            .scaledBy(
-                x: (Singleton.hasAppContext && Singleton.appContext.isRTL ? -1 : 1),
-                y: 1
-            )
-        
         return result
     }()
 
@@ -282,8 +275,10 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.viewModel = cellViewModel
         
         // We want to add spacing between "clusters" of messages to indicate that time has
@@ -313,7 +308,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         profilePictureView.update(
             publicKey: cellViewModel.authorId,
             threadVariant: .contact,    // Always show the display picture in 'contact' mode
-            customImageData: nil,
+            displayPictureFilename: nil,
             profile: cellViewModel.profile,
             profileIcon: (cellViewModel.isSenderOpenGroupModerator ? .crown : .none)
         )
@@ -362,6 +357,13 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         let authorLabelAvailableSpace = CGSize(width: authorLabelAvailableWidth, height: .greatestFiniteMagnitude)
         let authorLabelSize = authorLabel.sizeThatFits(authorLabelAvailableSpace)
         authorLabelHeightConstraint.constant = (cellViewModel.senderName != nil ? authorLabelSize.height : 0)
+        
+        // Flip horizontally for RTL languages
+        replyIconImageView.transform = CGAffineTransform.identity
+            .scaledBy(
+                x: (Dependencies.isRTL ? -1 : 1),
+                y: 1
+            )
 
         // Swipe to reply
         if ContextMenuVC.viewModelCanReply(cellViewModel) {
@@ -559,9 +561,9 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                             authorId: quote.authorId,
                             quotedText: quote.body,
                             threadVariant: cellViewModel.threadVariant,
-                            currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                            currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                            currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
+                            currentUserSessionId: cellViewModel.currentUserSessionId,
+                            currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+                            currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId,
                             direction: (cellViewModel.variant == .standardOutgoing ?
                                 .outgoing :
                                 .incoming
@@ -701,7 +703,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                     return
                 }
                 
-                let isSelfSend: Bool = (reactionInfo.reaction.authorId == cellViewModel.currentUserPublicKey)
+                let isSelfSend: Bool = (reactionInfo.reaction.authorId == cellViewModel.currentUserSessionId)
                 
                 if let value: ReactionViewModel = result.value(forKey: emoji) {
                     result.replace(
@@ -797,10 +799,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             let v = panGestureRecognizer.velocity(in: self)
             // Only allow swipes to the left; allowing swipes to the right gets in the way of
             // the default iOS swipe to go back gesture
-            guard
-                (Singleton.hasAppContext && Singleton.appContext.isRTL && v.x > 0) ||
-                (!Singleton.hasAppContext || !Singleton.appContext.isRTL && v.x < 0)
-            else { return false }
+            guard (Dependencies.isRTL && v.x > 0) || (!Dependencies.isRTL && v.x < 0) else { return false }
             
             return abs(v.x) > abs(v.y) // It has to be more horizontal than vertical
         }
@@ -863,10 +862,11 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         isHandlingLongPress = true
     }
 
-    @objc private func handleTap(_ gestureRecognizer: UITapGestureRecognizer) { onTap(gestureRecognizer) }
-    
-    private func onTap(_ gestureRecognizer: UITapGestureRecognizer, using dependencies: Dependencies = Dependencies()) {
-        guard let cellViewModel: MessageViewModel = self.viewModel else { return }
+    @objc private func handleTap(_ gestureRecognizer: UITapGestureRecognizer) {
+        guard
+            let dependencies: Dependencies = self.dependencies,
+            let cellViewModel: MessageViewModel = self.viewModel
+        else { return }
         
         let location = gestureRecognizer.location(in: self)
         
@@ -874,7 +874,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             // For open groups only attempt to start a conversation if the author has a blinded id
             guard cellViewModel.threadVariant != .community else {
                 // FIXME: Add in support for opening a conversation with a 'blinded25' id
-                guard SessionId.Prefix(from: cellViewModel.authorId) == .blinded15 else { return }
+                guard (try? SessionId.Prefix(from: cellViewModel.authorId)) == .blinded15 else { return }
                 
                 delegate?.startThread(
                     with: cellViewModel.authorId,
@@ -901,10 +901,10 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                 if reactionContainerView.convert(reactionView.frame, from: reactionView.superview).contains(convertedLocation) {
                     
                     if reactionView.viewModel.showBorder {
-                        delegate?.removeReact(cellViewModel, for: reactionView.viewModel.emoji, using: dependencies)
+                        delegate?.removeReact(cellViewModel, for: reactionView.viewModel.emoji)
                     }
                     else {
-                        delegate?.react(cellViewModel, with: reactionView.viewModel.emoji, using: dependencies)
+                        delegate?.react(cellViewModel, with: reactionView.viewModel.emoji)
                     }
                     return
                 }
@@ -921,7 +921,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             }
         }
         else if snContentView.bounds.contains(snContentView.convert(location, from: self)) {
-            delegate?.handleItemTapped(cellViewModel, cell: self, cellLocation: location, using: dependencies)
+            delegate?.handleItemTapped(cellViewModel, cell: self, cellLocation: location)
         }
     }
 
@@ -938,8 +938,8 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             .translation(in: self)
             .x
             .clamp(
-                (Singleton.hasAppContext && Singleton.appContext.isRTL ? 0 : -CGFloat.greatestFiniteMagnitude),
-                (Singleton.hasAppContext && Singleton.appContext.isRTL ? CGFloat.greatestFiniteMagnitude : 0)
+                (Dependencies.isRTL ? 0 : -CGFloat.greatestFiniteMagnitude),
+                (Dependencies.isRTL ? CGFloat.greatestFiniteMagnitude : 0)
             )
         
         switch gestureRecognizer.state {
@@ -948,7 +948,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             case .changed:
                 // The idea here is to asymptotically approach a maximum drag distance
                 let damping: CGFloat = 20
-                let sign: CGFloat = (Singleton.hasAppContext && Singleton.appContext.isRTL ? 1 : -1)
+                let sign: CGFloat = (Dependencies.isRTL ? 1 : -1)
                 let x = (damping * (sqrt(abs(translationX)) / sqrt(damping))) * sign
                 viewsToMoveForReply.forEach { $0.transform = CGAffineTransform(translationX: x, y: 0) }
                 
@@ -989,11 +989,11 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         }
     }
 
-    private func reply(using dependencies: Dependencies = Dependencies()) {
+    private func reply() {
         guard let cellViewModel: MessageViewModel = self.viewModel else { return }
         
         resetReply()
-        delegate?.handleReplyButtonTapped(for: cellViewModel, using: dependencies)
+        delegate?.handleReplyButtonTapped(for: cellViewModel)
     }
 
     // MARK: - Convenience
@@ -1101,8 +1101,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         primaryColor: Theme.PrimaryColor,
         textColor: ThemeValue,
         searchText: String?
-    ) -> NSMutableAttributedString?
-    {
+    ) -> NSMutableAttributedString? {
         guard
             let body: String = cellViewModel.body,
             !body.isEmpty,
@@ -1117,9 +1116,9 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             attributedString: MentionUtilities.highlightMentions(
                 in: body,
                 threadVariant: cellViewModel.threadVariant,
-                currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
+                currentUserSessionId: cellViewModel.currentUserSessionId,
+                currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+                currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId,
                 isOutgoingMessage: isOutgoing,
                 textColor: actualTextColor,
                 theme: theme,
@@ -1202,7 +1201,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                     // we only highlight those cases)
                     normalizedBody
                         .ranges(
-                            of: (Singleton.appContext.isRTL ?
+                            of: (Dependencies.isRTL ?
                                  "(\(part.lowercased()))(^|[^a-zA-Z0-9])" :
                                  "(^|[^a-zA-Z0-9])(\(part.lowercased()))"
                             ),
@@ -1249,7 +1248,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
         ThemeManager.onThemeChange(observer: result) { [weak result] theme, primaryColor in
             let hasPreviousSetText: Bool = ((result?.attributedText?.length ?? 0) > 0)
             
-            result?.attributedText = Self.getBodyAttributedText(
+            result?.attributedText = VisibleMessageCell.getBodyAttributedText(
                 for: cellViewModel,
                 theme: theme,
                 primaryColor: primaryColor,

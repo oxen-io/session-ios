@@ -1,17 +1,37 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import Combine
 import GRDB
 import UserNotifications
 import SignalUtilitiesKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
-public class NSENotificationPresenter: NSObject, NotificationsProtocol {
+public class NSENotificationPresenter: NSObject, NotificationsManagerType {
     private var notifications: [String: UNNotificationRequest] = [:]
-     
-    public func notifyUser(_ db: Database, for interaction: Interaction, in thread: SessionThread, applicationState: UIApplication.State) {
-        let isMessageRequest: Bool = thread.isMessageRequest(db, includeNonVisible: true)
+    
+    // MARK: - Registration
+    
+    public func registerNotificationSettings() -> AnyPublisher<Void, Never> {
+        return Just(()).eraseToAnyPublisher()
+    }
+    
+    // MARK: - Presentation
+    
+    public func notifyUser(
+        _ db: Database,
+        for interaction: Interaction,
+        in thread: SessionThread,
+        applicationState: UIApplication.State,
+        using dependencies: Dependencies
+    ) {
+        let isMessageRequest: Bool = SessionThread.isMessageRequest(
+            db,
+            threadId: thread.id,
+            userSessionId: getUserSessionId(db),
+            includeNonVisible: true
+        )
         
         // Ensure we should be showing a notification for the thread
         guard thread.shouldShowNotification(db, for: interaction, isMessageRequest: isMessageRequest) else {
@@ -40,7 +60,7 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
             )
         }
         
-        let snippet: String = (interaction.previewText(db)
+        let snippet: String = (interaction.previewText(db, using: dependencies)
             .filterForDisplay?
             .replacingMentions(for: thread.id))
             .defaulting(to: "APN_Message".localized())
@@ -181,7 +201,12 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
     }
     
     public func notifyUser(_ db: Database, forReaction reaction: Reaction, in thread: SessionThread, applicationState: UIApplication.State) {
-        let isMessageRequest: Bool = thread.isMessageRequest(db, includeNonVisible: true)
+        let isMessageRequest: Bool = SessionThread.isMessageRequest(
+            db,
+            threadId: thread.id,
+            userSessionId: getUserSessionId(db),
+            includeNonVisible: true
+        )
         
         // No reaction notifications for muted, group threads or message requests
         guard Date().timeIntervalSince1970 > (thread.mutedUntilTimestamp ?? 0) else { return }
@@ -222,6 +247,12 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
         addNotifcationRequest(identifier: UUID().uuidString, notificationContent: notificationContent, trigger: nil)
     }
     
+    public func notifyForFailedSend(_ db: Database, in thread: SessionThread, applicationState: UIApplication.State) {
+        // Not possible in the NotificationServiceExtension
+    }
+    
+    // MARK: - Clearing
+    
     public func cancelNotifications(identifiers: [String]) {
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.removePendingNotificationRequests(withIdentifiers: identifiers)
@@ -233,8 +264,11 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
         notificationCenter.removeAllPendingNotificationRequests()
         notificationCenter.removeAllDeliveredNotifications()
     }
-    
-    private func addNotifcationRequest(identifier: String, notificationContent: UNNotificationContent, trigger: UNNotificationTrigger?) {
+}
+
+// MARK: - Convenience
+private extension NSENotificationPresenter {
+    func addNotifcationRequest(identifier: String, notificationContent: UNNotificationContent, trigger: UNNotificationTrigger?) {
         let request = UNNotificationRequest(identifier: identifier, content: notificationContent, trigger: trigger)
         
         SNLog("Add remote notification request: \(notificationContent.body)")

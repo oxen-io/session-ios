@@ -10,4 +10,11 @@ public class SnodeResponse: Codable {
     
     internal let hardFork: [Int]
     internal let timeOffset: Int64
+    
+    // MARK: - Initialization
+    
+    internal init(hardFork: [Int], timeOffset: Int64) {
+        self.hardFork = hardFork
+        self.timeOffset = timeOffset
+    }
 }

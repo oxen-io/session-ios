@@ -15,7 +15,7 @@ extension Timer {
         // timeInterval for execution and append it to the execution set so the test can
         // trigger the logic in a synchronous way)
         guard !dependencies.forceSynchronous else {
-            dependencies.asyncExecutions.appendTo(Int(ceil(dependencies.dateNow.timeIntervalSince1970 + timeInterval))) {
+            dependencies.async(at: dependencies.dateNow.timeIntervalSince1970 + timeInterval) {
                 block(timer)
             }
             return timer
@@ -23,5 +23,13 @@ extension Timer {
         
         RunLoop.main.add(timer, forMode: .common)
         return timer
+    }
+}
+
+// MARK: - Objective-C Extensions
+
+public extension Timer {
+    @objc static func weakScheduledTimer(timeInterval: TimeInterval, repeats: Bool, onFire: @escaping (Timer) -> ()) -> Timer {
+        return Timer.scheduledTimerOnMainThread(withTimeInterval: timeInterval, repeats: repeats, block: onFire)
     }
 }

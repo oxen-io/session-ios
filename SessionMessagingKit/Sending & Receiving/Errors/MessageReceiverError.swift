@@ -21,7 +21,7 @@ public enum MessageReceiverError: LocalizedError {
     case decryptionFailed
     case invalidGroupPublicKey
     case noGroupKeyPair
-    case invalidSharedConfigMessageHandling
+    case invalidConfigMessageHandling
     case requiredThreadNotInConfig
     case outdatedMessage
 
@@ -30,7 +30,7 @@ public enum MessageReceiverError: LocalizedError {
             case .duplicateMessage, .duplicateMessageNewSnode, .duplicateControlMessage,
                 .invalidMessage, .unknownMessage, .unknownEnvelopeType, .invalidSignature,
                 .noData, .senderBlocked, .noThread, .selfSend, .decryptionFailed,
-                .invalidSharedConfigMessageHandling, .requiredThreadNotInConfig, .outdatedMessage:
+                .invalidConfigMessageHandling, .requiredThreadNotInConfig, .outdatedMessage:
                 return false
                 
             default: return true
@@ -71,7 +71,7 @@ public enum MessageReceiverError: LocalizedError {
             case .invalidGroupPublicKey: return "Invalid group public key."
             case .noGroupKeyPair: return "Missing group key pair."
                 
-            case .invalidSharedConfigMessageHandling: return "Invalid handling of a shared config message."
+            case .invalidConfigMessageHandling: return "Invalid handling of a config message."
             case .requiredThreadNotInConfig: return "Required thread not in config."
             case .outdatedMessage: return "Message was sent before a config change which would have removed the message."
         }

@@ -40,9 +40,9 @@ final class ScanQRCodeWrapperVC: BaseVC {
         scanQRCodeVC.scanDelegate = delegate
         let scanQRCodeVCView = scanQRCodeVC.view!
         view.addSubview(scanQRCodeVCView)
+        scanQRCodeVCView.pin(.top, to: .top, of: view)
         scanQRCodeVCView.pin(.leading, to: .leading, of: view)
         scanQRCodeVCView.pin(.trailing, to: .trailing, of: view)
-        scanQRCodeVCView.autoPinEdge(.top, to: .top, of: view)
         
         if let message = message {
             scanQRCodeVCView.set(.height, lessThanOrEqualTo: UIScreen.main.bounds.width)
@@ -65,11 +65,11 @@ final class ScanQRCodeWrapperVC: BaseVC {
             explanationLabel.numberOfLines = 0
             bottomView.addSubview(explanationLabel)
             
-            explanationLabel.autoPinWidthToSuperview(withMargin: 32)
-            explanationLabel.autoPinHeightToSuperview(withMargin: 32)
+            explanationLabel.set(.width, to: .width, of: bottomView, withOffset: 32)
+            explanationLabel.set(.height, to: .height, of: bottomView, withOffset: 32)
         }
         else {
-            scanQRCodeVCView.autoPinEdge(.bottom, to: .bottom, of: view)
+            scanQRCodeVCView.pin(.bottom, to: .bottom, of: view)
         }
     }
     

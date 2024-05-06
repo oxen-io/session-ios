@@ -2,7 +2,6 @@
 
 import Foundation
 import UIKit
-import PureLayout
 import SignalCoreKit
 import SessionUIKit
 import SessionUtilitiesKit
@@ -11,7 +10,7 @@ import SessionUtilitiesKit
 let kMaxMessageBodyCharacterCount = 2000
 
 protocol AttachmentTextToolbarDelegate: AnyObject {
-    func attachmentTextToolbarDidTapSend(_ attachmentTextToolbar: AttachmentTextToolbar, using dependencies: Dependencies)
+    func attachmentTextToolbarDidTapSend(_ attachmentTextToolbar: AttachmentTextToolbar)
     func attachmentTextToolbarDidBeginEditing(_ attachmentTextToolbar: AttachmentTextToolbar)
     func attachmentTextToolbarDidEndEditing(_ attachmentTextToolbar: AttachmentTextToolbar)
     func attachmentTextToolbarDidChange(_ attachmentTextToolbar: AttachmentTextToolbar)
@@ -80,7 +79,7 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
         contentView.addSubview(textContainer)
         contentView.addSubview(lengthLimitLabel)
         addSubview(contentView)
-        contentView.autoPinEdgesToSuperviewEdges()
+        contentView.pin(to: self)
 
         // Layout
 
@@ -95,30 +94,22 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
             right: AttachmentTextToolbar.kToolbarMargin
         )
 
-        self.textViewHeightConstraint = textView.autoSetDimension(.height, toSize: AttachmentTextToolbar.kMinTextViewHeight)
+        self.textViewHeightConstraint = textView.set(.height, to: AttachmentTextToolbar.kMinTextViewHeight)
+        textContainer.pin(.top, to: .top, of: contentView)
+        textContainer.pin(.bottom, to: .bottom, of: contentView)
+        textContainer.pin(.left, to: .left, of: contentView)
 
-        // We pin all three edges explicitly rather than doing something like:
-        //  textView.autoPinEdges(toSuperviewMarginsExcludingEdge: .right)
-        // because that method uses `leading` / `trailing` rather than `left` vs. `right`.
-        // So it doesn't work as expected with RTL layouts when we explicitly want something
-        // to be on the right side for both RTL and LTR layouts, like with the send button.
-        // I believe this is a bug in PureLayout. Filed here: https://github.com/PureLayout/PureLayout/issues/209
-        textContainer.autoPinEdge(toSuperviewMargin: .top)
-        textContainer.autoPinEdge(toSuperviewMargin: .bottom)
-        textContainer.autoPinEdge(toSuperviewMargin: .left)
+        sendButton.pin(.left, to: .right, of: textContainer, withInset: AttachmentTextToolbar.kToolbarMargin)
+        sendButton.pin(.right, to: .right, of: textContainer)
+        sendButton.pin(.bottom, to: .bottom, of: textContainer, withInset: -3)
+        sendButton.setContentHugging(to: .required)
+        sendButton.setCompressionResistance(to: .required)
 
-        sendButton.autoPinEdge(.left, to: .right, of: textContainer, withOffset: AttachmentTextToolbar.kToolbarMargin)
-        sendButton.autoPinEdge(.bottom, to: .bottom, of: textContainer, withOffset: -3)
-
-        sendButton.autoPinEdge(toSuperviewMargin: .right)
-        sendButton.setContentHuggingHigh()
-        sendButton.setCompressionResistanceHigh()
-
-        lengthLimitLabel.autoPinEdge(toSuperviewMargin: .left)
-        lengthLimitLabel.autoPinEdge(toSuperviewMargin: .right)
-        lengthLimitLabel.autoPinEdge(.bottom, to: .top, of: textContainer, withOffset: -6)
-        lengthLimitLabel.setContentHuggingHigh()
-        lengthLimitLabel.setCompressionResistanceHigh()
+        lengthLimitLabel.pin(.left, to: .left, of: contentView)
+        lengthLimitLabel.pin(.right, to: .right, of: contentView)
+        lengthLimitLabel.pin(.bottom, to: .top, of: textContainer, withInset: -6)
+        lengthLimitLabel.setContentHugging(to: .required)
+        lengthLimitLabel.setCompressionResistance(to: .required)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -184,10 +175,10 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
         textContainer.clipsToBounds = true
 
         textContainer.addSubview(placeholderTextView)
-        placeholderTextView.autoPinEdgesToSuperviewEdges()
+        placeholderTextView.pin(to: textContainer)
 
         textContainer.addSubview(textView)
-        textView.autoPinEdgesToSuperviewEdges()
+        textView.pin(to: textContainer)
 
         return textContainer
     }()
@@ -212,10 +203,8 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
 
     // MARK: - Actions
     
-    @objc func didTapSend() { onSend() }
-
-    private func onSend(using dependencies: Dependencies = Dependencies()) {
-        attachmentTextToolbarDelegate?.attachmentTextToolbarDidTapSend(self, using: dependencies)
+    @objc func didTapSend() {
+        attachmentTextToolbarDelegate?.attachmentTextToolbarDidTapSend(self)
     }
 
     // MARK: - UITextViewDelegate
@@ -307,6 +296,6 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
 
     private func clampedTextViewHeight(fixedWidth: CGFloat) -> CGFloat {
         let contentSize = textView.sizeThatFits(CGSize(width: fixedWidth, height: CGFloat.greatestFiniteMagnitude))
-        return CGFloatClamp(contentSize.height, AttachmentTextToolbar.kMinTextViewHeight, maxTextViewHeight)
+        return contentSize.height.clamp(AttachmentTextToolbar.kMinTextViewHeight, maxTextViewHeight)
     }
 }

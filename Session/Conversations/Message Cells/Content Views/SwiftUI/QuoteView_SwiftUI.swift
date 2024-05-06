@@ -13,9 +13,9 @@ struct QuoteView_SwiftUI: View {
         var authorId: String
         var quotedText: String?
         var threadVariant: SessionThread.Variant
-        var currentUserPublicKey: String?
-        var currentUserBlinded15PublicKey: String?
-        var currentUserBlinded25PublicKey: String?
+        var currentUserSessionId: String?
+        var currentUserBlinded15SessionId: String?
+        var currentUserBlinded25SessionId: String?
         var direction: Direction
         var attachment: Attachment?
     }
@@ -34,9 +34,9 @@ struct QuoteView_SwiftUI: View {
     
     private var isCurrentUser: Bool {
         return [
-            info.currentUserPublicKey,
-            info.currentUserBlinded15PublicKey,
-            info.currentUserBlinded25PublicKey
+            info.currentUserSessionId,
+            info.currentUserBlinded15SessionId,
+            info.currentUserBlinded25SessionId
         ]
         .compactMap { $0 }
         .asSet()
@@ -95,9 +95,9 @@ struct QuoteView_SwiftUI: View {
                         return thumbnail
                     }
                     
-                    let fallbackImageName: String = (MIMETypeUtil.isAudio(attachment.contentType) ? "attachment_audio" : "actionsheet_document_black")
+                    let fallbackImageName: String = (MimeTypeUtil.isAudio(attachment.contentType) ? "attachment_audio" : "actionsheet_document_black")
                     return UIImage(named: fallbackImageName)?
-                        .resizedImage(to: CGSize(width: Self.iconSize, height: Self.iconSize))?
+                        .resized(to: CGSize(width: Self.iconSize, height: Self.iconSize))?
                         .withRenderingMode(.alwaysTemplate)
                 }() {
                     Image(uiImage: image)
@@ -159,9 +159,9 @@ struct QuoteView_SwiftUI: View {
                         MentionUtilities.highlightMentions(
                             in: quotedText,
                             threadVariant: info.threadVariant,
-                            currentUserPublicKey: info.currentUserPublicKey,
-                            currentUserBlinded15PublicKey: info.currentUserBlinded15PublicKey,
-                            currentUserBlinded25PublicKey: info.currentUserBlinded25PublicKey,
+                            currentUserSessionId: info.currentUserSessionId,
+                            currentUserBlinded15SessionId: info.currentUserBlinded15SessionId,
+                            currentUserBlinded25SessionId: info.currentUserBlinded25SessionId,
                             isOutgoingMessage: (info.direction == .outgoing),
                             textColor: textColor,
                             theme: ThemeManager.currentTheme,

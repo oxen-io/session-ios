@@ -2,7 +2,6 @@
 
 import Foundation
 import Combine
-import Sodium
 import GRDB
 import SessionUtilitiesKit
 import SessionMessagingKit
@@ -30,34 +29,31 @@ enum Onboarding {
         _ requestId: UUID,
         using dependencies: Dependencies = Dependencies()
     ) -> AnyPublisher<String?, Error> {
-        let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
+        let userSessionId: SessionId = getUserSessionId(using: dependencies)
         
-        return SnodeAPI.getSwarm(for: userPublicKey)
-            .tryFlatMapWithRandomSnode { snode -> AnyPublisher<[Message], Error> in
-                CurrentUserPoller
-                    .poll(
-                        namespaces: [.configUserProfile],
-                        from: snode,
-                        for: userPublicKey,
-                        // Note: These values mean the received messages will be
-                        // processed immediately rather than async as part of a Job
-                        calledFromBackgroundPoller: true,
-                        isBackgroundPollValid: { true }
-                    )
+        /// **Note:** We trigger this as a "background poll" as doing so means the received messages will be
+        /// processed immediately rather than async as part of a Job
+        return dependencies[singleton: .currentUserPoller].poll(
+            namespaces: [.configUserProfile],
+            for: userSessionId.hexString,
+            calledFromBackgroundPoller: true,
+            isBackgroundPollValid: { true },
+            drainBehaviour: .alwaysRandom,
+            using: dependencies
+        )
+        .map { _ -> String? in
+            guard requestId == profileNameRetrievalIdentifier.wrappedValue else { return nil }
+            
+            return dependencies[singleton: .storage].read { db in
+                try Profile
+                    .filter(id: userSessionId.hexString)
+                    .select(.name)
+                    .asRequest(of: String.self)
+                    .fetchOne(db)
             }
-            .map { _ -> String? in
-                guard requestId == profileNameRetrievalIdentifier.wrappedValue else { return nil }
-                
-                return Storage.shared.read { db in
-                    try Profile
-                        .filter(id: userPublicKey)
-                        .select(.name)
-                        .asRequest(of: String.self)
-                        .fetchOne(db)
-                }
-            }
-            .shareReplay(1)
-            .eraseToAnyPublisher()
+        }
+        .shareReplay(1)
+        .eraseToAnyPublisher()
     }
     
     enum State: CustomStringConvertible {
@@ -92,12 +88,12 @@ enum Onboarding {
         
         /// If the user returns to an earlier screen during Onboarding we might need to clear out a partially created
         /// account (eg. returning from the PN setting screen to the seed entry screen when linking a device)
-        func unregister(using dependencies: Dependencies = Dependencies()) {
+        func unregister(using dependencies: Dependencies) {
             // Clear the in-memory state from SessionUtil
-            SessionUtil.clearMemoryState()
+            SessionUtil.clearMemoryState(using: dependencies)
             
             // Clear any data which gets set during Onboarding
-            Storage.shared.write { db in
+            dependencies[singleton: .storage].write { db in
                 db[.hasViewedSeed] = false
                 
                 try SessionThread.deleteAll(db)
@@ -113,59 +109,72 @@ enum Onboarding {
             profileNameRetrievalPublisher.mutate { $0 = nil }
             
             // Clear the cached 'encodedPublicKey' if needed
-            dependencies.caches.mutate(cache: .general) { $0.encodedPublicKey = nil }
+            dependencies.mutate(cache: .general) { $0.sessionId = nil }
             
-            UserDefaults.standard[.hasSyncedInitialConfiguration] = false
+            dependencies[defaults: .standard, key: .hasSyncedInitialConfiguration] = false
         }
         
-        func preregister(with seed: Data, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) {
-            let x25519PublicKey = x25519KeyPair.hexEncodedPublicKey
+        func preregister(
+            ed25519KeyPair: KeyPair,
+            x25519KeyPair: KeyPair,
+            using dependencies: Dependencies = Dependencies()
+        ) {
+            let sessionId: SessionId = SessionId(.standard, publicKey: x25519KeyPair.publicKey)
             
-            // Create the initial shared util state (won't have been created on
-            // launch due to lack of ed25519 key)
-            SessionUtil.loadState(
-                userPublicKey: x25519PublicKey,
-                ed25519SecretKey: ed25519KeyPair.secretKey
-            )
+            // Reset the PushNotificationAPI keys (just in case they were left over from a prior install)
+            PushNotificationAPI.deleteKeys(using: dependencies)
             
             // Store the user identity information
-            Storage.shared.write { db in
+            dependencies[singleton: .storage].write { db in
                 try Identity.store(
                     db,
-                    seed: seed,
                     ed25519KeyPair: ed25519KeyPair,
                     x25519KeyPair: x25519KeyPair
                 )
                 
+                // Create the initial shared util state (won't have been created on
+                // launch due to lack of ed25519 key)
+                SessionUtil.loadState(db, using: dependencies)
+
                 // No need to show the seed again if the user is restoring or linking
                 db[.hasViewedSeed] = (self == .recover || self == .link)
                 
                 // Create a contact for the current user and set their approval/trusted statuses so
                 // they don't get weird behaviours
                 try Contact
-                    .fetchOrCreate(db, id: x25519PublicKey)
-                    .save(db)
+                    .fetchOrCreate(db, id: sessionId.hexString)
+                    .upsert(db)
                 try Contact
-                    .filter(id: x25519PublicKey)
+                    .filter(id: sessionId.hexString)
                     .updateAllAndConfig(
                         db,
                         Contact.Columns.isTrusted.set(to: true),    // Always trust the current user
                         Contact.Columns.isApproved.set(to: true),
-                        Contact.Columns.didApproveMe.set(to: true)
+                        Contact.Columns.didApproveMe.set(to: true),
+                        calledFromConfig: nil,
+                        using: dependencies
                     )
 
                 /// Create the 'Note to Self' thread (not visible by default)
                 ///
                 /// **Note:** We need to explicitly `updateAllAndConfig` the `shouldBeVisible` value to `false`
                 /// otherwise it won't actually get synced correctly
-                try SessionThread
-                    .fetchOrCreate(db, id: x25519PublicKey, variant: .contact, shouldBeVisible: false)
+                try SessionThread.fetchOrCreate(
+                    db,
+                    id: sessionId.hexString,
+                    variant: .contact,
+                    shouldBeVisible: false,
+                    calledFromConfig: nil,
+                    using: dependencies
+                )
                 
                 try SessionThread
-                    .filter(id: x25519PublicKey)
+                    .filter(id: sessionId.hexString)
                     .updateAllAndConfig(
                         db,
-                        SessionThread.Columns.shouldBeVisible.set(to: false)
+                        SessionThread.Columns.shouldBeVisible.set(to: false),
+                        calledFromConfig: nil,
+                        using: dependencies
                     )
             }
             
@@ -173,37 +182,45 @@ enum Onboarding {
             // home screen a configuration sync is triggered (yes, the logic is a
             // bit weird). This is needed so that if the user registers and
             // immediately links a device, there'll be a configuration in their swarm.
-            UserDefaults.standard[.hasSyncedInitialConfiguration] = (self == .register)
+            dependencies[defaults: .standard, key: .hasSyncedInitialConfiguration] = (self == .register)
             
             // Only continue if this isn't a new account
             guard self != .register else { return }
             
-            // Fetch the
+            // Fetch the profile name
             Onboarding.profileNamePublisher
-                .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+                .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
                 .sinkUntilComplete()
         }
         
-        func completeRegistration() {
+        func completeRegistration(
+            suppressDidRegisterNotification: Bool = false,
+            onComplete: ((Bool) -> Void)? = nil,
+            using dependencies: Dependencies = Dependencies()
+        ) {
             // Set the `lastNameUpdate` to the current date, so that we don't overwrite
             // what the user set in the display name step with whatever we find in their
             // swarm (otherwise the user could enter a display name and have it immediately
             // overwritten due to the config request running slow)
-            Storage.shared.write { db in
+            dependencies[singleton: .storage].write { db in
                 try Profile
-                    .filter(id: getUserHexEncodedPublicKey(db))
+                    .filter(id: getUserSessionId(db, using: dependencies).hexString)
                     .updateAllAndConfig(
                         db,
-                        Profile.Columns.lastNameUpdate.set(to: Date().timeIntervalSince1970)
+                        Profile.Columns.lastNameUpdate.set(to: dependencies.dateNow.timeIntervalSince1970),
+                        calledFromConfig: nil,
+                        using: dependencies
                     )
             }
             
             // Notify the app that registration is complete
-            Identity.didRegister()
+            if !suppressDidRegisterNotification {
+                Identity.didRegister()
+            }
             
             // Now that we have registered get the Snode pool (just in case) - other non-blocking
             // launch jobs will automatically be run because the app activation was triggered
-            GetSnodePoolJob.run()
+            GetSnodePoolJob.run(onComplete: onComplete, using: dependencies)
         }
     }
 }

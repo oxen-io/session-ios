@@ -183,12 +183,12 @@ final class DisplayNameVC: BaseVC {
         guard !displayName.isEmpty else {
             return showError(title: "vc_display_name_display_name_missing_error".localized())
         }
-        guard !ProfileManager.isToLong(profileName: displayName) else {
+        guard !Profile.isTooLong(profileName: displayName) else {
             return showError(title: "vc_display_name_display_name_too_long_error".localized())
         }
         
         // Try to save the user name but ignore the result
-        ProfileManager.updateLocal(
+        Profile.updateLocal(
             queue: .global(qos: .default),
             profileName: displayName
         )

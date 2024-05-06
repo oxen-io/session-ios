@@ -13,6 +13,7 @@ public enum OnionRequestAPIError: Error, CustomStringConvertible {
     case snodePublicKeySetMissing
     case unsupportedSnodeVersion(String)
     case invalidRequestInfo
+    case pathEncryptionFailed
 
     public var description: String {
         switch self {
@@ -26,13 +27,14 @@ public enum OnionRequestAPIError: Error, CustomStringConvertible {
                 }
                 
                 return "HTTP request failed at destination (\(destination)) with status code: \(statusCode) (OnionRequestAPIError.httpRequestFailedAtDestination)."
-                
+            
             case .insufficientSnodes: return "Couldn't find enough Service Nodes to build a path (OnionRequestAPIError.insufficientSnodes)."
             case .invalidURL: return "Invalid URL (OnionRequestAPIError.invalidURL)."
             case .missingSnodeVersion: return "Missing Service Node version (OnionRequestAPIError.missingSnodeVersion)."
             case .snodePublicKeySetMissing: return "Missing Service Node public key set (OnionRequestAPIError.snodePublicKeySetMissing)."
             case .unsupportedSnodeVersion(let version): return "Unsupported Service Node version: \(version) (OnionRequestAPIError.unsupportedSnodeVersion)."
             case .invalidRequestInfo: return "Invalid Request Info (OnionRequestAPIError.invalidRequestInfo)."
+            case .pathEncryptionFailed: return "Path Encryption Failed (OnionRequestAPIError.pathEncryptionFailed)."
         }
     }
 }

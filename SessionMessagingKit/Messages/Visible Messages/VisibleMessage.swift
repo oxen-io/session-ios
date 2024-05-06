@@ -9,6 +9,7 @@ public final class VisibleMessage: Message {
         case syncTarget
         case text = "body"
         case attachmentIds = "attachments"
+        case dataMessageHasAttachments
         case quote
         case linkPreview
         case profile
@@ -22,6 +23,7 @@ public final class VisibleMessage: Message {
     public var syncTarget: String?
     public let text: String?
     public var attachmentIds: [String]
+    public let dataMessageHasAttachments: Bool?
     public let quote: VMQuote?
     public let linkPreview: VMLinkPreview?
     public var profile: VMProfile?
@@ -32,13 +34,21 @@ public final class VisibleMessage: Message {
     
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies) else { return false }
         if !attachmentIds.isEmpty { return true }
         if openGroupInvitation != nil { return true }
         if reaction != nil { return true }
         if let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { return true }
         return false
+    }
+    
+    public func isValidWithDataMessageAttachments(using dependencies: Dependencies) -> Bool {
+        // If the message is valid using the default method, or it has attachmentIds then just use the
+        // default logic, otherwise we want to check
+        guard !isValid(using: dependencies) || attachmentIds.isEmpty else { return isValid(using: dependencies) }
+        
+        return (dataMessageHasAttachments == true)
     }
     
     // MARK: - Initialization
@@ -50,15 +60,17 @@ public final class VisibleMessage: Message {
         syncTarget: String? = nil,
         text: String?,
         attachmentIds: [String] = [],
+        dataMessageHasAttachments: Bool? = nil,
         quote: VMQuote? = nil,
         linkPreview: VMLinkPreview? = nil,
-        profile: VMProfile? = nil,
+        profile: VMProfile? = nil,   // Added when sending via the `MessageWithProfile` protocol
         openGroupInvitation: VMOpenGroupInvitation? = nil,
         reaction: VMReaction? = nil
     ) {
         self.syncTarget = syncTarget
         self.text = text
         self.attachmentIds = attachmentIds
+        self.dataMessageHasAttachments = dataMessageHasAttachments
         self.quote = quote
         self.linkPreview = linkPreview
         self.profile = profile
@@ -80,6 +92,7 @@ public final class VisibleMessage: Message {
         syncTarget = try? container.decode(String.self, forKey: .syncTarget)
         text = try? container.decode(String.self, forKey: .text)
         attachmentIds = ((try? container.decode([String].self, forKey: .attachmentIds)) ?? [])
+        dataMessageHasAttachments = try? container.decode(Bool.self, forKey: .dataMessageHasAttachments)
         quote = try? container.decode(VMQuote.self, forKey: .quote)
         linkPreview = try? container.decode(VMLinkPreview.self, forKey: .linkPreview)
         profile = try? container.decode(VMProfile.self, forKey: .profile)
@@ -97,6 +110,7 @@ public final class VisibleMessage: Message {
         try container.encodeIfPresent(syncTarget, forKey: .syncTarget)
         try container.encodeIfPresent(text, forKey: .text)
         try container.encodeIfPresent(attachmentIds, forKey: .attachmentIds)
+        try container.encodeIfPresent(dataMessageHasAttachments, forKey: .dataMessageHasAttachments)
         try container.encodeIfPresent(quote, forKey: .quote)
         try container.encodeIfPresent(linkPreview, forKey: .linkPreview)
         try container.encodeIfPresent(profile, forKey: .profile)
@@ -113,6 +127,7 @@ public final class VisibleMessage: Message {
             syncTarget: dataMessage.syncTarget,
             text: dataMessage.body,
             attachmentIds: [],    // Attachments are handled in MessageReceiver
+            dataMessageHasAttachments: (proto.dataMessage?.attachments.isEmpty == false),
             quote: dataMessage.quote.map { VMQuote.fromProto($0) },
             linkPreview: dataMessage.preview.first.map { VMLinkPreview.fromProto($0) },
             profile: VMProfile.fromProto(dataMessage),

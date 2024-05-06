@@ -4,6 +4,8 @@ import Foundation
 import SignalCoreKit
 
 public extension String {
+    var bytes: [UInt8] { Array(self.utf8) }
+    
     var glyphCount: Int {
         let richText = NSAttributedString(string: self)
         let line = CTLineCreateWithAttributedString(richText)
@@ -73,11 +75,21 @@ public extension String {
         // for more details.
         return text.replacingOccurrences(of: "%", with: "%%")
     }
+    
+    func appending(_ other: String?) -> String {
+        guard let value: String = other else { return self }
+        
+        return self.appending(value)
+    }
 }
 
 // MARK: - Formatting
 
 extension String.StringInterpolation {
+    public mutating func appendInterpolation(plural value: Int) {
+        appendInterpolation(value == 1 ? "" : "s")
+    }
+    
     mutating func appendInterpolation(_ value: Int, format: String) {
         let result: String = String(format: "%\(format)d", value)
         appendLiteral(result)

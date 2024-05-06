@@ -15,7 +15,7 @@ enum _002_SetupStandardJobs: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Start by adding the jobs that don't have collections (in the jobs like these
         // will be added via migrations)
         try autoreleasepool {
@@ -53,6 +53,6 @@ enum _002_SetupStandardJobs: Migration {
             ).migrationSafeInserted(db)
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

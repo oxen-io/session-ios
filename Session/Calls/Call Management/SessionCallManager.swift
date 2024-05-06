@@ -10,6 +10,8 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 public final class SessionCallManager: NSObject, CallManagerProtocol {
+    let dependencies: Dependencies
+    
     let provider: CXProvider?
     let callController: CXCallController?
     
@@ -58,7 +60,9 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     
     // MARK: - Initialization
     
-    init(useSystemCallLog: Bool = false) {
+    init(useSystemCallLog: Bool = false, using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
         if Preferences.isCallKitSupported {
             self.provider = SessionCallManager.sharedProvider(useSystemCallLog: useSystemCallLog)
             self.callController = CXCallController()
@@ -92,10 +96,14 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         )
     }
     
-    public func reportOutgoingCall(_ call: SessionCall) {
+    public func setCurrentCall(_ call: CurrentCallProtocol?) {
+        self.currentCall = call
+    }
+    
+    public func reportOutgoingCall(_ call: SessionCall, using dependencies: Dependencies) {
         AssertIsOnMainThread()
-        UserDefaults.sharedLokiProject?[.isCallOngoing] = true
-        UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
+        dependencies[defaults: .appGroup, key: .isCallOngoing] = true
+        dependencies[defaults: .appGroup, key: .lastCallPreOffer] = Date()
         
         call.stateDidChange = {
             if call.hasStartedConnecting {
@@ -108,7 +116,11 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         }
     }
     
-    public func reportIncomingCall(_ call: SessionCall, callerName: String, completion: @escaping (Error?) -> Void) {
+    public func reportIncomingCall(
+        _ call: CurrentCallProtocol,
+        callerName: String,
+        completion: @escaping (Error?) -> Void
+    ) {
         let provider = provider ?? Self.sharedProvider(useSystemCallLog: false)
         // Construct a CXCallUpdate describing the incoming call, including the caller.
         let update = CXCallUpdate()
@@ -119,14 +131,14 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         disableUnsupportedFeatures(callUpdate: update)
 
         // Report the incoming call to the system
-        provider.reportNewIncomingCall(with: call.callId, update: update) { error in
+        provider.reportNewIncomingCall(with: call.callId, update: update) { [dependencies] error in
             guard error == nil else {
                 self.reportCurrentCallEnded(reason: .failed)
                 completion(error)
                 return
             }
-            UserDefaults.sharedLokiProject?[.isCallOngoing] = true
-            UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
+            dependencies[defaults: .appGroup, key: .isCallOngoing] = true
+            dependencies[defaults: .appGroup, key: .lastCallPreOffer] = Date()
             completion(nil)
         }
     }
@@ -141,10 +153,10 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         
         func handleCallEnded() {
             WebRTCSession.current = nil
-            UserDefaults.sharedLokiProject?[.isCallOngoing] = false
-            UserDefaults.sharedLokiProject?[.lastCallPreOffer] = nil
+            dependencies[defaults: .appGroup, key: .isCallOngoing] = false
+            dependencies[defaults: .appGroup, key: .lastCallPreOffer] = nil
             
-            if Singleton.hasAppContext && Singleton.appContext.isInBackground {
+            if dependencies.hasInitialised(singleton: .appContext) && dependencies[singleton: .appContext].isInBackground {
                 (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()
                 DDLog.flushLog()
             }
@@ -152,7 +164,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         
         guard let call = currentCall else {
             handleCallEnded()
-            Self.suspendDatabaseIfCallEndedInBackground()
+            suspendDatabaseIfCallEndedInBackground()
             return
         }
         
@@ -160,14 +172,14 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             self.provider?.reportCall(with: call.callId, endedAt: nil, reason: reason)
             
             switch (reason) {
-                case .answeredElsewhere: call.updateCallMessage(mode: .answeredElsewhere)
-                case .unanswered: call.updateCallMessage(mode: .unanswered)
-                case .declinedElsewhere: call.updateCallMessage(mode: .local)
-                default: call.updateCallMessage(mode: .remote)
+                case .answeredElsewhere: call.updateCallMessage(mode: .answeredElsewhere, using: dependencies)
+                case .unanswered: call.updateCallMessage(mode: .unanswered, using: dependencies)
+                case .declinedElsewhere: call.updateCallMessage(mode: .local, using: dependencies)
+                default: call.updateCallMessage(mode: .remote, using: dependencies)
             }
         }
         else {
-            call.updateCallMessage(mode: .local)
+            call.updateCallMessage(mode: .local, using: dependencies)
         }
         
         call.webRTCSession.dropConnection()
@@ -190,11 +202,11 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         callUpdate.supportsDTMF = false
     }
     
-    public static func suspendDatabaseIfCallEndedInBackground() {
-        if Singleton.hasAppContext && Singleton.appContext.isInBackground {
+    public func suspendDatabaseIfCallEndedInBackground() {
+        if dependencies.hasInitialised(singleton: .appContext) && dependencies[singleton: .appContext].isInBackground {
             // Stop all jobs except for message sending and when completed suspend the database
-            JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend) {
-                Storage.suspendDatabaseAccess()
+            dependencies[singleton: .jobRunner].stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) { [dependencies] in
+                Storage.suspendDatabaseAccess(using: dependencies)
             }
         }
     }
@@ -202,36 +214,39 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     // MARK: - UI
     
     public func showCallUIForCall(caller: String, uuid: String, mode: CallMode, interactionId: Int64?) {
-        guard let call: SessionCall = Storage.shared.read({ db in SessionCall(db, for: caller, uuid: uuid, mode: mode) }) else {
-            return
-        }
+        guard
+            let call: SessionCall = dependencies[singleton: .storage]
+                .read({ [dependencies] db in
+                    SessionCall(db, for: caller, uuid: uuid, mode: mode, using: dependencies)
+                })
+        else { return }
         
         call.callInteractionId = interactionId
-        call.reportIncomingCallIfNeeded { error in
+        call.reportIncomingCallIfNeeded { [dependencies] error in
             if let error = error {
                 SNLog("[Calls] Failed to report incoming call to CallKit due to error: \(error)")
                 return
             }
             
             DispatchQueue.main.async {
-                guard Singleton.hasAppContext && Singleton.appContext.isMainAppAndActive else { return }
-                
-                guard let presentingVC = Singleton.appContext.frontmostViewController else {
-                    preconditionFailure()   // FIXME: Handle more gracefully
-                }
+                guard
+                    dependencies.hasInitialised(singleton: .appContext),
+                    dependencies[singleton: .appContext].isMainAppAndActive,
+                    let presentingVC: UIViewController = dependencies[singleton: .appContext].frontmostViewController
+                else { return }
                 
                 if
                     let conversationVC: ConversationVC = (presentingVC as? TopBannerController)?.wrappedViewController() as? ConversationVC,
                     conversationVC.viewModel.threadData.threadId == call.sessionId
                 {
-                    let callVC = CallVC(for: call)
+                    let callVC = CallVC(for: call, using: dependencies)
                     callVC.conversationVC = conversationVC
                     conversationVC.inputAccessoryView?.isHidden = true
                     conversationVC.inputAccessoryView?.alpha = 0
                     presentingVC.present(callVC, animated: true, completion: nil)
                 }
                 else if !Preferences.isCallKitSupported {
-                    let incomingCallBanner = IncomingCallBanner(for: call)
+                    let incomingCallBanner = IncomingCallBanner(for: call, using: dependencies)
                     incomingCallBanner.show()
                 }
             }
@@ -239,7 +254,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     }
     
     public func handleAnswerMessage(_ message: CallMessage) {
-        guard Singleton.hasAppContext else { return }
+        guard dependencies.hasInitialised(singleton: .appContext) else { return }
         guard Thread.isMainThread else {
             DispatchQueue.main.async {
                 self.handleAnswerMessage(message)
@@ -247,11 +262,11 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             return
         }
         
-        (Singleton.appContext.frontmostViewController as? CallVC)?.handleAnswerMessage(message)
+        (dependencies[singleton: .appContext].frontmostViewController as? CallVC)?.handleAnswerMessage(message)
     }
     
     public func dismissAllCallUI() {
-        guard Singleton.hasAppContext else { return }
+        guard dependencies.hasInitialised(singleton: .appContext) else { return }
         guard Thread.isMainThread else {
             DispatchQueue.main.async {
                 self.dismissAllCallUI()
@@ -260,8 +275,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
         }
         
         IncomingCallBanner.current?.dismiss()
-        (Singleton.appContext.frontmostViewController as? CallVC)?.handleEndCallMessage()
+        (dependencies[singleton: .appContext].frontmostViewController as? CallVC)?.handleEndCallMessage()
         MiniCallView.current?.dismiss()
     }
 }
-

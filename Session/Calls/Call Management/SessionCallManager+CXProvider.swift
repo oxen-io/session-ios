@@ -28,7 +28,7 @@ extension SessionCallManager: CXProviderDelegate {
         
         guard let call: SessionCall = (self.currentCall as? SessionCall) else { return action.fail() }
         
-        if Singleton.hasAppContext && Singleton.appContext.isMainAppAndActive {
+        if dependencies.hasInitialised(singleton: .appContext) && dependencies[singleton: .appContext].isMainAppAndActive {
             if answerCallAction() {
                 action.fulfill()
             }

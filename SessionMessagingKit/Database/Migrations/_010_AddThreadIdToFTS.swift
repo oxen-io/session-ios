@@ -14,7 +14,7 @@ enum _010_AddThreadIdToFTS: Migration {
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Can't actually alter a virtual table in SQLite so we need to drop and recreate it,
         // luckily this is actually pretty quick
         if try db.tableExists(Interaction.fullTextSearchTableName) {
@@ -30,6 +30,6 @@ enum _010_AddThreadIdToFTS: Migration {
             t.column(Interaction.Columns.threadId.name)
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

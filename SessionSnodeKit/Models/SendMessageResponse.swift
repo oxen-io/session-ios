@@ -1,10 +1,9 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import Sodium
 import SessionUtilitiesKit
 
-public class SendMessagesResponse: SnodeRecursiveResponse<SendMessagesResponse.SwarmItem> {
+public final class SendMessagesResponse: SnodeRecursiveResponse<SendMessagesResponse.SwarmItem> {
     private enum CodingKeys: String, CodingKey {
         case hash
         case swarm
@@ -13,6 +12,21 @@ public class SendMessagesResponse: SnodeRecursiveResponse<SendMessagesResponse.S
     public let hash: String
     
     // MARK: - Initialization
+    
+    internal init(
+        hash: String,
+        swarm: [String: SwarmItem],
+        hardFork: [Int],
+        timeOffset: Int64
+    ) {
+        self.hash = hash
+        
+        super.init(
+            swarm: swarm,
+            hardFork: hardFork,
+            timeOffset: timeOffset
+        )
+    }
     
     required init(from decoder: Decoder) throws {
         let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
@@ -62,9 +76,9 @@ extension SendMessagesResponse: ValidatableResponse {
     internal static var requiredSuccessfulResponses: Int { -2 }
     
     internal func validResultMap(
-        sodium: Sodium,
-        userX25519PublicKey: String,
-        validationData: Void
+        publicKey: String,
+        validationData: Void,
+        using dependencies: Dependencies
     ) throws -> [String: Bool] {
         let validationMap: [String: Bool] = swarm.reduce(into: [:]) { result, next in
             guard
@@ -87,10 +101,12 @@ extension SendMessagesResponse: ValidatableResponse {
             /// Signature of `hash` signed by the node's ed25519 pubkey
             let verificationBytes: [UInt8] = hash.bytes
             
-            result[next.key] = sodium.sign.verify(
-                message: verificationBytes,
-                publicKey: Data(hex: next.key).bytes,
-                signature: encodedSignature.bytes
+            result[next.key] = dependencies[singleton: .crypto].verify(
+                .signature(
+                    message: verificationBytes,
+                    publicKey: Data(hex: next.key).bytes,
+                    signature: encodedSignature.bytes
+                )
             )
         }
         

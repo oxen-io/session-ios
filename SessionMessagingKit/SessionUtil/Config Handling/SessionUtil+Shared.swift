@@ -9,6 +9,12 @@ import SessionUtilitiesKit
 
 // MARK: - Convenience
 
+public extension SessionUtil {
+    enum Crypto {
+        public typealias Domain = String
+    }
+}
+
 internal extension SessionUtil {
     /// This is a buffer period within which we will process messages which would result in a config change, any message which would normally
     /// result in a config change which was sent before `lastConfigMessage.timestamp - configChangeBufferPeriod` will not
@@ -28,6 +34,9 @@ internal extension SessionUtil {
             .appending(contentsOf: columnsRelatedToConvoInfoVolatile)
             .appending(contentsOf: columnsRelatedToUserGroups)
             .appending(contentsOf: columnsRelatedToThreads)
+            .appending(contentsOf: columnsRelatedToGroupInfo)
+            .appending(contentsOf: columnsRelatedToGroupMembers)
+            .appending(contentsOf: columnsRelatedToGroupKeys)
             .map { ColumnKey($0) }
             .asSet()
         
@@ -44,36 +53,49 @@ internal extension SessionUtil {
         return (priority >= SessionUtil.visiblePriority)
     }
     
+    static func pushChangesIfNeeded(
+        _ db: Database,
+        for variant: ConfigDump.Variant,
+        sessionId: SessionId,
+        using dependencies: Dependencies
+    ) throws {
+        try performAndPushChange(db, for: variant, sessionId: sessionId, using: dependencies) { _ in }
+    }
+    
     static func performAndPushChange(
         _ db: Database,
         for variant: ConfigDump.Variant,
-        publicKey: String,
-        change: (UnsafeMutablePointer<config_object>?) throws -> ()
+        sessionId: SessionId,
+        using dependencies: Dependencies,
+        change: (Config?) throws -> ()
     ) throws {
         // Since we are doing direct memory manipulation we are using an `Atomic`
         // type which has blocking access in it's `mutate` closure
         let needsPush: Bool
         
         do {
-            needsPush = try SessionUtil
-                .config(for: variant, publicKey: publicKey)
-                .mutate { conf in
-                    guard conf != nil else { throw SessionUtilError.nilConfigObject }
-                    
+            needsPush = try dependencies[cache: .sessionUtil]
+                .config(for: variant, sessionId: sessionId)
+                .mutate { config in
                     // Peform the change
-                    try change(conf)
+                    try change(config)
                     
+                    // If an error occurred during the change then actually throw it to prevent
+                    // any database change from completing
+                    if let lastError: SessionUtilError = config?.lastError { throw lastError }
+
                     // If we don't need to dump the data the we can finish early
-                    guard config_needs_dump(conf) else { return config_needs_push(conf) }
-                    
+                    guard config.needsDump(using: dependencies) else { return config.needsPush }
+
                     try SessionUtil.createDump(
-                        conf: conf,
+                        config: config,
                         for: variant,
-                        publicKey: publicKey,
-                        timestampMs: SnodeAPI.currentOffsetTimestampMs()
-                    )?.save(db)
-                    
-                    return config_needs_push(conf)
+                        sessionId: sessionId,
+                        timestampMs: SnodeAPI.currentOffsetTimestampMs(using: dependencies),
+                        using: dependencies
+                    )?.upsert(db)
+
+                    return config.needsPush
                 }
         }
         catch {
@@ -84,12 +106,16 @@ internal extension SessionUtil {
         // Make sure we need a push before scheduling one
         guard needsPush else { return }
         
-        db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(publicKey)) { db in
-            ConfigurationSyncJob.enqueue(db, publicKey: publicKey)
+        db.afterNextTransactionNestedOnce(dedupeId: SessionUtil.syncDedupeId(sessionId.hexString)) { db in
+            ConfigurationSyncJob.enqueue(db, sessionIdHexString: sessionId.hexString)
         }
     }
     
-    @discardableResult static func updatingThreads<T>(_ db: Database, _ updated: [T]) throws -> [T] {
+    @discardableResult static func updatingThreads<T>(
+        _ db: Database,
+        _ updated: [T],
+        using dependencies: Dependencies
+    ) throws -> [T] {
         guard let updatedThreads: [SessionThread] = updated as? [SessionThread] else {
             throw StorageError.generic
         }
@@ -97,7 +123,7 @@ internal extension SessionUtil {
         // If we have no updated threads then no need to continue
         guard !updatedThreads.isEmpty else { return updated }
         
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         let groupedThreads: [SessionThread.Variant: [SessionThread]] = updatedThreads
             .grouped(by: \.variant)
         let urlInfo: [String: OpenGroupUrlInfo] = try OpenGroupUrlInfo
@@ -105,7 +131,7 @@ internal extension SessionUtil {
             .reduce(into: [:]) { result, next in result[next.threadId] = next }
         
         // Update the unread state for the threads first (just in case that's what changed)
-        try SessionUtil.updateMarkedAsUnreadState(db, threads: updatedThreads)
+        try SessionUtil.updateMarkedAsUnreadState(db, threads: updatedThreads, using: dependencies)
         
         // Then update the `hidden` and `priority` values
         try groupedThreads.forEach { variant, threads in
@@ -113,12 +139,13 @@ internal extension SessionUtil {
                 case .contact:
                     // If the 'Note to Self' conversation is pinned then we need to custom handle it
                     // first as it's part of the UserProfile config
-                    if let noteToSelf: SessionThread = threads.first(where: { $0.id == userPublicKey }) {
+                    if let noteToSelf: SessionThread = threads.first(where: { $0.id == userSessionId.hexString }) {
                         try SessionUtil.performAndPushChange(
                             db,
                             for: .userProfile,
-                            publicKey: userPublicKey
-                        ) { conf in
+                            sessionId: userSessionId,
+                            using: dependencies
+                        ) { config in
                             try SessionUtil.updateNoteToSelf(
                                 priority: {
                                     guard noteToSelf.shouldBeVisible else { return SessionUtil.hiddenPriority }
@@ -127,21 +154,22 @@ internal extension SessionUtil {
                                         .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
                                         .defaulting(to: SessionUtil.visiblePriority)
                                 }(),
-                                in: conf
+                                in: config
                             )
                         }
                     }
                     
                     // Remove the 'Note to Self' convo from the list for updating contact priorities
-                    let remainingThreads: [SessionThread] = threads.filter { $0.id != userPublicKey }
+                    let remainingThreads: [SessionThread] = threads.filter { $0.id != userSessionId.hexString }
                     
                     guard !remainingThreads.isEmpty else { return }
                     
                     try SessionUtil.performAndPushChange(
                         db,
                         for: .contacts,
-                        publicKey: userPublicKey
-                    ) { conf in
+                        sessionId: userSessionId,
+                        using: dependencies
+                    ) { config in
                         try SessionUtil.upsert(
                             contactData: remainingThreads
                                 .map { thread in
@@ -156,7 +184,8 @@ internal extension SessionUtil {
                                         }()
                                     )
                                 },
-                            in: conf
+                            in: config,
+                            using: dependencies
                         )
                     }
                     
@@ -164,8 +193,9 @@ internal extension SessionUtil {
                     try SessionUtil.performAndPushChange(
                         db,
                         for: .userGroups,
-                        publicKey: userPublicKey
-                    ) { conf in
+                        sessionId: userSessionId,
+                        using: dependencies
+                    ) { config in
                         try SessionUtil.upsert(
                             communities: threads
                                 .compactMap { thread -> CommunityInfo? in
@@ -178,7 +208,8 @@ internal extension SessionUtil {
                                         )
                                     }
                                 },
-                            in: conf
+                            in: config,
+                            using: dependencies
                         )
                     }
                     
@@ -186,8 +217,9 @@ internal extension SessionUtil {
                     try SessionUtil.performAndPushChange(
                         db,
                         for: .userGroups,
-                        publicKey: userPublicKey
-                    ) { conf in
+                        sessionId: userSessionId,
+                        using: dependencies
+                    ) { config in
                         try SessionUtil.upsert(
                             legacyGroups: threads
                                 .map { thread in
@@ -198,39 +230,67 @@ internal extension SessionUtil {
                                             .defaulting(to: SessionUtil.visiblePriority)
                                     )
                                 },
-                            in: conf
+                            in: config,
+                            using: dependencies
                         )
                     }
                 
                 case .group:
-                    break
+                    try SessionUtil.performAndPushChange(
+                        db,
+                        for: .userGroups,
+                        sessionId: userSessionId,
+                        using: dependencies
+                    ) { config in
+                        try SessionUtil.upsert(
+                            groups: threads
+                                .map { thread in
+                                    GroupInfo(
+                                        groupSessionId: thread.id,
+                                        priority: thread.pinnedPriority
+                                            .map { Int32($0 == 0 ? SessionUtil.visiblePriority : max($0, 1)) }
+                                            .defaulting(to: SessionUtil.visiblePriority)
+                                    )
+                                },
+                            in: config,
+                            using: dependencies
+                        )
+                    }
             }
         }
         
         return updated
     }
     
-    static func hasSetting(_ db: Database, forKey key: String) throws -> Bool {
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+    static func hasSetting(
+        _ db: Database,
+        forKey key: String,
+        using dependencies: Dependencies
+    ) throws -> Bool {
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch key {
             case Setting.BoolKey.checkForCommunityMessageRequests.rawValue:
-                return try SessionUtil
-                    .config(for: .userProfile, publicKey: userPublicKey)
+                return try dependencies[cache: .sessionUtil]
+                    .config(for: .userProfile, sessionId: userSessionId)
                     .wrappedValue
-                    .map { conf -> Bool in (try SessionUtil.rawBlindedMessageRequestValue(in: conf) >= 0) }
+                    .map { config -> Bool in (try SessionUtil.rawBlindedMessageRequestValue(in: config) >= 0) }
                     .defaulting(to: false)
                 
             default: return false
         }
     }
     
-    static func updatingSetting(_ db: Database, _ updated: Setting?) throws {
+    static func updatingSetting(
+        _ db: Database,
+        _ updated: Setting?,
+        using dependencies: Dependencies
+    ) throws {
         // Don't current support any nullable settings
         guard let updatedSetting: Setting = updated else { return }
         
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         
         // Currently the only synced setting is 'checkForCommunityMessageRequests'
         switch updatedSetting.id {
@@ -238,11 +298,12 @@ internal extension SessionUtil {
                 try SessionUtil.performAndPushChange(
                     db,
                     for: .userProfile,
-                    publicKey: userPublicKey
-                ) { conf in
+                    sessionId: userSessionId,
+                    using: dependencies
+                ) { config in
                     try SessionUtil.updateSettings(
                         checkForCommunityMessageRequests: updatedSetting.unsafeValue(as: Bool.self),
-                        in: conf
+                        in: config
                     )
                 }
                 
@@ -250,15 +311,15 @@ internal extension SessionUtil {
         }
     }
     
-    static func kickFromConversationUIIfNeeded(removedThreadIds: [String]) {
+    static func kickFromConversationUIIfNeeded(removedThreadIds: [String], using dependencies: Dependencies) {
         guard !removedThreadIds.isEmpty else { return }
         
         // If the user is currently navigating somewhere within the view hierarchy of a conversation
         // we just deleted then return to the home screen
         DispatchQueue.main.async {
             guard
-                Singleton.hasAppContext,
-                let rootViewController: UIViewController = Singleton.appContext.mainWindow?.rootViewController,
+                dependencies.hasInitialised(singleton: .appContext),
+                let rootViewController: UIViewController = dependencies[singleton: .appContext].mainWindow?.rootViewController,
                 let topBannerController: TopBannerController = (rootViewController as? TopBannerController),
                 !topBannerController.children.isEmpty,
                 let navController: UINavigationController = topBannerController.children[0] as? UINavigationController
@@ -343,18 +404,23 @@ internal extension SessionUtil {
         _ db: Database,
         threadId: String,
         targetConfig: ConfigDump.Variant,
-        changeTimestampMs: Int64
+        changeTimestampMs: Int64,
+        using dependencies: Dependencies = Dependencies()
     ) -> Bool {
-        let targetPublicKey: String = {
+        let targetSessionId: String = {
             switch targetConfig {
-                default: return getUserHexEncodedPublicKey(db)
+                case .userProfile, .contacts, .convoInfoVolatile, .userGroups:
+                    return getUserSessionId(db, using: dependencies).hexString
+                    
+                case .groupInfo, .groupMembers, .groupKeys: return threadId
+                case .invalid: return ""
             }
         }()
         
         let configDumpTimestampMs: Int64 = (try? ConfigDump
             .filter(
                 ConfigDump.Columns.variant == targetConfig &&
-                ConfigDump.Columns.publicKey == targetPublicKey
+                ConfigDump.Columns.sessionId == targetSessionId
             )
             .select(.timestampMs)
             .asRequest(of: Int64.self)
@@ -369,9 +435,86 @@ internal extension SessionUtil {
         loopCounter += 1
         
         guard loopCounter < maxLoopCount else {
-            SNLog("[SessionUtil] Got stuck in infinite loop processing '\(variant.configMessageKind.description)' data")
+            SNLog("[SessionUtil] Got stuck in infinite loop processing '\(variant.description)' data")
             throw SessionUtilError.processingLoopLimitReached
         }
+    }
+}
+
+// MARK: - Encryption
+
+public extension SessionUtil {
+    static func encrypt(
+        messages: [Data],
+        toRecipients recipients: [SessionId],
+        ed25519PrivateKey: [UInt8],
+        domain: SessionUtil.Crypto.Domain,
+        using dependencies: Dependencies
+    ) throws -> Data {
+        var outLen: Int = 0
+        var cMessages: [UnsafePointer<UInt8>?] = messages
+            .map { message in message.cArray }
+            .unsafeCopy()
+        var messageSizes: [Int] = messages.map { $0.count }
+        var cRecipients: [UnsafePointer<UInt8>?] = recipients
+            .map { recipient in recipient.publicKey }
+            .unsafeCopy()
+        var secretKey: [UInt8] = ed25519PrivateKey
+        var cDomain: [CChar] = domain.cArray
+        var cEncryptedDataPtr: UnsafeMutablePointer<UInt8>?
+        
+        try CExceptionHelper.performSafely {
+            cEncryptedDataPtr = session_encrypt_for_multiple_simple_ed25519(
+                &outLen,
+                &cMessages,
+                &messageSizes,
+                messages.count,
+                &cRecipients,
+                recipients.count,
+                &secretKey,
+                &cDomain,
+                nil,
+                0
+            )
+        }
+        
+        let encryptedData: Data? = cEncryptedDataPtr.map { Data(bytes: $0, count: outLen) }
+        cMessages.forEach { $0?.deallocate() }
+        cRecipients.forEach { $0?.deallocate() }
+        cEncryptedDataPtr?.deallocate()
+        
+        return try encryptedData ?? { throw MessageSenderError.encryptionFailed }()
+    }
+    
+    static func decrypt(
+        ciphertext: Data,
+        senderSessionId: SessionId,
+        ed25519KeyPair: KeyPair,
+        domain: SessionUtil.Crypto.Domain,
+        using dependencies: Dependencies
+    ) throws -> Data {
+        var outLen: Int = 0
+        var cEncryptedData: [UInt8] = Array(ciphertext)
+        var secretKey: [UInt8] = ed25519KeyPair.secretKey
+        var cSenderPubkey: [UInt8] = senderSessionId.publicKey
+        var cDomain: [CChar] = domain.cArray
+        var cDecryptedDataPtr: UnsafeMutablePointer<UInt8>?
+        
+        try CExceptionHelper.performSafely {
+            cDecryptedDataPtr = session_decrypt_for_multiple_simple_ed25519(
+                &outLen,
+                &cEncryptedData,
+                cEncryptedData.count,
+                &secretKey,
+                &cSenderPubkey,
+                &cDomain
+            )
+        }
+        
+        let decryptedData: Data? = cDecryptedDataPtr.map { Data(bytes: $0, count: outLen) }
+        cDecryptedDataPtr?.deallocate()
+        
+        return try decryptedData ?? { throw MessageReceiverError.decryptionFailed }()
     }
 }
 
@@ -382,26 +525,29 @@ public extension SessionUtil {
         _ db: Database? = nil,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        visibleOnly: Bool
+        visibleOnly: Bool,
+        using dependencies: Dependencies
     ) -> Bool {
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = getUserSessionId(db, using: dependencies)
         let configVariant: ConfigDump.Variant = {
             switch threadVariant {
-                case .contact: return (threadId == userPublicKey ? .userProfile : .contacts)
+                case .contact: return (threadId == userSessionId.hexString ? .userProfile : .contacts)
                 case .legacyGroup, .group, .community: return .userGroups
             }
         }()
         
-        return SessionUtil
-            .config(for: configVariant, publicKey: userPublicKey)
+        return dependencies[cache: .sessionUtil]
+            .config(for: configVariant, sessionId: userSessionId)
             .wrappedValue
-            .map { conf in
+            .map { config in
+                guard case .object(let conf) = config else { return false }
+                
                 var cThreadId: [CChar] = threadId.cArray.nullTerminated()
                 
                 switch threadVariant {
                     case .contact:
                         // The 'Note to Self' conversation is stored in the 'userProfile' config
-                        guard threadId != userPublicKey else {
+                        guard threadId != userSessionId.hexString else {
                             return (
                                 !visibleOnly ||
                                 SessionUtil.shouldBeVisible(priority: user_profile_get_nts_priority(conf))
@@ -418,7 +564,7 @@ public extension SessionUtil {
                         return (!visibleOnly || SessionUtil.shouldBeVisible(priority: contact.priority))
                         
                     case .community:
-                        let maybeUrlInfo: OpenGroupUrlInfo? = Storage.shared
+                        let maybeUrlInfo: OpenGroupUrlInfo? = dependencies[singleton: .storage]
                             .read { db in try OpenGroupUrlInfo.fetchAll(db, ids: [threadId]) }?
                             .first
                         
@@ -443,7 +589,10 @@ public extension SessionUtil {
                         return false
                         
                     case .group:
-                        return false
+                        var group: ugroups_group_info = ugroups_group_info()
+                        
+                        /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence
+                        return user_groups_get_group(conf, &group, &cThreadId)
                 }
             }
             .defaulting(to: false)

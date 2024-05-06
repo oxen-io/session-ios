@@ -24,7 +24,7 @@ enum _001_InitialSetupMigration: Migration {
         return .porter(wrapping: .unicode61())
     }()
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: Contact.self) { t in
             t.column(.id, .text)
                 .notNull()
@@ -144,7 +144,7 @@ enum _001_InitialSetupMigration: Migration {
             t.column(.name, .text).notNull()
             t.column(.roomDescription, .text)
             t.column(.imageId, .text)
-            t.column(.imageData, .blob)
+            t.deprecatedColumn(name: "imageData", .blob)              // stringlint:disable
             t.column(.userCount, .integer).notNull()
             t.column(.infoUpdates, .integer).notNull()
             t.column(.sequenceNumber, .integer).notNull()
@@ -386,6 +386,6 @@ enum _001_InitialSetupMigration: Migration {
             t.column(.timestampMs, .integer).notNull()
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

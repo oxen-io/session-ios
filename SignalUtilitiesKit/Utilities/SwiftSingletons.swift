@@ -4,14 +4,10 @@ import Foundation
 import SignalCoreKit
 import SessionUtilitiesKit
 
-public class SwiftSingletons: NSObject {
+public class SwiftSingletons {
     public static let shared = SwiftSingletons()
 
     private var classSet = Set<String>()
-
-    private override init() {
-        super.init()
-    }
 
     public func register(_ singleton: AnyObject) {
         guard !SNUtilitiesKit.isRunningTests else { return }

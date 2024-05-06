@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import PureLayout
 import SessionUIKit
 import SessionUtilitiesKit
 import NVActivityIndicatorView
@@ -44,18 +43,17 @@ class EmptySearchResultCell: UITableViewCell {
         selectionStyle = .none
         
         contentView.addSubview(messageLabel)
-        messageLabel.autoSetDimension(.height, toSize: 150)
-        messageLabel.autoPinEdge(toSuperviewMargin: .top, relation: .greaterThanOrEqual)
-        messageLabel.autoPinEdge(toSuperviewMargin: .leading, relation: .greaterThanOrEqual)
-        messageLabel.autoPinEdge(toSuperviewMargin: .bottom, relation: .greaterThanOrEqual)
-        messageLabel.autoPinEdge(toSuperviewMargin: .trailing, relation: .greaterThanOrEqual)
-        messageLabel.autoVCenterInSuperview()
-        messageLabel.autoHCenterInSuperview()
-        messageLabel.setContentHuggingHigh()
-        messageLabel.setCompressionResistanceHigh()
+        messageLabel.set(.height, to: 150)
+        messageLabel.pin(.top, greaterThanOrEqualTo: .top, of: contentView)
+        messageLabel.pin(.leading, greaterThanOrEqualTo: .leading, of: contentView)
+        messageLabel.pin(.bottom, lessThanOrEqualTo: .bottom, of: contentView)
+        messageLabel.pin(.trailing, lessThanOrEqualTo: .trailing, of: contentView)
+        messageLabel.center(in: contentView)
+        messageLabel.setContentHugging(to: .required)
+        messageLabel.setCompressionResistance(to: .required)
 
         contentView.addSubview(spinner)
-        spinner.autoCenterInSuperview()
+        spinner.center(in: contentView)
     }
 
     required init?(coder aDecoder: NSCoder) {

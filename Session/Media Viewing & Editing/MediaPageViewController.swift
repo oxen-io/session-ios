@@ -16,6 +16,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     
     fileprivate var mediaInteractiveDismiss: MediaInteractiveDismiss?
     
+    private let dependencies: Dependencies
     public let viewModel: MediaGalleryViewModel
     private var dataChangeObservable: DatabaseCancellable? {
         didSet { oldValue?.cancel() }   // Cancel the old observable if there was one
@@ -63,8 +64,10 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     init(
         viewModel: MediaGalleryViewModel,
         initialItem: MediaGalleryViewModel.Item,
-        options: [MediaGalleryOption]
+        options: [MediaGalleryOption],
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.viewModel = viewModel
         self.showAllMediaButton = options.contains(.showAllMediaButton)
         self.sliderEnabled = options.contains(.sliderEnabled)
@@ -132,7 +135,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         // Navigation
 
-        let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+        let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: dependencies)
         self.navigationItem.leftBarButtonItem = backButton
         self.navigationItem.titleView = portraitHeaderView
 
@@ -180,8 +183,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         galleryRailView.isHidden = true
         galleryRailView.delegate = self
-        galleryRailView.autoSetDimension(.height, toSize: 72)
-        footerBar.autoSetDimension(.height, toSize: 44)
+        galleryRailView.set(.height, to: 72)
+        footerBar.set(.height, to: 44)
 
         let bottomContainer: DynamicallySizedView = DynamicallySizedView()
         bottomContainer.clipsToBounds = true
@@ -193,7 +196,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         bottomStack.axis = .vertical
         bottomStack.isLayoutMarginsRelativeArrangement = true
         bottomContainer.addSubview(bottomStack)
-        bottomStack.autoPinEdgesToSuperviewEdges()
+        bottomStack.pin(to: bottomContainer)
         
         let galleryRailBlockingView: UIView = UIView()
         galleryRailBlockingView.themeBackgroundColor = .backgroundPrimary
@@ -391,7 +394,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         guard dataChangeObservable == nil else { return }
         
         // Start observing for data changes
-        dataChangeObservable = Storage.shared.start(
+        dataChangeObservable = Dependencies()[singleton: .storage].start(
             viewModel.observableAlbumData,
             onError: { _ in },
             onChange: { [weak self] albumData in
@@ -493,7 +496,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             threadId: self.viewModel.threadId,
             threadVariant: self.viewModel.threadVariant,
             focusedAttachmentId: currentItem.attachment.id,
-            performInitialQuerySync: true
+            performInitialQuerySync: true,
+            using: dependencies
         )
         
         let navController: MediaGalleryNavigationController = MediaGalleryNavigationController()
@@ -550,7 +554,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             let threadId: String = self.viewModel.threadId
             let threadVariant: SessionThread.Variant = self.viewModel.threadVariant
             
-            Storage.shared.write { db in
+            Dependencies()[singleton: .storage].write { db in
                 try MessageSender.send(
                     db,
                     message: DataExtractionNotification(
@@ -580,13 +584,13 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             title: "delete_message_for_me".localized(),
             style: .destructive
         ) { _ in
-            Storage.shared.writeAsync { db in
+            Dependencies()[singleton: .storage].writeAsync { db in
                 _ = try Attachment
                     .filter(id: itemToDelete.attachment.id)
                     .deleteAll(db)
                 
                 // Add the garbage collection job to delete orphaned attachment files
-                JobRunner.add(
+                Dependencies()[singleton: .jobRunner].add(
                     db,
                     job: Job(
                         variant: .garbageCollection,
@@ -594,7 +598,9 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
                         details: GarbageCollectionJob.Details(
                             typesToCollect: [.orphanedAttachmentFiles]
                         )
-                    )
+                    ),
+                    canStartJob: true,
+                    using: Dependencies()
                 )
                 
                 // Delete any interactions which had all of their attachments removed
@@ -792,7 +798,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         self.navigationController?.view.isUserInteractionEnabled = false
         self.navigationController?.dismiss(animated: true, completion: { [weak self] in
-            if !IsLandscapeOrientationEnabled() {
+            if !UIDevice.current.isIPad {
                 UIDevice.current.ows_setOrientation(.portrait)
             }
             
@@ -855,13 +861,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         containerView.layoutMargins = UIEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
 
         containerView.addSubview(stackView)
-
-        stackView.autoPinEdge(toSuperviewMargin: .top, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .trailing, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .bottom, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .leading, relation: .greaterThanOrEqual)
-        stackView.setContentHuggingHigh()
-        stackView.autoCenterInSuperview()
+        stackView.pin(.top, greaterThanOrEqualTo: .top, of: containerView)
+        stackView.pin(.trailing, greaterThanOrEqualTo: .trailing, of: containerView)
+        stackView.pin(.bottom, lessThanOrEqualTo: .bottom, of: containerView)
+        stackView.pin(.leading, lessThanOrEqualTo: .leading, of: containerView)
+        stackView.setContentHugging(to: .required)
+        stackView.center(in: containerView)
 
         return containerView
     }()
@@ -877,7 +882,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         let name: String = {
             switch targetItem.interactionVariant {
                 case .standardIncoming:
-                    return Storage.shared
+                    return Dependencies()[singleton: .storage]
                         .read { db in
                             Profile.displayName(
                                 db,

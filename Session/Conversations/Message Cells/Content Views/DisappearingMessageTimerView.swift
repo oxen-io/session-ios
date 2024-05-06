@@ -39,7 +39,7 @@ class DisappearingMessageTimerView: UIView {
         self.startAnimation()
     }
     
-    @objc private func updateProgress() {
+    private func updateProgress() {
         guard self.expirationTimestampMs > 0 else {
             self.progress = 12
             return
@@ -60,13 +60,10 @@ class DisappearingMessageTimerView: UIView {
     
     private func startAnimation() {
         self.clearAnimation()
-        self.animationTimer = Timer.weakScheduledTimer(
+        self.animationTimer = Timer.scheduledTimerOnMainThread(
             withTimeInterval: 0.1,
-            target: self,
-            selector: #selector(updateProgress),
-            userInfo: nil,
             repeats: true
-        )
+        ) { [weak self] _ in self?.updateProgress() }
     }
     
     private func clearAnimation() {

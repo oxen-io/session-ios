@@ -10,9 +10,13 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class NukeDataModal: Modal {
+    private let dependencies: Dependencies
+    
     // MARK: - Initialization
     
-    override init(targetView: UIView? = nil, dismissType: DismissType = .recursive, afterClosed: (() -> ())? = nil) {
+    init(targetView: UIView? = nil, dismissType: DismissType = .recursive, using dependencies: Dependencies, afterClosed: (() -> ())? = nil) {
+        self.dependencies = dependencies
+        
         super.init(targetView: targetView, dismissType: dismissType, afterClosed: afterClosed)
         
         self.modalPresentationStyle = .overFullScreen
@@ -152,7 +156,7 @@ final class NukeDataModal: Modal {
     
     private func clearDeviceOnly() {
         ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: false) { [weak self] _ in
-            ConfigurationSyncJob.run()
+            ConfigurationSyncJob.run(sessionIdHexString: getUserSessionId().hexString)
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .receive(on: DispatchQueue.main)
                 .sinkUntilComplete(
@@ -165,37 +169,53 @@ final class NukeDataModal: Modal {
     }
     
     private func clearEntireAccount(presentedViewController: UIViewController) {
+        typealias PreparedClearRequests = (
+            deleteAll: HTTP.PreparedRequest<[String: Bool]>,
+            inboxRequestInfo: [HTTP.PreparedRequest<String>]
+        )
+        
         ModalActivityIndicatorViewController
-            .present(fromViewController: presentedViewController, canCancel: false) { [weak self] _ in
-                Publishers
-                    .MergeMany(
-                        Storage.shared
-                            .read { db -> [(String, OpenGroupAPI.PreparedSendData<OpenGroupAPI.DeleteInboxResponse>)] in
-                                return try OpenGroup
-                                    .filter(OpenGroup.Columns.isActive == true)
-                                    .select(.server)
-                                    .distinct()
-                                    .asRequest(of: String.self)
-                                    .fetchSet(db)
-                                    .map { ($0, try OpenGroupAPI.preparedClearInbox(db, on: $0))}
-                            }
-                            .defaulting(to: [])
-                            .compactMap { server, data in
-                                OpenGroupAPI
-                                    .send(data: data)
-                                    .map { _ in [server: true] }
-                                    .eraseToAnyPublisher()
-                            }
-                    )
-                    .collect()
-                    .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                    .flatMap { results in
-                        SnodeAPI
-                            .deleteAllMessages(namespace: .all)
-                            .map { results.reduce($0) { result, next in result.updated(with: next) } }
+            .present(fromViewController: presentedViewController, canCancel: false) { [weak self, dependencies] _ in
+                dependencies[singleton: .storage]
+                    .readPublisher { db -> PreparedClearRequests in
+                        (
+                            try SnodeAPI.preparedDeleteAllMessages(
+                                namespace: .all,
+                                authMethod: try Authentication.with(
+                                    db,
+                                    sessionIdHexString: getUserSessionId(db, using: dependencies).hexString,
+                                    using: dependencies
+                                ),
+                                using: dependencies
+                            ),
+                            try OpenGroup
+                                .filter(OpenGroup.Columns.isActive == true)
+                                .select(.server)
+                                .distinct()
+                                .asRequest(of: String.self)
+                                .fetchSet(db)
+                                .map { server in
+                                    try OpenGroupAPI.preparedClearInbox(db, on: server, using: dependencies)
+                                        .map { _, _ in server }
+                                }
+                        )
+                    }
+                    .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
+                    .flatMap { preparedRequests -> AnyPublisher<(HTTP.PreparedRequest<[String: Bool]>, [String]), Error> in
+                        Publishers
+                            .MergeMany(preparedRequests.inboxRequestInfo.map { $0.send(using: dependencies) })
+                            .collect()
+                            .map { response in (preparedRequests.deleteAll, response.map { $0.1 }) }
                             .eraseToAnyPublisher()
                     }
-                    .receive(on: DispatchQueue.main)
+                    .flatMap { preparedDeleteAllRequest, clearedServers in
+                        preparedDeleteAllRequest
+                            .send(using: dependencies)
+                            .map { _, data in
+                                clearedServers.reduce(into: data) { result, next in result[next] = true }
+                            }
+                    }
+                    .receive(on: DispatchQueue.main, using: dependencies)
                     .sinkUntilComplete(
                         receiveCompletion: { result in
                             switch result {
@@ -250,14 +270,14 @@ final class NukeDataModal: Modal {
             }
     }
     
-    private func deleteAllLocalData(using dependencies: Dependencies = Dependencies()) {
+    private func deleteAllLocalData() {
         // Unregister push notifications if needed
-        let isUsingFullAPNs: Bool = UserDefaults.standard[.isUsingFullAPNs]
-        let maybeDeviceToken: String? = UserDefaults.standard[.deviceToken]
+        let isUsingFullAPNs: Bool = dependencies[defaults: .standard, key: .isUsingFullAPNs]
+        let maybeDeviceToken: String? = dependencies[defaults: .standard, key: .deviceToken]
         
         if isUsingFullAPNs, let deviceToken: String = maybeDeviceToken {
             PushNotificationAPI
-                .unsubscribe(token: Data(hex: deviceToken))
+                .unsubscribeAll(token: Data(hex: deviceToken), using: dependencies)
                 .sinkUntilComplete()
         }
         
@@ -265,34 +285,34 @@ final class NukeDataModal: Modal {
         ///
         /// **Note:** This is file as long as this process kills the app, if it doesn't then we need an alternate mechanism to flag that
         /// the `JobRunner` is allowed to start it's queues again
-        JobRunner.stopAndClearPendingJobs()
+        dependencies[singleton: .jobRunner].stopAndClearPendingJobs(using: dependencies)
         
         // Clear the app badge and notifications
-        AppEnvironment.shared.notificationPresenter.clearAllNotifications()
+        dependencies[singleton: .notificationsManager].clearAllNotifications()
         UIApplication.shared.applicationIconBadgeNumber = 0
         
         // Clear out the user defaults
         UserDefaults.removeAll()
         
         // Remove the cached key so it gets re-cached on next access
-        dependencies.caches.mutate(cache: .general) {
-            $0.encodedPublicKey = nil
+        dependencies.mutate(cache: .general) {
+            $0.sessionId = nil
             $0.recentReactionTimestamps = []
         }
         
         // Clear the Snode pool
-        SnodeAPI.clearSnodePool()
+        SnodeAPI.clearSnodePool(using: dependencies)
         
         // Stop any pollers
         (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()
         
         // Call through to the SessionApp's "resetAppData" which will wipe out logs, database and
         // profile storage
-        let wasUnlinked: Bool = UserDefaults.standard[.wasUnlinked]
+        let wasUnlinked: Bool = dependencies[defaults: .standard, key: .wasUnlinked]
         
-        SessionApp.resetAppData {
+        SessionApp.resetAppData(using: dependencies) { [dependencies] in
             // Resetting the data clears the old user defaults. We need to restore the unlink default.
-            UserDefaults.standard[.wasUnlinked] = wasUnlinked
+            dependencies[defaults: .standard, key: .wasUnlinked] = wasUnlinked
         }
     }
 }
