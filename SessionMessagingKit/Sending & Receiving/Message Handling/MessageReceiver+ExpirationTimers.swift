@@ -100,14 +100,5 @@ extension MessageReceiver {
                 db,
                 Contact.Columns.lastKnownClientVersion.set(to: version)
             )
-        
-        if contactId == getUserHexEncodedPublicKey(db) {
-            switch version {
-                case .legacyDisappearingMessages:
-                    TopBannerController.show(warning: .outdatedUserConfig)
-                case .newDisappearingMessages:
-                    TopBannerController.hide()
-            }
-        }
     }
 }

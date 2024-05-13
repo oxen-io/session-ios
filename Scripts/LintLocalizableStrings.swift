@@ -77,7 +77,8 @@ extension ProjectState {
         .regex("Logger\\..*\\("),
         .regex("OWSLogger\\..*\\("),
         .regex("case .* = "),
-        .regex("Error.*\\(")
+        .regex("Error.*\\("),
+        .belowLineContaining("PreviewProvider")
     ]
 }
 
@@ -545,6 +546,7 @@ indirect enum MatchType: Hashable {
     case containsAnd(String, caseSensitive: Bool, MatchType)
     case regex(String)
     case previousLine(numEarlier: Int, MatchType)
+    case belowLineContaining(String)
     
     func matches(_ value: String, _ index: Int, _ lines: [String]) -> Bool {
         switch self {
@@ -578,6 +580,9 @@ indirect enum MatchType: Hashable {
                 
                 let targetIndex: Int = (index - numEarlier)
                 return type.matches(lines[targetIndex], targetIndex, lines)
+                
+            case .belowLineContaining(let other):
+                return lines[0..<index].contains(where: { $0.lowercased().contains(other.lowercased()) })
         }
     }
 }

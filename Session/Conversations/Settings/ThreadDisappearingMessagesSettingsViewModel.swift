@@ -87,11 +87,12 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
     
     let title: String = "DISAPPEARING_MESSAGES".localized()
     lazy var subtitle: String? = {
-        if threadVariant == .contact && !isNoteToSelf {
-            return "DISAPPERING_MESSAGES_SUBTITLE_CONTACTS".localized()
+        switch (threadVariant, isNoteToSelf) {
+            case (.contact, false): return "DISAPPERING_MESSAGES_SUBTITLE_CONTACTS".localized()
+            case (.group, _): return "DISAPPERING_MESSAGES_SUBTITLE_GROUPS".localized()
+            case (.community, _): return nil
+            case (.legacyGroup, _), (_, true): return "DISAPPERING_MESSAGES_SUBTITLE_GROUPS".localized()
         }
-        
-        return "DISAPPERING_MESSAGES_SUBTITLE_GROUPS".localized()
     }()
     
     lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = shouldShowConfirmButton
@@ -155,7 +156,6 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                             (self?.currentSelection.value.type == .disappearAfterRead)
                                         }
                                     ),
-                                    styling: SessionCell.StyleInfo(tintColor: .textPrimary),
                                     accessibility: Accessibility(
                                         identifier: "Disappear after read option",
                                         label: "Disappear after read option"
@@ -186,7 +186,6 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                             (self?.currentSelection.value.type == .disappearAfterSend)
                                         }
                                     ),
-                                    styling: SessionCell.StyleInfo(tintColor: .textPrimary),
                                     accessibility: Accessibility(
                                         identifier: "Disappear after send option",
                                         label: "Disappear after send option"
@@ -302,6 +301,7 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                                 // setting
                                                 let updatedConfig: DisappearingMessagesConfiguration = currentSelection
                                                     .with(
+                                                        isEnabled: true,
                                                         durationSeconds: duration,
                                                         type: .disappearAfterSend
                                                     )
