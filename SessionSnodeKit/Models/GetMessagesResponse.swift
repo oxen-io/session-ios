@@ -13,13 +13,13 @@ public class GetMessagesResponse: SnodeResponse {
             case data
             case expiration
             case hash
-            case timestamp
+            case timestampMs = "timestamp"
         }
         
         public let data: String
         public let expiration: Int64?
         public let hash: String
-        public let timestamp: Int64
+        public let timestampMs: Int64
     }
     
     public let messages: [RawMessage]

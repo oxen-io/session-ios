@@ -61,7 +61,6 @@ public enum AppSetup {
             assert(success)
 
             SessionEnvironment.shared = SessionEnvironment(
-                reachabilityManager: SSKReachabilityManagerImpl(),
                 audioSession: OWSAudioSession(),
                 proximityMonitoringManager: OWSProximityMonitoringManagerImpl(),
                 windowManager: OWSWindowManager(default: ())
@@ -99,12 +98,12 @@ public enum AppSetup {
             onProgressUpdate: migrationProgressChanged,
             onMigrationRequirement: { db, requirement in
                 switch requirement {
-                    case .sessionUtilStateLoaded:
+                    case .libSessionStateLoaded:
                         guard Identity.userExists(db) else { return }
                         
                         // After the migrations have run but before the migration completion we load the
                         // SessionUtil state
-                        SessionUtil.loadState(
+                        LibSession.loadState(
                             db,
                             userPublicKey: getUserHexEncodedPublicKey(db),
                             ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey
@@ -114,7 +113,7 @@ public enum AppSetup {
             onComplete: { result, needsConfigSync in
                 // The 'needsConfigSync' flag should be based on whether either a migration or the
                 // configs need to be sync'ed
-                migrationsCompletion(result, (needsConfigSync || SessionUtil.needsSync))
+                migrationsCompletion(result, (needsConfigSync || LibSession.needsSync))
                 
                 // The 'if' is only there to prevent the "variable never read" warning from showing
                 if backgroundTask != nil { backgroundTask = nil }

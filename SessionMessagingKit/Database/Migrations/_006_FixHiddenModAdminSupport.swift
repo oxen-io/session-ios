@@ -13,6 +13,7 @@ enum _006_FixHiddenModAdminSupport: Migration {
     static let minExpectedRunDuration: TimeInterval = 0.01
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [GroupMember.self]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         try db.alter(table: GroupMember.self) { t in

@@ -57,7 +57,7 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
@@ -87,7 +87,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Session needs camera access to take pictures and scan QR codes.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Session&apos;s Screen Lock feature uses Face ID.</string>
+	<string>Session's Screen Lock feature uses Face ID.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>com.loki-project.loki-messenger</string>
 	<key>NSMicrophoneUsageDescription</key>

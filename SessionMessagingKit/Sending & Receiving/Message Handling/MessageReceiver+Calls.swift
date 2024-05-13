@@ -223,7 +223,7 @@ extension MessageReceiver {
             variant: .infoCall,
             body: String(data: messageInfoData, encoding: .utf8),
             timestampMs: messageSentTimestamp,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: LibSession.timestampAlreadyRead(
                 threadId: thread.id,
                 threadVariant: thread.variant,
                 timestampMs: (messageSentTimestamp * 1000),
@@ -302,7 +302,7 @@ extension MessageReceiver {
             variant: .infoCall,
             body: String(data: messageInfoData, encoding: .utf8),
             timestampMs: timestampMs,
-            wasRead: SessionUtil.timestampAlreadyRead(
+            wasRead: LibSession.timestampAlreadyRead(
                 threadId: thread.id,
                 threadVariant: thread.variant,
                 timestampMs: (timestampMs * 1000),

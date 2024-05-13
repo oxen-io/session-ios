@@ -43,8 +43,7 @@ public enum SendReadReceiptsJob: JobExecutor {
                     ),
                     to: details.destination,
                     namespace: details.destination.defaultNamespace,
-                    interactionId: nil,
-                    isSyncMessage: false
+                    interactionId: nil
                 )
             }
             .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }

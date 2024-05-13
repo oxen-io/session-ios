@@ -407,8 +407,8 @@ public enum GarbageCollectionJob: JobExecutor {
                         // directory which contains content to keep as well as delete (directories which end up empty after
                         // this clean up will be removed during the next run)
                         let directoryNamesContainingContent: [String] = allAttachmentFilePaths
-                            .filter { path -> Bool in path.contains("/") }
-                            .compactMap { path -> String? in path.components(separatedBy: "/").first }
+                            .filter { path -> Bool in path.contains("/") }  // stringlint:disable
+                            .compactMap { path -> String? in path.components(separatedBy: "/").first }  // stringlint:disable
                         let orphanedAttachmentFiles: Set<String> = allAttachmentFilePaths
                             .subtracting(fileInfo.attachmentLocalRelativePaths)
                             .subtracting(directoryNamesContainingContent)

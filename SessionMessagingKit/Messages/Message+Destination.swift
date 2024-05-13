@@ -7,8 +7,16 @@ import SessionUtilitiesKit
 
 public extension Message {
     enum Destination: Codable, Hashable {
+        /// A message directed to another user
         case contact(publicKey: String)
+        
+        /// A message that was originally sent to another user but needs to be replicated to the current users swarm
+        case syncMessage(originalRecipientPublicKey: String)
+        
+        /// A message directed to group conversation
         case closedGroup(groupPublicKey: String)
+        
+        /// A message directed to an open group
         case openGroup(
             roomToken: String,
             server: String,
@@ -16,13 +24,15 @@ public extension Message {
             whisperMods: Bool = false,
             fileIds: [String]? = nil
         )
+        
+        /// A message directed to an open group inbox
         case openGroupInbox(server: String, openGroupPublicKey: String, blindedPublicKey: String)
         
         public var defaultNamespace: SnodeAPI.Namespace? {
             switch self {
-                case .contact: return .`default`
+                case .contact, .syncMessage: return .`default`
                 case .closedGroup: return .legacyClosedGroup
-                default: return nil
+                case .openGroup, .openGroupInbox: return nil
             }
         }
         

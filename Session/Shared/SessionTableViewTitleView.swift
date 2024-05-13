@@ -27,6 +27,7 @@ final class SessionTableViewTitleView: UIView {
     
     private lazy var titleLabel: UILabel = {
         let result: UILabel = UILabel()
+        result.setContentCompressionResistancePriority(.required, for: .vertical)
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
         result.themeTextColor = .textPrimary
         result.lineBreakMode = .byTruncatingTail
@@ -63,8 +64,12 @@ final class SessionTableViewTitleView: UIView {
         
         addSubview(stackView)
         
-        stackView.pin([ UIView.HorizontalEdge.trailing, UIView.VerticalEdge.top, UIView.VerticalEdge.bottom ], to: self)
-        stackView.pin(.leading, to: .leading, of: self, withInset: 0)
+        // Note: We are intentionally letting the stackView go out of bounds because the title will clip
+        // in some cases when the subtitle wraps over 2 lines (this provides the extra space we need)
+        stackView.pin(.top, to: .top, of: self, withInset: -2)
+        stackView.pin(.leading, to: .leading, of: self)
+        stackView.pin(.trailing, to: .trailing, of: self)
+        stackView.pin(.bottom, to: .bottom, of: self, withInset: 2)
     }
 
     deinit {

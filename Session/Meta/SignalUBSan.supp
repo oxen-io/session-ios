@@ -1,9 +1,6 @@
 # See https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html#runtime-suppressions
 # for details.
 
-# YapDatabase
-bool:YapDatabaseAutoViewTransaction.m
-
 # SocketRocket
 bool:SRWebSocket.m
 

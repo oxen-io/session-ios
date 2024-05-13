@@ -11,6 +11,7 @@ public protocol JobRunnerType {
     func setExecutor(_ executor: JobExecutor.Type, for variant: Job.Variant)
     func canStart(queue: JobQueue?) -> Bool
     func afterBlockingQueue(callback: @escaping () -> ())
+    func queue(for variant: Job.Variant) -> DispatchQueue?
         
     // MARK: - State Management
     
@@ -19,13 +20,16 @@ public protocol JobRunnerType {
     func appDidFinishLaunching(using dependencies: Dependencies)
     func appDidBecomeActive(using dependencies: Dependencies)
     func startNonBlockingQueues(using dependencies: Dependencies)
-    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, onComplete: (() -> ())?)
+    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, using dependencies: Dependencies, onComplete: (() -> ())?)
     
     // MARK: - Job Scheduling
     
-    @discardableResult func add(_ db: Database, job: Job?, canStartJob: Bool, using dependencies: Dependencies) -> Job?
-    func upsert(_ db: Database, job: Job?, canStartJob: Bool, using dependencies: Dependencies)
+    @discardableResult func add(_ db: Database, job: Job?, dependantJob: Job?, canStartJob: Bool, using dependencies: Dependencies) -> Job?
+    @discardableResult func upsert(_ db: Database, job: Job?, canStartJob: Bool, using dependencies: Dependencies) -> Job?
     @discardableResult func insert(_ db: Database, job: Job?, before otherJob: Job) -> (Int64, Job)?
+    func enqueueDependenciesIfNeeded(_ jobs: [Job], using dependencies: Dependencies)
+    func afterJob(_ job: Job?, state: JobRunner.JobState, callback: @escaping (JobRunner.JobResult) -> ())
+    func removePendingJob(_ job: Job?)
 }
 
 // MARK: - JobRunnerType Convenience
@@ -56,7 +60,7 @@ public extension JobRunnerType {
     func isCurrentlyRunning(_ job: Job?) -> Bool {
         guard let job: Job = job else { return false }
         
-        return !jobInfoFor(jobs: [job], state: .running).isEmpty
+        return !jobInfoFor(jobs: [job], state: .running, variant: nil).isEmpty
     }
     
     func hasJob<T: Encodable>(
@@ -75,8 +79,18 @@ public extension JobRunnerType {
             .contains(where: { $0.detailsData == detailsData })
     }
     
-    func stopAndClearPendingJobs(exceptForVariant: Job.Variant? = nil, onComplete: (() -> ())? = nil) {
-        stopAndClearPendingJobs(exceptForVariant: exceptForVariant, onComplete: onComplete)
+    func stopAndClearPendingJobs(exceptForVariant: Job.Variant? = nil, using dependencies: Dependencies, onComplete: (() -> ())? = nil) {
+        stopAndClearPendingJobs(exceptForVariant: exceptForVariant, using: dependencies, onComplete: onComplete)
+    }
+    
+    // MARK: -- Job Scheduling
+    
+    @discardableResult func add(_ db: Database, job: Job?, canStartJob: Bool, using dependencies: Dependencies) -> Job? {
+        return add(db, job: job, dependantJob: nil, canStartJob: canStartJob, using: dependencies)
+    }
+    
+    func afterJob(_ job: Job?, callback: @escaping (JobRunner.JobResult) -> ()) {
+        afterJob(job, state: .any, callback: callback)
     }
 }
 
@@ -130,11 +144,26 @@ public final class JobRunner: JobRunnerType {
         public static let any: JobState = [ .pending, .running ]
     }
     
-    public enum JobResult {
+    public enum JobResult: Equatable {
         case succeeded
-        case failed
+        case failed(Error?, Bool)
         case deferred
         case notFound
+        
+        public static func == (lhs: JobRunner.JobResult, rhs: JobRunner.JobResult) -> Bool {
+            switch (lhs, rhs) {
+                case (.succeeded, .succeeded): return true
+                case (.failed(let lhsError, let lhsPermanent), .failed(let rhsError, let rhsPermanent)):
+                    return (
+                        // Not a perfect solution but should be good enough
+                        "\(lhsError ?? JobRunnerError.generic)" == "\(rhsError ?? JobRunnerError.generic)" &&
+                        lhsPermanent == rhsPermanent
+                    )
+                    
+                case (.deferred, .deferred): return true
+                default: return false
+            }
+        }
     }
 
     public struct JobInfo: Equatable, CustomDebugStringConvertible {
@@ -142,6 +171,7 @@ public final class JobRunner: JobRunnerType {
         public let threadId: String?
         public let interactionId: Int64?
         public let detailsData: Data?
+        public let uniqueHashValue: Int?
         
         public var debugDescription: String {
             let dataDescription: String = detailsData
@@ -153,10 +183,16 @@ public final class JobRunner: JobRunnerType {
                 "variant: \(variant),",
                 " threadId: \(threadId ?? "nil"),",
                 " interactionId: \(interactionId.map { "\($0)" } ?? "nil"),",
-                " detailsData: \(dataDescription)",
+                " detailsData: \(dataDescription),",
+                " uniqueHashValue: \(uniqueHashValue.map { "\($0)" } ?? "nil")",
                 ")"
             ].joined()
         }
+    }
+    
+    private enum Validation {
+        case enqueueOnly
+        case persist
     }
     
     // MARK: - Variables
@@ -329,7 +365,11 @@ public final class JobRunner: JobRunnerType {
     
         blockingQueueDrainCallback.mutate { $0.append(callback) }
     }
-
+    
+    public func queue(for variant: Job.Variant) -> DispatchQueue? {
+        return queues.wrappedValue[variant]?.targetQueue()
+    }
+    
     // MARK: - State Management
 
     public func jobInfoFor(
@@ -360,7 +400,8 @@ public final class JobRunner: JobRunnerType {
                                 variant: job.variant,
                                 threadId: job.threadId,
                                 interactionId: job.interactionId,
-                                detailsData: job.details
+                                detailsData: job.details,
+                                uniqueHashValue: job.uniqueHashValue
                             )
                         )
                     })
@@ -534,6 +575,7 @@ public final class JobRunner: JobRunnerType {
     
     public func stopAndClearPendingJobs(
         exceptForVariant: Job.Variant?,
+        using dependencies: Dependencies,
         onComplete: (() -> ())?
     ) {
         // Inform the JobRunner that it can't start any queues (this is to prevent queues from
@@ -597,31 +639,34 @@ public final class JobRunner: JobRunnerType {
     @discardableResult public func add(
         _ db: Database,
         job: Job?,
+        dependantJob: Job?,
         canStartJob: Bool,
         using dependencies: Dependencies
     ) -> Job? {
-        // Store the job into the database (getting an id for it)
-        guard let updatedJob: Job = try? job?.inserted(db) else {
-            SNLog("[JobRunner] Unable to add \(job.map { "\($0.variant)" } ?? "unknown") job")
-            return nil
-        }
-        guard !canStartJob || updatedJob.id != nil else {
-            SNLog("[JobRunner] Not starting \(job.map { "\($0.variant)" } ?? "unknown") job due to missing id")
-            return nil
+        guard let updatedJob: Job = validatedJob(db, job: job, validation: .persist) else { return nil }
+        
+        // If we are adding a job that's dependant on another job then create the dependency between them
+        if let jobId: Int64 = updatedJob.id, let dependantJobId: Int64 = dependantJob?.id {
+            try? JobDependencies(
+                jobId: jobId,
+                dependantId: dependantJobId
+            )
+            .insert(db)
         }
         
         // Don't add to the queue if the JobRunner isn't ready (it's been saved to the db so it'll be loaded
         // once the queue actually get started later)
         guard canAddToQueue(updatedJob) else { return updatedJob }
         
-        queues.wrappedValue[updatedJob.variant]?.add(db, job: updatedJob, canStartJob: canStartJob, using: dependencies)
+        let jobQueue: JobQueue? = queues.wrappedValue[updatedJob.variant]
+        jobQueue?.add(db, job: updatedJob, canStartJob: canStartJob, using: dependencies)
         
         // Don't start the queue if the job can't be started
         guard canStartJob else { return updatedJob }
         
         // Start the job runner if needed
-        db.afterNextTransactionNestedOnce(dedupeId: "JobRunner-Start: \(updatedJob.variant)") { [weak self] _ in
-            self?.queues.wrappedValue[updatedJob.variant]?.start(using: dependencies)
+        db.afterNextTransactionNestedOnce(dedupeId: "JobRunner-Start: \(jobQueue?.queueContext ?? "N/A")") { _ in
+            jobQueue?.start(using: dependencies)
         }
         
         return updatedJob
@@ -632,27 +677,39 @@ public final class JobRunner: JobRunnerType {
         job: Job?,
         canStartJob: Bool,
         using dependencies: Dependencies
-    ) {
-        guard let job: Job = job else { return }    // Ignore null jobs
+    ) -> Job? {
+        guard let job: Job = job else { return nil }    // Ignore null jobs
         guard job.id != nil else {
-            add(db, job: job, canStartJob: canStartJob, using: dependencies)
-            return
+            // When we upsert a job that should be unique we want to return the existing job (if it exists)
+            switch job.uniqueHashValue {
+                case .none: return add(db, job: job, canStartJob: canStartJob, using: dependencies)
+                case .some:
+                    let existingJob: Job? = try? Job
+                        .filter(Job.Columns.variant == job.variant)
+                        .filter(Job.Columns.uniqueHashValue == job.uniqueHashValue)
+                        .fetchOne(db)
+                    
+                    return (existingJob ?? add(db, job: job, canStartJob: canStartJob, using: dependencies))
+            }
         }
+        guard let updatedJob: Job = validatedJob(db, job: job, validation: .enqueueOnly) else { return nil }
         
         // Don't add to the queue if the JobRunner isn't ready (it's been saved to the db so it'll be loaded
         // once the queue actually get started later)
-        guard canAddToQueue(job) else { return }
+        guard canAddToQueue(updatedJob) else { return updatedJob }
         
-        queues.wrappedValue[job.variant]?.upsert(db, job: job, canStartJob: canStartJob, using: dependencies)
+        let jobQueue: JobQueue? = queues.wrappedValue[updatedJob.variant]
+        jobQueue?.upsert(db, job: updatedJob, canStartJob: canStartJob, using: dependencies)
         
         // Don't start the queue if the job can't be started
-        guard canStartJob else { return }
+        guard canStartJob else { return updatedJob }
         
         // Start the job runner if needed
-        
-        db.afterNextTransactionNestedOnce(dedupeId: "JobRunner-Start: \(job.variant)") { [weak self] _ in
-            self?.queues.wrappedValue[job.variant]?.start(using: dependencies)
+        db.afterNextTransactionNestedOnce(dedupeId: "JobRunner-Start: \(jobQueue?.queueContext ?? "N/A")") { _ in
+            jobQueue?.start(using: dependencies)
         }
+        
+        return updatedJob
     }
     
     @discardableResult public func insert(
@@ -662,37 +719,71 @@ public final class JobRunner: JobRunnerType {
     ) -> (Int64, Job)? {
         switch job?.behaviour {
             case .recurringOnActive, .recurringOnLaunch, .runOnceNextLaunch:
-                SNLog("[JobRunner] Attempted to insert \(job.map { "\($0.variant)" } ?? "unknown") job before the current one even though it's behaviour is \(job.map { "\($0.behaviour)" } ?? "unknown")")
+                SNLog("[JobRunner] Attempted to insert \(job?.variant) job before the current one even though it's behaviour is \(job?.behaviour)")
                 return nil
                 
             default: break
         }
         
-        // Store the job into the database (getting an id for it)
-        guard let updatedJob: Job = try? job?.inserted(db) else {
-            SNLog("[JobRunner] Unable to add \(job.map { "\($0.variant)" } ?? "unknown") job")
-            return nil
-        }
-        guard let jobId: Int64 = updatedJob.id else {
-            SNLog("[JobRunner] Unable to add \(job.map { "\($0.variant)" } ?? "unknown") job due to missing id")
-            return nil
-        }
+        guard
+            let updatedJob: Job = validatedJob(db, job: job, validation: .persist),
+            let jobId: Int64 = updatedJob.id
+        else { return nil }
         
         queues.wrappedValue[updatedJob.variant]?.insert(updatedJob, before: otherJob)
         
         return (jobId, updatedJob)
     }
     
-    internal func afterCurrentlyRunningJob(_ job: Job?, callback: @escaping (JobResult) -> ()) {
+    /// Job dependencies can be quite messy as they might already be running or scheduled on different queues from the related job, this could result
+    /// in some odd inter-dependencies between the JobQueues. Instead of this we want all jobs to run on their original assigned queues (so the
+    /// concurrency rules remain consistent and easy to reason with), the only downside to this approach is serial queues could potentially be blocked
+    /// waiting on unrelated dependencies to be run as this method will insert jobs at the start of the `pendingJobsQueue`
+    public func enqueueDependenciesIfNeeded(_ jobs: [Job], using dependencies: Dependencies) {
+        /// Do nothing if we weren't given any jobs
+        guard !jobs.isEmpty else { return }
+        
+        /// Ignore any dependencies which are already running or scheduled
+        let dependencyJobQueues: Set<JobQueue> = jobs
+            .compactMap { queues.wrappedValue[$0.variant] }
+            .asSet()
+        let allCurrentlyRunningJobIds: [Int64] = dependencyJobQueues
+            .flatMap { $0.currentlyRunningJobIds.wrappedValue }
+        let jobsToEnqueue: [JobQueue: [Job]] = jobs
+            .compactMap { job in job.id.map { ($0, job) } }
+            .filter { jobId, _ in !allCurrentlyRunningJobIds.contains(jobId) }
+            .compactMap { _, job in queues.wrappedValue[job.variant].map { (job, $0) } }
+            .grouped(by: { _, queue in queue })
+            .mapValues { data in data.map { job, _ in job } }
+        
+        /// Regardless of whether the jobs are dependant jobs or dependencies we want them to be moved to the start of the
+        /// `pendingJobsQueue` because at least one job in the job chain has been triggered so we want to try to complete
+        /// the entire job chain rather than worry about deadlocks between different job chains
+        ///
+        /// **Note:** If any of these `dependantJobs` have other dependencies then when they attempt to start they will be
+        /// removed from the queue, replaced by their dependencies
+        jobsToEnqueue.forEach { queue, jobs in
+            queue.pendingJobsQueue.mutate { pendingJobs in
+                pendingJobs = pendingJobs
+                    .filter { !jobs.contains($0) }
+                    .inserting(contentsOf: jobs, at: 0)
+            }
+            
+            // Start the job queue if needed (might be a different queue from the currently executing one)
+            queue.start(using: dependencies)
+        }
+    }
+    
+    public func afterJob(_ job: Job?, state: JobRunner.JobState, callback: @escaping (JobResult) -> ()) {
         guard let job: Job = job, let jobId: Int64 = job.id, let queue: JobQueue = queues.wrappedValue[job.variant] else {
             callback(.notFound)
             return
         }
         
-        queue.afterCurrentlyRunningJob(jobId, callback: callback)
+        queue.afterJob(jobId, state: state, callback: callback)
     }
     
-    internal func removePendingJob(_ job: Job?) {
+    public func removePendingJob(_ job: Job?) {
         guard let job: Job = job, let jobId: Int64 = job.id else { return }
         
         queues.wrappedValue[job.variant]?.removePendingJob(jobId)
@@ -719,6 +810,43 @@ public final class JobRunner: JobRunnerType {
             job.behaviour == .recurringOnLaunch ||
             appHasBecomeActive.wrappedValue
         )
+    }
+    
+    private func validatedJob(_ db: Database, job: Job?, validation: Validation) -> Job? {
+        guard let job: Job = job else { return nil }
+        
+        switch (validation, job.uniqueHashValue) {
+            case (.enqueueOnly, .none): return job
+            case (.enqueueOnly, .some(let uniqueHashValue)):
+                // Nothing currently running or sitting in a JobQueue
+                guard !allJobInfo().contains(where: { _, info -> Bool in info.uniqueHashValue == uniqueHashValue }) else {
+                    SNLog("[JobRunner] Unable to add \(job.variant) job due to unique constraint")
+                    return nil
+                }
+                
+                return job
+                
+            case (.persist, .some(let uniqueHashValue)):
+                guard
+                    // Nothing currently running or sitting in a JobQueue
+                    !allJobInfo().contains(where: { _, info -> Bool in info.uniqueHashValue == uniqueHashValue }) &&
+                    // Nothing in the database
+                    !Job.filter(Job.Columns.uniqueHashValue == uniqueHashValue).isNotEmpty(db)
+                else {
+                    SNLog("[JobRunner] Unable to add \(job.variant) job due to unique constraint")
+                    return nil
+                }
+                
+                fallthrough // Validation passed so try to persist the job
+                
+            case (.persist, .none):
+                guard let updatedJob: Job = try? job.inserted(db), updatedJob.id != nil else {
+                    SNLog("[JobRunner] Unable to add \(job.variant) job\(job.id == nil ? " due to missing id" : "")")
+                    return nil
+                }
+                
+                return updatedJob
+        }
     }
 }
 
@@ -776,7 +904,7 @@ public final class JobQueue: Hashable {
                 repeats: false,
                 using: dependencies,
                 block: { [weak queue] _ in
-                    queue?.start(using: dependencies)
+                    queue?.start(forceWhenAlreadyRunning: (queue?.executionType == .concurrent), using: dependencies)
                 }
             )
             return trigger
@@ -813,7 +941,7 @@ public final class JobQueue: Hashable {
     private let executionType: ExecutionType
     private let qosClass: DispatchQoS
     private let queueKey: DispatchSpecificKey = DispatchSpecificKey<String>()
-    private let queueContext: String
+    fileprivate let queueContext: String
     fileprivate let jobVariants: [Job.Variant]
     
     private lazy var internalQueue: DispatchQueue = {
@@ -837,8 +965,8 @@ public final class JobQueue: Hashable {
     fileprivate var pendingJobsQueue: Atomic<[Job]> = Atomic([])
     
     private var nextTrigger: Atomic<Trigger?> = Atomic(nil)
-    private var jobCallbacks: Atomic<[Int64: [(JobRunner.JobResult) -> ()]]> = Atomic([:])
-    private var currentlyRunningJobIds: Atomic<Set<Int64>> = Atomic([])
+    fileprivate var jobCallbacks: Atomic<[Int64: [(JobRunner.JobResult) -> ()]]> = Atomic([:])
+    fileprivate var currentlyRunningJobIds: Atomic<Set<Int64>> = Atomic([])
     private var currentlyRunningJobInfo: Atomic<[Int64: JobRunner.JobInfo]> = Atomic([:])
     private var deferLoopTracker: Atomic<[Int64: (count: Int, times: [TimeInterval])]> = Atomic([:])
     private let maxDeferralsPerSecond: Int
@@ -880,6 +1008,24 @@ public final class JobQueue: Hashable {
     
     // MARK: - Execution
     
+    fileprivate func targetQueue() -> DispatchQueue {
+        /// As it turns out Combine doesn't play too nicely with concurrent Dispatch Queues, in Combine events are dispatched asynchronously to
+        /// the queue which means an odd situation can occasionally occur where the `finished` event can actually run before the `output`
+        /// event - this can result in unexpected behaviours (for more information see https://github.com/groue/GRDB.swift/issues/1334)
+        ///
+        /// Due to this if a job is meant to run on a concurrent queue then we actually want to create a temporary serial queue just for the execution
+        /// of that job
+        guard executionType == .concurrent else { return internalQueue }
+        
+        return DispatchQueue(
+            label: "\(self.queueContext)-serial",
+            qos: self.qosClass,
+            attributes: [],
+            autoreleaseFrequency: .inherit,
+            target: nil
+        )
+    }
+
     fileprivate func add(
         _ db: Database,
         job: Job,
@@ -1008,8 +1154,13 @@ public final class JobQueue: Hashable {
         return currentlyRunningJobInfo.wrappedValue
     }
     
-    fileprivate func afterCurrentlyRunningJob(_ jobId: Int64, callback: @escaping (JobRunner.JobResult) -> ()) {
-        guard currentlyRunningJobIds.wrappedValue.contains(jobId) else { return callback(.notFound) }
+    fileprivate func afterJob(_ jobId: Int64, state: JobRunner.JobState, callback: @escaping (JobRunner.JobResult) -> ()) {
+        /// Check if the current job state matches the requested state (if not then the job in the requested state can't be found so stop here)
+        switch (state, currentlyRunningJobIds.wrappedValue.contains(jobId)) {
+            case (.running, false): return callback(.notFound)
+            case (.pending, true): return callback(.notFound)
+            default: break
+        }
         
         jobCallbacks.mutate { jobCallbacks in
             jobCallbacks[jobId] = (jobCallbacks[jobId] ?? []).appending(callback)
@@ -1097,7 +1248,7 @@ public final class JobQueue: Hashable {
         // on the main thread (if it is on the main thread then swap to a different thread)
         guard DispatchQueue.with(key: queueKey, matches: queueContext, using: dependencies) else {
             internalQueue.async(using: dependencies) { [weak self] in
-                self?.start(using: dependencies)
+                self?.start(forceWhenAlreadyRunning: forceWhenAlreadyRunning, using: dependencies)
             }
             return
         }
@@ -1112,6 +1263,7 @@ public final class JobQueue: Hashable {
         hasStartedAtLeastOnce.mutate { $0 = true }
         
         // Get any pending jobs
+        
         let jobVariants: [Job.Variant] = self.jobVariants
         let jobIdsAlreadyRunning: Set<Int64> = currentlyRunningJobIds.wrappedValue
         let jobsAlreadyInQueue: Set<Int64> = pendingJobsQueue.wrappedValue.compactMap { $0.id }.asSet()
@@ -1245,7 +1397,7 @@ public final class JobQueue: Hashable {
         .defaulting(to: (0, []))
         
         guard dependencyInfo.jobs.count == dependencyInfo.expectedCount else {
-            SNLog("[JobRunner] \(queueContext) found job with missing dependencies, removing the job")
+            SNLog("[JobRunner] \(queueContext) Removing \(nextJob.variant) job due to missing dependencies")
             handleJobFailed(
                 nextJob,
                 error: JobRunnerError.missingDependencies,
@@ -1255,23 +1407,13 @@ public final class JobQueue: Hashable {
             return
         }
         guard dependencyInfo.jobs.isEmpty else {
-            SNLog("[JobRunner] \(queueContext) found job with \(dependencyInfo.jobs.count) dependencies, running those first")
-            
-            /// Remove all jobs this one is dependant on that aren't currently running from the queue and re-insert them at the start
-            /// of the queue
-            ///
-            /// **Note:** We don't add the current job back the the queue because it should only be re-added if it's dependencies
-            /// are successfully completed
-            let currentlyRunningJobIds: [Int64] = Array(currentlyRunningJobIds.wrappedValue)
-            let dependencyJobsNotCurrentlyRunning: [Job] = dependencyInfo.jobs
-                .filter { job in !currentlyRunningJobIds.contains(job.id ?? -1) }
-                .sorted { lhs, rhs in (lhs.id ?? -1) < (rhs.id ?? -1) }
-            
-            pendingJobsQueue.mutate { queue in
-                queue = queue
-                    .filter { !dependencyJobsNotCurrentlyRunning.contains($0) }
-                    .inserting(contentsOf: dependencyJobsNotCurrentlyRunning, at: 0)
-            }
+            SNLog("[JobRunner] \(queueContext) Deferring \(nextJob.variant) job until \(dependencyInfo.jobs.count) dependenc\(dependencyInfo.jobs.count == 1 ? "y" : "ies") are completed")
+                        
+            // Enqueue the dependencies then defer the current job
+            dependencies.jobRunner.enqueueDependenciesIfNeeded(
+                Array(dependencyInfo.jobs),
+                using: dependencies
+            )
             handleJobDeferred(nextJob, using: dependencies)
             return
         }
@@ -1297,33 +1439,16 @@ public final class JobQueue: Hashable {
                     variant: nextJob.variant,
                     threadId: nextJob.threadId,
                     interactionId: nextJob.interactionId,
-                    detailsData: nextJob.details
+                    detailsData: nextJob.details,
+                    uniqueHashValue: nextJob.uniqueHashValue
                 )
             )
         }
         SNLog("[JobRunner] \(queueContext) started \(nextJob.variant) job (\(executionType == .concurrent ? "\(numJobsRunning) currently running, " : "")\(numJobsRemaining) remaining)")
         
-        /// As it turns out Combine doesn't plat too nicely with concurrent Dispatch Queues, in Combine events are dispatched asynchronously to
-        /// the queue which means an odd situation can occasionally occur where the `finished` event can actually run before the `output`
-        /// event - this can result in unexpected behaviours (for more information see https://github.com/groue/GRDB.swift/issues/1334)
-        ///
-        /// Due to this if a job is meant to run on a concurrent queue then we actually want to create a temporary serial queue just for the execution
-        /// of that job
-        let targetQueue: DispatchQueue = {
-            guard executionType == .concurrent else { return internalQueue }
-            
-            return DispatchQueue(
-                label: "\(self.queueContext)-serial",
-                qos: self.qosClass,
-                attributes: [],
-                autoreleaseFrequency: .inherit,
-                target: nil
-            )
-        }()
-        
         jobExecutor.run(
             nextJob,
-            queue: targetQueue,
+            queue: targetQueue(),
             success: handleJobSucceeded,
             failure: handleJobFailed,
             deferred: handleJobDeferred,
@@ -1340,6 +1465,7 @@ public final class JobQueue: Hashable {
     }
     
     private func scheduleNextSoonestJob(using dependencies: Dependencies) {
+        // Retrieve any pending jobs from the database
         let jobVariants: [Job.Variant] = self.jobVariants
         let jobIdsAlreadyRunning: Set<Int64> = currentlyRunningJobIds.wrappedValue
         let nextJobTimestamp: TimeInterval? = dependencies.storage.read(using: dependencies) { db in
@@ -1366,13 +1492,14 @@ public final class JobQueue: Hashable {
         
         // If the next job isn't scheduled in the future then just restart the JobRunner immediately
         let secondsUntilNextJob: TimeInterval = (nextJobTimestamp - dependencies.dateNow.timeIntervalSince1970)
+        let ceilSecondsUntilNextJob: Int = Int(ceil(Swift.abs(secondsUntilNextJob)))
         
         guard secondsUntilNextJob > 0 else {
             // Only log that the queue is getting restarted if this queue had actually been about to stop
             if executionType != .concurrent || currentlyRunningJobIds.wrappedValue.isEmpty {
                 let timingString: String = (nextJobTimestamp == 0 ?
                     "that should be in the queue" :
-                    "scheduled \(Int(ceil(abs(secondsUntilNextJob)))) second\(Int(ceil(abs(secondsUntilNextJob))) == 1 ? "" : "s") ago"
+                    "scheduled \(ceilSecondsUntilNextJob) second\(ceilSecondsUntilNextJob == 1 ? "" : "s") ago"
                 )
                 SNLog("[JobRunner] Restarting \(queueContext) immediately for job \(timingString)")
             }
@@ -1386,11 +1513,11 @@ public final class JobQueue: Hashable {
             return
         }
         
-        // Only schedule a trigger if this queue has actually completed
-        guard executionType != .concurrent || currentlyRunningJobIds.wrappedValue.isEmpty else { return }
+        // Only schedule a trigger if the queue is concurrent, or it has actually completed
+        guard executionType == .concurrent || currentlyRunningJobIds.wrappedValue.isEmpty else { return }
         
         // Setup a trigger
-        SNLog("[JobRunner] Stopping \(queueContext) until next job in \(Int(ceil(abs(secondsUntilNextJob)))) second\(Int(ceil(abs(secondsUntilNextJob))) == 1 ? "" : "s")")
+        SNLog("[JobRunner] Stopping \(queueContext) until next job in \(ceilSecondsUntilNextJob) second\(ceilSecondsUntilNextJob == 1 ? "" : "s")")
         nextTrigger.mutate { trigger in
             trigger?.invalidate()   // Need to invalidate the old trigger to prevent a memory leak
             trigger = Trigger.create(queue: self, timestamp: nextJobTimestamp, using: dependencies)
@@ -1471,24 +1598,11 @@ public final class JobQueue: Hashable {
             default: break
         }
         
-        /// Now that the job has been completed we want to insert any jobs that were dependant on it, that aren't already running
-        /// to the start of the queue (the most likely case is that we want an entire job chain to be completed at the same time rather
-        /// than being blocked by other unrelated jobs)
-        ///
-        /// **Note:** If any of these `dependantJobs` have other dependencies then when they attempt to start they will be
-        /// removed from the queue, replaced by their dependencies
-        if !dependantJobs.isEmpty {
-            let currentlyRunningJobIds: [Int64] = Array(currentlyRunningJobIds.wrappedValue)
-            let dependantJobsNotCurrentlyRunning: [Job] = dependantJobs
-                .filter { job in !currentlyRunningJobIds.contains(job.id ?? -1) }
-                .sorted { lhs, rhs in (lhs.id ?? -1) < (rhs.id ?? -1) }
-            
-            pendingJobsQueue.mutate { queue in
-                queue = queue
-                    .filter { !dependantJobsNotCurrentlyRunning.contains($0) }
-                    .inserting(contentsOf: dependantJobsNotCurrentlyRunning, at: 0)
-            }
-        }
+        /// Now that the job has been completed we want to enqueue any jobs that were dependant on it
+        dependencies.jobRunner.enqueueDependenciesIfNeeded(
+            dependantJobs,
+            using: dependencies
+        )
         
         // Perform job cleanup and start the next job
         performCleanUp(for: job, result: .succeeded, using: dependencies)
@@ -1507,7 +1621,7 @@ public final class JobQueue: Hashable {
     ) {
         guard dependencies.storage.read(using: dependencies, { db in try Job.exists(db, id: job.id ?? -1) }) == true else {
             SNLog("[JobRunner] \(queueContext) \(job.variant) job canceled")
-            performCleanUp(for: job, result: .failed, using: dependencies)
+            performCleanUp(for: job, result: .failed(error, permanentFailure), using: dependencies)
             
             internalQueue.async(using: dependencies) { [weak self] in
                 self?.runNextJob(using: dependencies)
@@ -1531,7 +1645,7 @@ public final class JobQueue: Hashable {
             }()
             performCleanUp(
                 for: job,
-                result: .failed,
+                result: .failed(error, permanentFailure),
                 shouldTriggerCallbacks: wasPossibleDeferralLoop,
                 using: dependencies
             )
@@ -1585,12 +1699,12 @@ public final class JobQueue: Hashable {
             
             failureText = "failed; scheduling retry (failure count is \(updatedFailureCount))"
             
-            _ = try job
+            try job
                 .with(
                     failureCount: updatedFailureCount,
                     nextRunTimestamp: nextRunTimestamp
                 )
-                .saved(db)
+                .upserted(db)
             
             // Update the failureCount and nextRunTimestamp on dependant jobs as well (update the
             // 'nextRunTimestamp' value to be 1ms later so when the queue gets regenerated they'll
@@ -1612,7 +1726,7 @@ public final class JobQueue: Hashable {
         }
         
         SNLog("[JobRunner] \(queueContext) \(job.variant) job \(failureText)")
-        performCleanUp(for: job, result: .failed, using: dependencies)
+        performCleanUp(for: job, result: .failed(error, permanentFailure), using: dependencies)
         internalQueue.async(using: dependencies) { [weak self] in
             self?.runNextJob(using: dependencies)
         }
@@ -1702,6 +1816,18 @@ public final class JobQueue: Hashable {
     }
 }
 
+// MARK: - Formatting
+
+extension String.StringInterpolation {
+    mutating func appendInterpolation(_ variant: Job.Variant?) {
+        appendLiteral(variant.map { "\($0)" } ?? "unknown") // stringlint:disable
+    }
+    
+    mutating func appendInterpolation(_ behaviour: Job.Behaviour?) {
+        appendLiteral(behaviour.map { "\($0)" } ?? "unknown") // stringlint:disable
+    }
+}
+
 // MARK: - JobRunner Singleton
 // FIXME: Remove this once the jobRunner is dependency injected everywhere correctly
 public extension JobRunner {
@@ -1742,12 +1868,12 @@ public extension JobRunner {
     ///
     /// **Note:** If the job has a `behaviour` of `runOnceNextLaunch` or the `nextRunTimestamp`
     /// is in the future then the job won't be started
-    static func upsert(
+    @discardableResult static func upsert(
         _ db: Database,
         job: Job?,
         canStartJob: Bool = true,
         using dependencies: Dependencies = Dependencies()
-    ) { instance.upsert(db, job: job, canStartJob: canStartJob, using: dependencies) }
+    ) -> Job? { return instance.upsert(db, job: job, canStartJob: canStartJob, using: dependencies) }
     
     @discardableResult static func insert(
         _ db: Database,
@@ -1760,15 +1886,18 @@ public extension JobRunner {
     /// failure - they _should_ be picked up again the next time the app is launched)
     static func stopAndClearPendingJobs(
         exceptForVariant: Job.Variant? = nil,
+        using dependencies: Dependencies,
         onComplete: (() -> ())? = nil
-    ) { instance.stopAndClearPendingJobs(exceptForVariant: exceptForVariant, onComplete: onComplete) }
+    ) { 
+        instance.stopAndClearPendingJobs(exceptForVariant: exceptForVariant, using: dependencies, onComplete: onComplete)
+    }
     
     static func isCurrentlyRunning(_ job: Job?) -> Bool {
         return instance.isCurrentlyRunning(job)
     }
     
-    static func afterCurrentlyRunningJob(_ job: Job?, callback: @escaping (JobResult) -> ()) {
-        instance.afterCurrentlyRunningJob(job, callback: callback)
+    static func afterJob(_ job: Job?, state: JobState = .any, callback: @escaping (JobResult) -> ()) {
+        instance.afterJob(job, state: state, callback: callback)
     }
     
     static func removePendingJob(_ job: Job?) {

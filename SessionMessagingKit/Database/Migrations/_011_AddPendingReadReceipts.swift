@@ -13,6 +13,7 @@ enum _011_AddPendingReadReceipts: Migration {
     static let minExpectedRunDuration: TimeInterval = 0.01
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [PendingReadReceipt.self]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         try db.create(table: PendingReadReceipt.self) { t in

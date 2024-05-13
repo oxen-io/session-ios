@@ -55,16 +55,17 @@ message Content {
     DELETE_AFTER_READ = 1;
     DELETE_AFTER_SEND = 2;
   }
+    
+  // reserved 7, 11;
+  // reserved "configurationMessage", "sharedConfigMessage";
 
   optional DataMessage                dataMessage                            = 1;
   optional CallMessage                callMessage                            = 3;
   optional ReceiptMessage             receiptMessage                         = 5;
   optional TypingMessage              typingMessage                          = 6;
-  optional ConfigurationMessage       configurationMessage                   = 7;
   optional DataExtractionNotification dataExtractionNotification             = 8;
   optional UnsendRequest              unsendRequest                          = 9;
   optional MessageRequestResponse     messageRequestResponse                 = 10;
-  optional SharedConfigMessage        sharedConfigMessage                    = 11;
   optional ExpirationType             expirationType                         = 12;
   optional uint32                     expirationTimer                        = 13;
 }
@@ -218,37 +219,6 @@ message DataMessage {
   optional bool                      blocksCommunityMessageRequests = 106;
 }
 
-message ConfigurationMessage {
-
-  message ClosedGroup {
-    optional bytes   publicKey         = 1;
-    optional string  name              = 2;
-    optional KeyPair encryptionKeyPair = 3;
-    repeated bytes   members           = 4;
-    repeated bytes   admins            = 5;
-    optional uint32  expirationTimer   = 6;
-  }
-
-  message Contact {
-    // @required
-    required bytes  publicKey         = 1;
-    // @required
-    required string name              = 2;
-    optional string profilePicture    = 3;
-    optional bytes  profileKey        = 4;
-    optional bool   isApproved        = 5; // added for msg requests
-    optional bool   isBlocked         = 6; // added for msg requests
-    optional bool   didApproveMe      = 7; // added for msg requests
-  }
-
-  repeated ClosedGroup closedGroups   = 1;
-  repeated string      openGroups     = 2;
-  optional string      displayName    = 3;
-  optional string      profilePicture = 4;
-  optional bytes       profileKey     = 5;
-  repeated Contact     contacts       = 6;
-}
-
 message ReceiptMessage {
 
   enum Type {
@@ -280,20 +250,4 @@ message AttachmentPointer {
   optional uint32  height      = 10;
   optional string  caption     = 11;
   optional string  url         = 101;
-}
-
-message SharedConfigMessage {
-    enum Kind {
-        USER_PROFILE            = 1;
-        CONTACTS                = 2;
-        CONVO_INFO_VOLATILE     = 3;
-        USER_GROUPS             = 4;
-    }
-
-    // @required
-    required Kind              kind             = 1;
-    // @required
-    required int64             seqno            = 2;
-    // @required
-    required bytes             data             = 3;
 }

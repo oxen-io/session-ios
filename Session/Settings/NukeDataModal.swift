@@ -165,24 +165,26 @@ final class NukeDataModal: Modal {
     }
     
     private func clearEntireAccount(presentedViewController: UIViewController) {
+        let dependencies: Dependencies = Dependencies()
+        
         ModalActivityIndicatorViewController
             .present(fromViewController: presentedViewController, canCancel: false) { [weak self] _ in
                 Publishers
                     .MergeMany(
                         Storage.shared
-                            .read { db -> [(String, OpenGroupAPI.PreparedSendData<OpenGroupAPI.DeleteInboxResponse>)] in
+                            .read { db -> [(String, Network.PreparedRequest<OpenGroupAPI.DeleteInboxResponse>)] in
                                 return try OpenGroup
                                     .filter(OpenGroup.Columns.isActive == true)
                                     .select(.server)
                                     .distinct()
                                     .asRequest(of: String.self)
                                     .fetchSet(db)
-                                    .map { ($0, try OpenGroupAPI.preparedClearInbox(db, on: $0))}
+                                    .map { ($0, try OpenGroupAPI.preparedClearInbox(db, on: $0, using: dependencies))}
                             }
                             .defaulting(to: [])
-                            .compactMap { server, data in
-                                OpenGroupAPI
-                                    .send(data: data)
+                            .compactMap { server, preparedRequest in
+                                preparedRequest
+                                    .send(using: dependencies)
                                     .map { _ in [server: true] }
                                     .eraseToAnyPublisher()
                             }
@@ -265,7 +267,7 @@ final class NukeDataModal: Modal {
         ///
         /// **Note:** This is file as long as this process kills the app, if it doesn't then we need an alternate mechanism to flag that
         /// the `JobRunner` is allowed to start it's queues again
-        JobRunner.stopAndClearPendingJobs()
+        JobRunner.stopAndClearPendingJobs(using: dependencies)
         
         // Clear the app badge and notifications
         AppEnvironment.shared.notificationPresenter.clearAllNotifications()
@@ -281,7 +283,7 @@ final class NukeDataModal: Modal {
         }
         
         // Clear the Snode pool
-        SnodeAPI.clearSnodePool()
+        LibSession.clearSnodeCache()
         
         // Stop any pollers
         (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()

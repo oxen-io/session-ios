@@ -18,6 +18,7 @@ public class Message: Codable {
     public var isSelfSendValid: Bool { false }
     
     public var shouldBeRetryable: Bool { false }
+    public var processWithBlockedSender: Bool { false }
     
     // MARK: - Disappearing Messages
     public var expiresInSeconds: TimeInterval?
@@ -97,26 +98,62 @@ public class Message: Codable {
 
 // MARK: - Message Parsing/Processing
 
-public typealias ProcessedMessage = (
-    threadId: String,
-    threadVariant: SessionThread.Variant,
-    proto: SNProtoContent,
-    messageInfo: MessageReceiveJob.Details.MessageInfo
-)
+public protocol NotProtoConvertible {}
+
+public enum ProcessedMessage {
+    case standard(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        proto: SNProtoContent,
+        messageInfo: MessageReceiveJob.Details.MessageInfo
+    )
+    case config(
+        publicKey: String,
+        namespace: SnodeAPI.Namespace,
+        serverHash: String,
+        serverTimestampMs: Int64,
+        data: Data
+    )
+    
+    var threadId: String {
+        switch self {
+            case .standard(let threadId, _, _, _): return threadId
+            case .config(let publicKey, _, _, _, _): return publicKey
+        }
+    }
+    
+    var namespace: SnodeAPI.Namespace {
+        switch self {
+            case .standard(_, let threadVariant, _, _):
+                switch threadVariant {
+                    case .group: return .default    // FIXME: Change to proper namespace
+                    case .legacyGroup: return .legacyClosedGroup
+                    case .contact, .community: return .default
+                }
+                
+            case .config(_, let namespace, _, _, _): return namespace
+        }
+    }
+    
+    var isConfigMessage: Bool {
+        switch self {
+            case .standard: return false
+            case .config: return true
+        }
+    }
+}
 
 public extension Message {
-    enum Variant: String, Codable {
+    enum Variant: String, Codable, CaseIterable {
         case readReceipt
         case typingIndicator
         case closedGroupControlMessage
         case dataExtractionNotification
         case expirationTimerUpdate
-        case legacyConfigurationMessage = "configurationMessage"
         case unsendRequest
         case messageRequestResponse
         case visibleMessage
         case callMessage
-        case sharedConfigMessage
         
         init?(from type: Message) {
             switch type {
@@ -125,12 +162,10 @@ public extension Message {
                 case is ClosedGroupControlMessage: self = .closedGroupControlMessage
                 case is DataExtractionNotification: self = .dataExtractionNotification
                 case is ExpirationTimerUpdate: self = .expirationTimerUpdate
-                case is LegacyConfigurationMessage: self = .legacyConfigurationMessage
                 case is UnsendRequest: self = .unsendRequest
                 case is MessageRequestResponse: self = .messageRequestResponse
                 case is VisibleMessage: self = .visibleMessage
                 case is CallMessage: self = .callMessage
-                case is SharedConfigMessage: self = .sharedConfigMessage
                 default: return nil
             }
         }
@@ -142,15 +177,33 @@ public extension Message {
                 case .closedGroupControlMessage: return ClosedGroupControlMessage.self
                 case .dataExtractionNotification: return DataExtractionNotification.self
                 case .expirationTimerUpdate: return ExpirationTimerUpdate.self
-                case .legacyConfigurationMessage: return LegacyConfigurationMessage.self
                 case .unsendRequest: return UnsendRequest.self
                 case .messageRequestResponse: return MessageRequestResponse.self
                 case .visibleMessage: return VisibleMessage.self
                 case .callMessage: return CallMessage.self
-                case .sharedConfigMessage: return SharedConfigMessage.self
             }
         }
-
+        
+        /// This value ensures the variants can be ordered to ensure the correct types are processed and aren't parsed as the wrong type
+        /// due to the structures being close enough matches
+        var protoPriority: Int {
+            switch self {
+                case .readReceipt: return 0
+                case .typingIndicator: return 1
+                case .closedGroupControlMessage: return 2
+                case .dataExtractionNotification: return 3
+                case .expirationTimerUpdate: return 4
+                case .unsendRequest: return 5
+                case .messageRequestResponse: return 6
+                case .visibleMessage: return 7
+                case .callMessage: return 8
+            }
+        }
+        
+        var isProtoConvetible: Bool {
+            return !(self.messageType is NotProtoConvertible.Type)
+        }
+        
         func decode<CodingKeys: CodingKey>(from container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> Message {
             switch self {
                 case .readReceipt: return try container.decode(ReadReceipt.self, forKey: key)
@@ -163,42 +216,27 @@ public extension Message {
                     return try container.decode(DataExtractionNotification.self, forKey: key)
                     
                 case .expirationTimerUpdate: return try container.decode(ExpirationTimerUpdate.self, forKey: key)
-                
-                case .legacyConfigurationMessage:
-                    return try container.decode(LegacyConfigurationMessage.self, forKey: key)
                     
                 case .unsendRequest: return try container.decode(UnsendRequest.self, forKey: key)
                 case .messageRequestResponse: return try container.decode(MessageRequestResponse.self, forKey: key)
                 case .visibleMessage: return try container.decode(VisibleMessage.self, forKey: key)
                 case .callMessage: return try container.decode(CallMessage.self, forKey: key)
-                case .sharedConfigMessage: return try container.decode(SharedConfigMessage.self, forKey: key)
             }
         }
     }
     
-    static func createMessageFrom(_ proto: SNProtoContent, sender: String) -> Message? {
-        // Note: This array is ordered intentionally to ensure the correct types are processed
-        // and aren't parsed as the wrong type
-        let prioritisedVariants: [Variant] = [
-            .readReceipt,
-            .typingIndicator,
-            .closedGroupControlMessage,
-            .dataExtractionNotification,
-            .expirationTimerUpdate,
-            .legacyConfigurationMessage,
-            .unsendRequest,
-            .messageRequestResponse,
-            .visibleMessage,
-            .callMessage,
-            .sharedConfigMessage
-        ]
-        
-        return prioritisedVariants
+    static func createMessageFrom(_ proto: SNProtoContent, sender: String) throws -> Message {
+        let decodedMessage: Message? = Variant
+            .allCases
+            .sorted { lhs, rhs -> Bool in lhs.protoPriority < rhs.protoPriority }
+            .filter { variant -> Bool in variant.isProtoConvetible }
             .reduce(nil) { prev, variant in
                 guard prev == nil else { return prev }
                 
                 return variant.messageType.fromProto(proto, sender: sender)
             }
+        
+        return try decodedMessage ?? { throw MessageReceiverError.unknownMessage }()
     }
     
     static func requiresExistingConversation(message: Message, threadVariant: SessionThread.Variant) -> Bool {
@@ -224,7 +262,6 @@ public extension Message {
     static func shouldSync(message: Message) -> Bool {
         switch message {
             case is VisibleMessage: return true
-            case is LegacyConfigurationMessage: return true
             case is UnsendRequest: return true
             
             case let controlMessage as ClosedGroupControlMessage:
@@ -245,7 +282,7 @@ public extension Message {
     
     static func threadId(forMessage message: Message, destination: Message.Destination) -> String {
         switch destination {
-            case .contact(let publicKey):
+            case .contact(let publicKey), .syncMessage(let publicKey):
                 // Extract the 'syncTarget' value if there is one
                 let maybeSyncTarget: String?
                 
@@ -267,19 +304,20 @@ public extension Message {
     static func processRawReceivedMessage(
         _ db: Database,
         rawMessage: SnodeReceivedMessage,
+        publicKey: String,
         using dependencies: Dependencies = Dependencies()
     ) throws -> ProcessedMessage? {
-        guard let envelope = SNProtoEnvelope.from(rawMessage) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
         do {
-            let processedMessage: ProcessedMessage? = try processRawReceivedMessage(
+            let processedMessage: ProcessedMessage = try processRawReceivedMessage(
                 db,
-                envelope: envelope,
-                serverExpirationTimestamp: (TimeInterval(rawMessage.info.expirationDateMs) / 1000),
-                serverHash: rawMessage.info.hash,
-                handleClosedGroupKeyUpdateMessages: true,
+                data: rawMessage.data,
+                from: .swarm(
+                    publicKey: publicKey,
+                    namespace: rawMessage.namespace,
+                    serverHash: rawMessage.info.hash,
+                    serverTimestampMs: rawMessage.timestampMs,
+                    serverExpirationTimestamp: TimeInterval(Double(rawMessage.info.expirationDateMs) / 1000)
+                ),
                 using: dependencies
             )
             
@@ -324,50 +362,30 @@ public extension Message {
         }
     }
     
-    static func processRawReceivedMessage(
-        _ db: Database,
-        serializedData: Data,
-        serverHash: String?,
-        using dependencies: Dependencies = Dependencies()
-    ) throws -> ProcessedMessage? {
-        guard let envelope = try? SNProtoEnvelope.parseData(serializedData) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
-        return try processRawReceivedMessage(
-            db,
-            envelope: envelope,
-            serverExpirationTimestamp: (
-                (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
-                ControlMessageProcessRecord.defaultExpirationSeconds
-            ),
-            serverHash: serverHash,
-            handleClosedGroupKeyUpdateMessages: true,
-            using: dependencies
-        )
-    }
-    
     /// This method behaves slightly differently from the other `processRawReceivedMessage` methods as it doesn't
     /// insert the "message info" for deduping (we want the poller to re-process the message) and also avoids handling any
     /// closed group key update messages (the `NotificationServiceExtension` does this itself)
     static func processRawReceivedMessageAsNotification(
         _ db: Database,
-        envelope: SNProtoEnvelope,
+        data: Data,
+        metadata: PushNotificationAPI.NotificationMetadata,
         using dependencies: Dependencies = Dependencies()
     ) throws -> ProcessedMessage? {
-        let processedMessage: ProcessedMessage? = try processRawReceivedMessage(
+        return try processRawReceivedMessage(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: (
-                (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
-                ControlMessageProcessRecord.defaultExpirationSeconds
+            data: data,
+            from: .swarm(
+                publicKey: metadata.accountId,
+                namespace: metadata.namespace,
+                serverHash: metadata.hash,
+                serverTimestampMs: metadata.createdTimestampMs,
+                serverExpirationTimestamp: (
+                    TimeInterval(Double(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
+                    ControlMessageProcessRecord.defaultExpirationSeconds
+                )
             ),
-            serverHash: nil,
-            handleClosedGroupKeyUpdateMessages: false,
             using: dependencies
         )
-        
-        return processedMessage
     }
     
     static func processReceivedOpenGroupMessage(
@@ -381,24 +399,15 @@ public extension Message {
         // Need a sender in order to process the message
         guard let sender: String = message.sender, let timestamp = message.posted else { return nil }
         
-        // Note: The `posted` value is in seconds but all messages in the database use milliseconds for timestamps
-        let envelopeBuilder = SNProtoEnvelope.builder(type: .sessionMessage, timestamp: UInt64(floor(timestamp * 1000)))
-        envelopeBuilder.setContent(data)
-        envelopeBuilder.setSource(sender)
-        
-        guard let envelope = try? envelopeBuilder.build() else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
         return try processRawReceivedMessage(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: nil,
-            serverHash: nil,
-            openGroupId: openGroupId,
-            openGroupMessageServerId: message.id,
-            openGroupServerPublicKey: openGroupServerPublicKey,
-            handleClosedGroupKeyUpdateMessages: false,
+            data: data,
+            from: .community(
+                openGroupId: openGroupId,
+                sender: sender,
+                timestamp: timestamp,
+                messageServerId: message.id
+            ),
             using: dependencies
         )
     }
@@ -408,30 +417,20 @@ public extension Message {
         openGroupServerPublicKey: String,
         message: OpenGroupAPI.DirectMessage,
         data: Data,
-        isOutgoing: Bool? = nil,
-        otherBlindedPublicKey: String? = nil,
+        isOutgoing: Bool,
+        otherBlindedPublicKey: String,
         using dependencies: Dependencies = Dependencies()
     ) throws -> ProcessedMessage? {
-        // Note: The `posted` value is in seconds but all messages in the database use milliseconds for timestamps
-        let envelopeBuilder = SNProtoEnvelope.builder(type: .sessionMessage, timestamp: UInt64(floor(message.posted * 1000)))
-        envelopeBuilder.setContent(data)
-        envelopeBuilder.setSource(message.sender)
-        
-        guard let envelope = try? envelopeBuilder.build() else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
         return try processRawReceivedMessage(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: nil,
-            serverHash: nil,
-            openGroupId: nil,   // Explicitly null since it shouldn't be handled as an open group message
-            openGroupMessageServerId: message.id,
-            openGroupServerPublicKey: openGroupServerPublicKey,
-            isOutgoing: isOutgoing,
-            otherBlindedPublicKey: otherBlindedPublicKey,
-            handleClosedGroupKeyUpdateMessages: false,
+            data: data,
+            from: .openGroupInbox(
+                timestamp: message.posted,
+                messageServerId: message.id,
+                serverPublicKey: openGroupServerPublicKey,
+                blindedPublicKey: otherBlindedPublicKey,
+                isOutgoing: isOutgoing
+            ),
             using: dependencies
         )
     }
@@ -571,116 +570,81 @@ public extension Message {
     
     private static func processRawReceivedMessage(
         _ db: Database,
-        envelope: SNProtoEnvelope,
-        serverExpirationTimestamp: TimeInterval?,
-        serverHash: String?,
-        openGroupId: String? = nil,
-        openGroupMessageServerId: Int64? = nil,
-        openGroupServerPublicKey: String? = nil,
-        isOutgoing: Bool? = nil,
-        otherBlindedPublicKey: String? = nil,
-        handleClosedGroupKeyUpdateMessages: Bool,
+        data: Data,
+        from origin: Message.Origin,
         using dependencies: Dependencies
-    ) throws -> ProcessedMessage? {
-        let (message, proto, threadId, threadVariant) = try MessageReceiver.parse(
+    ) throws -> ProcessedMessage {
+        let processedMessage: ProcessedMessage = try MessageReceiver.parse(
             db,
-            envelope: envelope,
-            serverExpirationTimestamp: serverExpirationTimestamp,
-            openGroupId: openGroupId,
-            openGroupMessageServerId: openGroupMessageServerId,
-            openGroupServerPublicKey: openGroupServerPublicKey,
-            isOutgoing: isOutgoing,
-            otherBlindedPublicKey: otherBlindedPublicKey,
+            data: data,
+            origin: origin,
             using: dependencies
         )
-        message.serverHash = serverHash
         
-        // Ignore invalid messages and hashes for messages we have previously handled
-        guard let variant: Message.Variant = Message.Variant(from: message) else {
-            throw MessageReceiverError.invalidMessage
-        }
-        
-        /// **Note:** We want to immediately handle any `ClosedGroupControlMessage` with the kind `encryptionKeyPair` as
-        /// we need the keyPair in storage in order to be able to parse and messages which were signed with the new key (also no need to add
-        /// these as jobs as they will be fully handled in here)
-        if handleClosedGroupKeyUpdateMessages {
-            switch message {
-                case let closedGroupControlMessage as ClosedGroupControlMessage:
-                    switch closedGroupControlMessage.kind {
-                        case .encryptionKeyPair:
-                            try MessageReceiver.handleClosedGroupControlMessage(
-                                db,
-                                threadId: threadId,
-                                threadVariant: threadVariant,
-                                message: closedGroupControlMessage,
-                                using: dependencies
-                            )
-                            return nil
-                            
-                        default: break
-                    }
+        switch processedMessage {
+            case .standard(let threadId, let threadVariant, _, let messageInfo):
+                /// **Note:** We want to immediately handle any `ClosedGroupControlMessage` with the kind `encryptionKeyPair` as
+                /// we need the keyPair in storage in order to be able to parse and messages which were signed with the new key (also no need to add
+                /// these as jobs as they will be fully handled in here)
+                if
+                    let controlMessage = messageInfo.message as? ClosedGroupControlMessage,
+                    case .encryptionKeyPair = controlMessage.kind
+                {
+                    try MessageReceiver.handleClosedGroupControlMessage(
+                        db,
+                        threadId: threadId,
+                        threadVariant: threadVariant,
+                        message: controlMessage,
+                        using: dependencies
+                    )
+                }
                 
-                default: break
-            }
+                // Prevent ControlMessages from being handled multiple times if not supported
+                do {
+                    try ControlMessageProcessRecord(
+                        threadId: threadId,
+                        message: messageInfo.message,
+                        serverExpirationTimestamp: origin.serverExpirationTimestamp
+                    )?.insert(db)
+                }
+                catch {
+                    // We want to custom handle this
+                    if case DatabaseError.SQLITE_CONSTRAINT_UNIQUE = error {
+                        throw MessageReceiverError.duplicateControlMessage
+                    }
+                    
+                    throw error
+                }
+                
+            default: break
         }
         
-        // Prevent ControlMessages from being handled multiple times if not supported
-        do {
-            try ControlMessageProcessRecord(
-                threadId: threadId,
-                message: message,
-                serverExpirationTimestamp: serverExpirationTimestamp
-            )?.insert(db)
-        }
-        catch {
-            // We want to custom handle this 
-            if case DatabaseError.SQLITE_CONSTRAINT_UNIQUE = error {
-                throw MessageReceiverError.duplicateControlMessage
-            }
-            
-            throw error
-        }
-        
-        return (
-            threadId,
-            threadVariant,
-            proto,
-            try MessageReceiveJob.Details.MessageInfo(
-                message: message,
-                variant: variant,
-                threadVariant: threadVariant,
-                serverExpirationTimestamp: serverExpirationTimestamp,
-                proto: proto
-            )
-        )
+        return processedMessage
     }
     
     // MARK: - TTL for disappearing messages
     
     internal static func getSpecifiedTTL(
         message: Message,
-        isGroupMessage: Bool,
-        isSyncMessage: Bool
+        destination: Message.Destination
     ) -> UInt64 {
         // Not disappearing messages
         guard let expiresInSeconds = message.expiresInSeconds else { return message.ttl }
         
-        // Sync message should be read already, it is the same for disappear after read and disappear after sent
-        guard !isSyncMessage else { return UInt64(expiresInSeconds * 1000) }
-        
-        // Disappear after read messages that have not be read
-        guard let expiresStartedAtMs = message.expiresStartedAtMs else { return message.ttl }
-        
-        // Disappear after read messages that have already be read
-        guard message.sentTimestamp == UInt64(expiresStartedAtMs) else { return message.ttl }
-        
-        // Disappear after sent messages with exceptions
-        switch message {
-            case is ClosedGroupControlMessage, is UnsendRequest:
+        switch (destination, message) {
+            // Disappear after sent messages with exceptions
+            case (_, is UnsendRequest): return message.ttl
+            case (.closedGroup, is ClosedGroupControlMessage), (.closedGroup, is ExpirationTimerUpdate):
                 return message.ttl
-            case is ExpirationTimerUpdate:
-                return isGroupMessage ? message.ttl : UInt64(expiresInSeconds * 1000)
+
             default:
+                guard
+                    let expiresInSeconds = message.expiresInSeconds,     // Not disappearing messages
+                    expiresInSeconds > 0,                                // Not disappearing messages (0 == disabled)
+                    let expiresStartedAtMs = message.expiresStartedAtMs, // Unread disappear after read message
+                    message.sentTimestamp == UInt64(expiresStartedAtMs)  // Already read disappearing messages
+                else { return message.ttl }
+                
                 return UInt64(expiresInSeconds * 1000)
         }
     }

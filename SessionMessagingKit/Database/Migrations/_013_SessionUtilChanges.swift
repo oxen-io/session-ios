@@ -20,6 +20,7 @@ enum _013_SessionUtilChanges: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [
         SessionThread.self, Profile.self, GroupMember.self, ClosedGroupKeyPair.self, ConfigDump.self
     ]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         // Add `markedAsUnread` to the thread table

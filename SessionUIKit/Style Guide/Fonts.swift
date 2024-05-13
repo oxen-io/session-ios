@@ -1,14 +1,16 @@
+// Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
+
 import UIKit
 import SwiftUI
 
-@objc(LKFonts)
-public final class Fonts : NSObject {
-    
-    @objc public static func spaceMono(ofSize size: CGFloat) -> UIFont {
+public enum Fonts {
+    public static func spaceMono(ofSize size: CGFloat) -> UIFont {
         return UIFont(name: "SpaceMono-Regular", size: size)!
     }
     
-    @objc public static func boldSpaceMono(ofSize size: CGFloat) -> UIFont {
+    public static func boldSpaceMono(ofSize size: CGFloat) -> UIFont {
         return UIFont(name: "SpaceMono-Bold", size: size)!
     }
 }

@@ -29,11 +29,11 @@ public struct ProfileManager {
     // MARK: - Functions
     
     public static func isToLong(profileName: String) -> Bool {
-        return (profileName.utf8CString.count > SessionUtil.libSessionMaxNameByteLength)
+        return (profileName.utf8CString.count > LibSession.libSessionMaxNameByteLength)
     }
     
     public static func isToLong(profileUrl: String) -> Bool {
-        return (profileUrl.utf8CString.count > SessionUtil.libSessionMaxProfileUrlByteLength)
+        return (profileUrl.utf8CString.count > LibSession.libSessionMaxProfileUrlByteLength)
     }
     
     public static func profileAvatar(_ db: Database? = nil, id: String) -> Data? {
@@ -219,7 +219,7 @@ public struct ProfileManager {
         let useOldServer: Bool = (profileUrlStringAtStart.contains(FileServerAPI.oldServer))
         
         FileServerAPI
-            .download(fileId, useOldServer: useOldServer)
+            .download(fileId: fileId, useOldServer: useOldServer)
             .subscribe(on: DispatchQueue.global(qos: .background))
             .receive(on: DispatchQueue.global(qos: .background))
             .sinkUntilComplete(
@@ -425,9 +425,9 @@ public struct ProfileManager {
                 newProfileKey = try Randomness.generateRandomBytes(numberBytes: ProfileManager.avatarAES256KeyByteLength)
                 fileExtension = {
                     switch guessedFormat {
-                        case .gif: return "gif"
-                        case .webp: return "webp"
-                        default: return "jpg"
+                        case .gif: return "gif"     // stringlint:disable
+                        case .webp: return "webp"   // stringlint:disable
+                        default: return "jpg"       // stringlint:disable
                     }
                 }()
             }
@@ -473,7 +473,7 @@ public struct ProfileManager {
                             case .failure(let error):
                                 SNLog("Updating service with profile failed.")
                                 
-                                let isMaxFileSizeExceeded: Bool = ((error as? HTTPError) == .maxFileSizeExceeded)
+                                let isMaxFileSizeExceeded: Bool = ((error as? NetworkError) == .maxFileSizeExceeded)
                                 failure?(isMaxFileSizeExceeded ?
                                     .avatarUploadMaxFileSizeExceeded :
                                     .avatarUploadFailed

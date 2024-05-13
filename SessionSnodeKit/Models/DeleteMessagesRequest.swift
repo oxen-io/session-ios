@@ -17,7 +17,7 @@ extension SnodeAPI {
         public init(
             messageHashes: [String],
             requireSuccessfulDeletion: Bool,
-            pubkey: String,
+            swarmPublicKey: String,
             ed25519PublicKey: [UInt8],
             ed25519SecretKey: [UInt8]
         ) {
@@ -25,7 +25,7 @@ extension SnodeAPI {
             self.requireSuccessfulDeletion = requireSuccessfulDeletion
             
             super.init(
-                pubkey: pubkey,
+                pubkey: swarmPublicKey,
                 ed25519PublicKey: ed25519PublicKey,
                 ed25519SecretKey: ed25519SecretKey
             )
@@ -52,7 +52,7 @@ extension SnodeAPI {
             /// Ed25519 signature of `("delete" || messages...)`; this signs the value constructed
             /// by concatenating "delete" and all `messages` values, using `pubkey` to sign.  Must be base64
             /// encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.deleteMessages.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.deleteMessages.path.bytes
                 .appending(contentsOf: messageHashes.joined().bytes)
             
             guard

@@ -349,7 +349,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
         guard !updatedName.isEmpty else {
             return showError(title: "vc_create_closed_group_group_name_missing_error".localized())
         }
-        guard updatedName.utf8CString.count < SessionUtil.libSessionMaxGroupNameByteLength else {
+        guard updatedName.utf8CString.count < LibSession.libSessionMaxGroupNameByteLength else {
             return showError(title: "vc_create_closed_group_group_name_too_long_error".localized())
         }
         
@@ -395,13 +395,15 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
                             for: .contact,
                             id: lhs.profileId,
                             name: lhs.profile?.name,
-                            nickname: lhs.profile?.nickname
+                            nickname: lhs.profile?.nickname,
+                            suppressId: false
                         )
                         let rhsDisplayName: String = Profile.displayName(
                             for: .contact,
                             id: rhs.profileId,
                             name: rhs.profile?.name,
-                            nickname: rhs.profile?.nickname
+                            nickname: rhs.profile?.nickname,
+                            suppressId: false
                         )
                         
                         return (lhsDisplayName < rhsDisplayName)

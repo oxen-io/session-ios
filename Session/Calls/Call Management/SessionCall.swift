@@ -425,12 +425,16 @@ public final class SessionCall: CurrentCallProtocol, WebRTCSessionDelegate {
     private func tryToReconnect() {
         reconnectTimer?.invalidate()
         
-        guard SessionEnvironment.shared?.reachabilityManager.isReachable == true else {
-            reconnectTimer = Timer.scheduledTimerOnMainThread(withTimeInterval: 5, repeats: false) { _ in
-                self.tryToReconnect()
+        // Register a callback to get the current network status then remove it immediately as we only
+        // care about the current status
+        let networkStatusCallbackId: UUID = LibSession.onNetworkStatusChanged { [weak self] status in
+            guard status != .connected else { return }
+            
+            self?.reconnectTimer = Timer.scheduledTimerOnMainThread(withTimeInterval: 5, repeats: false) { _ in
+                self?.tryToReconnect()
             }
-            return
         }
+        LibSession.removeNetworkChangedCallback(callbackId: networkStatusCallbackId)
         
         let sessionId: String = self.sessionId
         let webRTCSession: WebRTCSession = self.webRTCSession

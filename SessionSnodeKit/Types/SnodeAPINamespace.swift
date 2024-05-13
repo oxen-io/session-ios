@@ -5,7 +5,7 @@
 import Foundation
 
 public extension SnodeAPI {
-    enum Namespace: Int, Codable, Hashable {
+    enum Namespace: Int, Codable, Hashable, CustomStringConvertible {
         case `default` = 0
         
         case configUserProfile = 2
@@ -16,6 +16,10 @@ public extension SnodeAPI {
         
         case legacyClosedGroup = -10
         
+        /// This is used when we somehow receive a message from an unknown namespace (shouldn't really be possible)
+        case unknown = -9999989
+        
+        /// This is a convenience namespace used to represent all other namespaces for specific API calls
         case all = -9999990
         
         // MARK: Variables
@@ -51,7 +55,7 @@ public extension SnodeAPI {
                     
                 case .configUserProfile, .configContacts,
                     .configConvoInfoVolatile, .configUserGroups,
-                    .configClosedGroupInfo, .all:
+                    .configClosedGroupInfo, .unknown, .all:
                     return false
             }
         }
@@ -61,6 +65,44 @@ public extension SnodeAPI {
                 case .`default`: return ""
                 case .all: return "all"
                 default: return "\(self.rawValue)"
+            }
+        }
+        
+        public var isConfigNamespace: Bool {
+            switch self {
+                case .configUserProfile, .configContacts, .configConvoInfoVolatile, .configUserGroups,
+                    .configClosedGroupInfo:
+                    return true
+                    
+                case .`default`, .legacyClosedGroup, .unknown, .all:
+                    return false
+            }
+        }
+        
+        /// This value defines the order that the SharedConfigMessages should be processed in, while we re-process config
+        /// messages every time we poll this will prevent an edge-case where data/logic between different config messages
+        /// could be dependant on each other (eg. there could be `convoInfoVolatile` data related to a new conversation
+        /// which hasn't been created yet because it's associated `contacts`/`userGroups` message hasn't yet been
+        /// processed (without this we would have to wait until the next poll for it to be processed correctly)
+        public var processingOrder: Int {
+            switch self {
+                case .configUserProfile, .configContacts: return 0
+                case .configUserGroups, .configClosedGroupInfo: return 1
+                case .configConvoInfoVolatile: return 2
+                    
+                case .`default`, .legacyClosedGroup, .unknown, .all:
+                    return 3
+            }
+        }
+        
+        /// Flag which indicates whether messages from this namespace should be handled synchronously as part of the polling process
+        /// or whether they can be scheduled to be handled asynchronously
+        public var shouldHandleSynchronously: Bool {
+            switch self {
+                case .`default`, .legacyClosedGroup, .configUserProfile, .configContacts,
+                    .configConvoInfoVolatile, .configUserGroups, .configClosedGroupInfo,
+                    .unknown, .all:
+                    return false
             }
         }
         
@@ -87,7 +129,7 @@ public extension SnodeAPI {
                     
                 case .configUserProfile, .configContacts,
                     .configConvoInfoVolatile, .configUserGroups,
-                    .configClosedGroupInfo, .all:
+                    .configClosedGroupInfo, .unknown, .all:
                     return 1
             }
         }
@@ -109,6 +151,23 @@ public extension SnodeAPI {
                 .reduce(into: [:]) { result, next in
                     result[next.namespace] = -next.maxSize
                 }
+        }
+        
+        // MARK: - CustomStringConvertible
+        
+        public var description: String {
+            switch self {
+                case .`default`: return "default"
+                case .configUserProfile: return "configUserProfile"
+                case .configContacts: return "configContacts"
+                case .configConvoInfoVolatile: return "configConvoInfoVolatile"
+                case .configUserGroups: return "configUserGroups"
+                case .configClosedGroupInfo: return "configClosedGroupInfo"
+                case .legacyClosedGroup: return "legacyClosedGroup"
+                
+                case .unknown: return "unknown"
+                case .all: return "all"
+            }
         }
     }
 }

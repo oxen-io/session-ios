@@ -3,6 +3,8 @@ import Foundation
 // MARK: - Convenience Types
 
 public struct Empty: Codable {
+    public static let null: Empty? = nil
+    
     public init() {}
 }
 
@@ -10,17 +12,26 @@ public typealias NoBody = Empty
 public typealias NoResponse = Empty
 
 public protocol EndpointType: Hashable {
+    static var name: String { get }
+    static var batchRequestVariant: Network.BatchRequest.Child.Variant { get }
+    static var excludedSubRequestHeaders: [HTTPHeader] { get }
+    
     var path: String { get }
+}
+
+public extension EndpointType {
+    static var batchRequestVariant: Network.BatchRequest.Child.Variant { .unsupported }
+    static var excludedSubRequestHeaders: [HTTPHeader] { [] }
 }
 
 // MARK: - Request
 
 public struct Request<T: Encodable, Endpoint: EndpointType> {
     public let method: HTTPMethod
-    public let server: String
+    public let target: any RequestTarget
     public let endpoint: Endpoint
-    public let queryParameters: [HTTPQueryParam: String]
     public let headers: [HTTPHeader: String]
+    
     /// This is the body value sent during the request
     ///
     /// **Warning:** The `bodyData` value should be used to when making the actual request instead of this as there
@@ -31,34 +42,28 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
 
     public init(
         method: HTTPMethod = .get,
-        server: String,
         endpoint: Endpoint,
-        queryParameters: [HTTPQueryParam: String] = [:],
+        target: any RequestTarget,
         headers: [HTTPHeader: String] = [:],
         body: T? = nil
     ) {
         self.method = method
-        self.server = server
         self.endpoint = endpoint
-        self.queryParameters = queryParameters
+        self.target = target
         self.headers = headers
         self.body = body
     }
     
     // MARK: - Internal Methods
     
-    private var url: URL? {
-        return URL(string: "\(server)\(urlPathAndParamsString)")
-    }
-    
-    private func bodyData() throws -> Data? {
+    private func bodyData(using dependencies: Dependencies) throws -> Data? {
         // Note: Need to differentiate between JSON, b64 string and bytes body values to ensure they are
         // encoded correctly so the server knows how to handle them
         switch body {
             case let bodyString as String:
                 // The only acceptable string body is a base64 encoded one
                 guard let encodedData: Data = Data(base64Encoded: bodyString) else {
-                    throw HTTPError.parsingFailed
+                    throw NetworkError.parsingFailed
                 }
                 
                 return encodedData
@@ -70,34 +75,20 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
                 // Having no body is fine so just return nil
                 guard let body: T = body else { return nil }
 
-                return try JSONEncoder().encode(body)
+                return try JSONEncoder(using: dependencies).encode(body)
         }
     }
     
     // MARK: - Request Generation
     
-    public var urlPathAndParamsString: String {
-        return [
-            "/\(endpoint.path)",
-            queryParameters
-                .map { key, value in "\(key)=\(value)" }
-                .joined(separator: "&")
-        ]
-        .compactMap { $0 }
-        .filter { !$0.isEmpty }
-        .joined(separator: "?")
-    }
-    
-    public func generateUrlRequest() throws -> URLRequest {
-        guard let url: URL = url else { throw HTTPError.invalidURL }
+    public func generateUrlRequest(using dependencies: Dependencies) throws -> URLRequest {
+        guard let url: URL = target.url else { throw NetworkError.invalidURL }
         
         var urlRequest: URLRequest = URLRequest(url: url)
         urlRequest.httpMethod = method.rawValue
         urlRequest.allHTTPHeaderFields = headers.toHTTPHeaders()
-        urlRequest.httpBody = try bodyData()
+        urlRequest.httpBody = try bodyData(using: dependencies)
         
         return urlRequest
     }
 }
-
-extension Request: Equatable where T: Equatable {}

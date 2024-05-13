@@ -18,6 +18,9 @@ public protocol Migration {
     /// correctly within migration tests
     static var createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] { get }
     
+    /// This includes any tables which have been permanently dropped as part of this migration
+    static var droppedTables: [(TableRecord & FetchableRecord).Type] { get }
+    
     static func migrate(_ db: Database) throws
 }
 

@@ -44,17 +44,11 @@ public enum GetExpirationJob: JobExecutor {
         
         let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
         SnodeAPI
-            .getSwarm(for: userPublicKey, using: dependencies)
-            .tryFlatMap { swarm -> AnyPublisher<(ResponseInfoType, GetExpiriesResponse), Error> in
-                guard let snode = swarm.randomElement() else { throw SnodeAPIError.generic }
-                
-                return SnodeAPI.getExpiries(
-                    from: snode,
-                    associatedWith: userPublicKey,
-                    of: expirationInfo.map { $0.key },
-                    using: dependencies
-                )
-            }
+            .getExpiries(
+                swarmPublicKey: userPublicKey,
+                of: expirationInfo.map { $0.key },
+                using: dependencies
+            )
             .subscribe(on: queue, using: dependencies)
             .receive(on: queue, using: dependencies)
             .map { _, response -> GetExpiriesResponse in response }

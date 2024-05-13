@@ -132,4 +132,18 @@ public class Dependencies {
         }
     }
 #endif
+    
+    // MARK: - Random Access Functions
+    
+    public func randomElement<T: Collection>(_ collection: T) -> T.Element? {
+        return collection.randomElement()
+    }
+    
+    public func randomElement<T>(_ elements: Set<T>) -> T? {
+        return elements.randomElement()
+    }
+    
+    public func popRandomElement<T>(_ elements: inout Set<T>) -> T? {
+        return elements.popRandomElement()
+    }
 }

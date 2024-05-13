@@ -22,7 +22,7 @@ private extension DispatchQueue {
     }
 }
 
-public func SNLog(_ message: String) {
+public func SNLog(_ message: String, forceNSLog: Bool = false) {
     let logPrefixes: String = [
         "Session",
         (Thread.isMainThread ? "Main" : nil),
@@ -35,6 +35,10 @@ public func SNLog(_ message: String) {
     print("[\(logPrefixes)] \(message)")
     #endif
     OWSLogger.info("[\(logPrefixes)] \(message)")
+    
+    if forceNSLog {
+        NSLog(message)
+    }
 }
 
 public func SNLogNotTests(_ message: String) {

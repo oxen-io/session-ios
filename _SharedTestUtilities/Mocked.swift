@@ -54,11 +54,11 @@ func anySet<R>() -> Set<R> { Set() }    // Unique name for compilation performan
 
 // MARK: - Extensions
 
-extension HTTP.BatchSubResponse: MockedGeneric where T: Mocked {
+extension Network.BatchSubResponse: MockedGeneric where T: Mocked {
     typealias Generic = T
     
-    static func mockValue(type: Generic.Type) -> HTTP.BatchSubResponse<Generic> {
-        return HTTP.BatchSubResponse(
+    static func mockValue(type: Generic.Type) -> Network.BatchSubResponse<Generic> {
+        return Network.BatchSubResponse(
             code: 200,
             headers: [:],
             body: Generic.mockValue,
@@ -67,9 +67,9 @@ extension HTTP.BatchSubResponse: MockedGeneric where T: Mocked {
     }
 }
 
-extension HTTP.BatchSubResponse {
-    static func mockArrayValue<M: Mocked>(type: M.Type) -> HTTP.BatchSubResponse<Array<M>> {
-        return HTTP.BatchSubResponse(
+extension Network.BatchSubResponse {
+    static func mockArrayValue<M: Mocked>(type: M.Type) -> Network.BatchSubResponse<Array<M>> {
+        return Network.BatchSubResponse(
             code: 200,
             headers: [:],
             body: [M.mockValue],

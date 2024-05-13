@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1400"
+   LastUpgradeVersion = "1520"
    version = "1.8">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -34,6 +34,20 @@
                ReferencedContainer = "container:Session.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FD7C37AD2BBB8B1D009DEEA7"
+               BuildableName = "SessionSnodeKitTests.xctest"
+               BlueprintName = "SessionSnodeKitTests"
+               ReferencedContainer = "container:Session.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -41,6 +55,7 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "NO"
+      codeCoverageEnabled = "YES"
       onlyGenerateCoverageForSpecifiedTargets = "YES">
       <MacroExpansion>
          <BuildableReference
@@ -150,6 +165,18 @@
                BlueprintIdentifier = "FD83B9AE27CF200A005E1583"
                BuildableName = "SessionUtilitiesKitTests.xctest"
                BlueprintName = "SessionUtilitiesKitTests"
+               ReferencedContainer = "container:Session.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES"
+            testExecutionOrdering = "random">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FD7C37AD2BBB8B1D009DEEA7"
+               BuildableName = "SessionSnodeKitTests.xctest"
+               BlueprintName = "SessionSnodeKitTests"
                ReferencedContainer = "container:Session.xcodeproj">
             </BuildableReference>
          </TestableReference>

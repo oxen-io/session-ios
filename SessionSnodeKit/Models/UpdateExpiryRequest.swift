@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 
@@ -76,7 +78,7 @@ extension SnodeAPI {
             /// ` || messages[N])` where `expiry` is the expiry timestamp expressed as a string.
             /// `ShortenOrExtend` is string signature must be base64 "shorten" if the shorten option is given (and true),
             /// "extend" if `extend` is true, and empty otherwise. The signature must be base64 encoded (json) or bytes (bt).
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.expire.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.expire.path.bytes
                 .appending(contentsOf: (shorten == true ? "shorten".bytes : []))
                 .appending(contentsOf: (extend == true ? "extend".bytes : []))
                 .appending(contentsOf: "\(expiryMs)".data(using: .ascii)?.bytes)

@@ -48,7 +48,7 @@ extension SnodeAPI {
         override func generateSignature() throws -> [UInt8] {
             /// Ed25519 signature of `("get_expiries" || timestamp || messages[0] || ... || messages[N])`
             /// where `timestamp` is expressed as a string (base10).  The signature must be base64 encoded (json) or bytes (bt).
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getExpiries.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getExpiries.path.bytes
                 .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
                 .appending(contentsOf: messageHashes.joined().bytes)
             

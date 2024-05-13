@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import Combine
@@ -15,12 +17,13 @@ public final class CurrentUserPoller: Poller {
     // MARK: - Settings
     
     override var namespaces: [SnodeAPI.Namespace] { CurrentUserPoller.namespaces }
+    override var pollerQueue: DispatchQueue { Threading.pollerQueue }
     
-    /// After polling a given snode this many times we always switch to a new one.
+    /// After polling a given snode 6 times we always switch to a new one.
     ///
     /// The reason for doing this is that sometimes a snode will be giving us successful responses while
     /// it isn't actually getting messages from other snodes.
-    override var maxNodePollCount: UInt { 6 }
+    override var pollDrainBehaviour: SwarmDrainBehaviour { .limitedReuse(count: 6) }
     
     private let pollInterval: TimeInterval = 1.5
     private let retryInterval: TimeInterval = 0.25
@@ -64,10 +67,12 @@ public final class CurrentUserPoller: Poller {
         if UserDefaults.sharedLokiProject?[.isMainAppActive] != true {
             // Do nothing when an error gets throws right after returning from the background (happens frequently)
         }
-        else if let targetSnode: Snode = targetSnode.wrappedValue {
-            SNLog("Main Poller polling \(targetSnode) failed; dropping it and switching to next snode.")
-            self.targetSnode.mutate { $0 = nil }
-            SnodeAPI.dropSnodeFromSwarmIfNeeded(targetSnode, publicKey: publicKey)
+        else if
+            let drainBehaviour: Atomic<SwarmDrainBehaviour> = drainBehaviour.wrappedValue[publicKey],
+            case .limitedReuse(_, .some(let targetSnode), _, _, _) = drainBehaviour.wrappedValue
+        {
+            SNLog("Main Poller polling \(targetSnode) failed with error: \(error); switching to next snode.")
+            drainBehaviour.mutate { $0 = $0.clearTargetSnode() }
         }
         else {
             SNLog("Polling failed due to having no target service node.")

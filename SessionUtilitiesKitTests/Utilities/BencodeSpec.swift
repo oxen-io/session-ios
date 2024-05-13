@@ -110,7 +110,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<TestType> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.to(throwError(HTTPError.parsingFailed))
+                        }.to(throwError(NetworkError.parsingFailed))
                     }
                     
                     // MARK: ------ throws a parsing error when given an invalid key
@@ -121,7 +121,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<TestType> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.to(throwError(HTTPError.parsingFailed))
+                        }.to(throwError(NetworkError.parsingFailed))
                     }
                     
                     // MARK: ------ decodes correctly when trying to decode an int to a bool with custom handling
@@ -132,7 +132,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<TestType3> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.toNot(throwError(HTTPError.parsingFailed))
+                        }.toNot(throwError(NetworkError.parsingFailed))
                     }
                     
                     // MARK: ------ throws a parsing error when trying to decode an int to a bool
@@ -143,7 +143,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<TestType2> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.to(throwError(HTTPError.parsingFailed))
+                        }.to(throwError(NetworkError.parsingFailed))
                     }
                 }
                 
@@ -193,7 +193,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<TestType> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.to(throwError(HTTPError.parsingFailed))
+                        }.to(throwError(NetworkError.parsingFailed))
                     }
                 }
                 
@@ -234,7 +234,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<String> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.to(throwError(HTTPError.parsingFailed))
+                        }.to(throwError(NetworkError.parsingFailed))
                     }
                 }
                 
@@ -275,7 +275,7 @@ class BencodeSpec: QuickSpec {
                         expect {
                             let result: BencodeResponse<Int> = try Bencode.decodeResponse(from: data)
                             _ = result
-                        }.to(throwError(HTTPError.parsingFailed))
+                        }.to(throwError(NetworkError.parsingFailed))
                     }
                 }
             }

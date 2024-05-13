@@ -2,7 +2,7 @@
 
 import Foundation
 
-public extension HTTP {
+public extension Network {
     struct RequestInfo: Codable {
         let method: String
         let endpoint: String

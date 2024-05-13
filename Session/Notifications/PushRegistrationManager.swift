@@ -115,13 +115,13 @@ public enum PushRegistrationError: Error {
      */
     private var isSusceptibleToFailedPushRegistration: Bool {
         // Only affects users who have disabled both: background refresh *and* notifications
-        guard DispatchQueue.main.sync(execute: { UIApplication.shared.backgroundRefreshStatus }) == .denied else {
-            return false
-        }
-
-        guard let notificationSettings = UIApplication.shared.currentUserNotificationSettings else {
-            return false
-        }
+        guard
+            let notificationSettings: UIUserNotificationSettings = DispatchQueue.main.sync(execute: {
+                guard UIApplication.shared.backgroundRefreshStatus == .denied else { return nil }
+                
+                return UIApplication.shared.currentUserNotificationSettings
+            })
+        else { return false }
 
         guard notificationSettings.types == [] else {
             return false

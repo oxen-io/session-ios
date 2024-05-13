@@ -96,7 +96,10 @@ class MessageSendJobSpec: QuickSpec {
             it("fails when given incorrect details") {
                 job = Job(
                     variant: .messageSend,
-                    details: MessageReceiveJob.Details(messages: [], calledFromBackgroundPoller: false)
+                    details: MessageReceiveJob.Details(
+                        messages: [MessageReceiveJob.Details.MessageInfo](),
+                        calledFromBackgroundPoller: false
+                    )
                 )
                 
                 var error: Error? = nil

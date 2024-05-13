@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import Combine
@@ -24,76 +26,97 @@ public enum FileServerAPI {
     
     // MARK: - File Storage
     
-    public static func upload(_ file: Data) -> AnyPublisher<FileUploadResponse, Error> {
-        let request = Request(
-            method: .post,
-            server: server,
-            endpoint: Endpoint.file,
-            headers: [
-                .contentDisposition: "attachment",
-                .contentType: "application/octet-stream"
-            ],
-            body: Array(file)
-        )
-
-        return send(request, serverPublicKey: serverPublicKey, timeout: FileServerAPI.fileUploadTimeout)
-            .decoded(as: FileUploadResponse.self)
+    public static func upload(
+        _ file: Data,
+        using dependencies: Dependencies = Dependencies()
+    ) -> AnyPublisher<FileUploadResponse, Error> {
+        do {
+            return try prepareRequest(
+                request: Request(
+                    method: .post,
+                    server: server,
+                    endpoint: Endpoint.file,
+                    headers: [
+                        .contentDisposition: "attachment",
+                        .contentType: "application/octet-stream"
+                    ],
+                    x25519PublicKey: serverPublicKey,
+                    body: Array(file)
+                ),
+                responseType: FileUploadResponse.self,
+                timeout: FileServerAPI.fileUploadTimeout,
+                using: dependencies
+            )
+            .send(using: dependencies)
+            .map { _, response in response }
+            .eraseToAnyPublisher()
+        }
+        catch { return Fail(error: error).eraseToAnyPublisher() }
     }
     
-    public static func download(_ fileId: String, useOldServer: Bool) -> AnyPublisher<Data, Error> {
-        let serverPublicKey: String = (useOldServer ? oldServerPublicKey : serverPublicKey)
-        let request = Request<NoBody, Endpoint>(
-            server: (useOldServer ? oldServer : server),
-            endpoint: .fileIndividual(fileId: fileId)
-        )
-        
-        return send(request, serverPublicKey: serverPublicKey, timeout: FileServerAPI.fileDownloadTimeout)
+    public static func download(
+        fileId: String,
+        useOldServer: Bool,
+        using dependencies: Dependencies = Dependencies()
+    ) -> AnyPublisher<Data, Error> {
+        do {
+            return try prepareRequest(
+                request: Request<NoBody, Endpoint>(
+                    server: (useOldServer ? oldServer : server),
+                    endpoint: .fileIndividual(fileId: fileId),
+                    x25519PublicKey: (useOldServer ? oldServerPublicKey : serverPublicKey)
+                ),
+                responseType: Data.self,
+                timeout: FileServerAPI.fileDownloadTimeout,
+                using: dependencies
+            )
+            .send(using: dependencies)
+            .map { _, data in data }
+            .eraseToAnyPublisher()
+        }
+        catch { return Fail(error: error).eraseToAnyPublisher() }
     }
 
-    public static func getVersion(_ platform: String) -> AnyPublisher<String, Error> {
-        let request = Request<NoBody, Endpoint>(
-            server: server,
-            endpoint: .sessionVersion,
-            queryParameters: [
-                .platform: platform
-            ]
-        )
-        
-        return send(request, serverPublicKey: serverPublicKey, timeout: HTTP.defaultTimeout)
-            .decoded(as: VersionResponse.self)
-            .map { response in response.version }
+    public static func getVersion(
+        _ platform: String,
+        using dependencies: Dependencies = Dependencies()
+    ) -> AnyPublisher<String, Error> {
+        do {
+            return try prepareRequest(
+                request: Request<NoBody, Endpoint>(
+                    server: server,
+                    endpoint: .sessionVersion,
+                    queryParameters: [
+                        .platform: platform
+                    ],
+                    x25519PublicKey: serverPublicKey
+                ),
+                responseType: VersionResponse.self,
+                timeout: Network.defaultTimeout,
+                using: dependencies
+            )
+            .send(using: dependencies)
+            .map { _, response in response.version }
             .eraseToAnyPublisher()
+        }
+        catch { return Fail(error: error).eraseToAnyPublisher() }
     }
     
     // MARK: - Convenience
     
-    private static func send<T: Encodable>(
-        _ request: Request<T, Endpoint>,
-        serverPublicKey: String,
-        timeout: TimeInterval
-    ) -> AnyPublisher<Data, Error> {
-        let urlRequest: URLRequest
-        
-        do {
-            urlRequest = try request.generateUrlRequest()
-        }
-        catch {
-            return Fail(error: error)
-                .eraseToAnyPublisher()
-        }
-        
-        return OnionRequestAPI
-            .sendOnionRequest(
-                urlRequest,
-                to: request.server,
-                with: serverPublicKey,
-                timeout: timeout
-            )
-            .tryMap { _, response -> Data in
-                guard let response: Data = response else { throw HTTPError.parsingFailed }
-                
-                return response
-            }
-            .eraseToAnyPublisher()
+    private static func prepareRequest<T: Encodable, R: Decodable>(
+        request: Request<T, Endpoint>,
+        responseType: R.Type,
+        retryCount: Int = 0,
+        timeout: TimeInterval,
+        using dependencies: Dependencies
+    ) throws -> Network.PreparedRequest<R> {
+        return Network.PreparedRequest<R>(
+            request: request,
+            urlRequest: try request.generateUrlRequest(using: dependencies),
+            responseType: responseType,
+            retryCount: retryCount,
+            timeout: timeout
+        )
     }
 }

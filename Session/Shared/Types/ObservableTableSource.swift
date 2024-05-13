@@ -216,6 +216,15 @@ public extension TableObservation {
                 .eraseToAnyPublisher()
         }
     }
+    
+    func compactMapWithPrevious<R>(transform: @escaping (T?, T) -> R?) -> TableObservation<R> {
+        return TableObservation<R> { viewModel, dependencies in
+            self.generatePublisher(viewModel, dependencies)
+                .withPrevious()
+                .compactMap(transform)
+                .eraseToAnyPublisher()
+        }
+    }
 }
 
 public extension Array {

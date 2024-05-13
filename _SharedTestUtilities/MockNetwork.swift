@@ -9,7 +9,7 @@ import SessionUtilitiesKit
 class MockNetwork: Mock<NetworkType>, NetworkType {
     var requestData: RequestData?
     
-    func send<T>(_ request: Network.RequestType<T>) -> AnyPublisher<(ResponseInfoType, T), Error> {
+    func send<T>(_ request: Network.RequestType<T>, using dependencies: Dependencies) -> AnyPublisher<(ResponseInfoType, T), Error> {
         requestData = request.data
         
         return accept(funcName: "send<T>(\(request.id))", args: request.args) as! AnyPublisher<(ResponseInfoType, T), Error>
@@ -90,12 +90,12 @@ extension Network.RequestType {
     }
 }
 
-// MARK: - HTTP.BatchSubResponse Encoding Convenience
+// MARK: - Network.BatchSubResponse Encoding Convenience
 
 extension Encodable where Self: Codable {
     func batchSubResponse() -> Data {
         return try! JSONEncoder().with(outputFormatting: .sortedKeys).encode(
-            HTTP.BatchSubResponse(
+            Network.BatchSubResponse(
                 code: 200,
                 headers: [:],
                 body: self,
@@ -111,4 +111,18 @@ extension Mocked where Self: Codable {
 
 extension Array where Element: Mocked, Element: Codable {
     static func mockBatchSubResponse() -> Data { return [Element.mockValue].batchSubResponse() }
+}
+
+// MARK: - Endpoint
+
+enum MockEndpoint: EndpointType, Mocked {
+    static var mockValue: MockEndpoint = .mock
+    
+    case mock
+    
+    static var name: String { "MockEndpoint" }
+    static var batchRequestVariant: Network.BatchRequest.Child.Variant { .storageServer }
+    static var excludedSubRequestHeaders: [HTTPHeader] { [] }
+    
+    var path: String { return "mock" }
 }

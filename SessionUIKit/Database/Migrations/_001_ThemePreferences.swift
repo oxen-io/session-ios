@@ -13,6 +13,7 @@ enum _001_ThemePreferences: Migration {
     static let minExpectedRunDuration: TimeInterval = 0.1
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [Identity.self]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         // Determine if the user was matching the system setting (previously the absence of this value

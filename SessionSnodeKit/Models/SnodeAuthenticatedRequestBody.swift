@@ -12,8 +12,8 @@ public class SnodeAuthenticatedRequestBody: Encodable {
         case signatureBase64 = "signature"
     }
     
-    private let pubkey: String
-    private let ed25519PublicKey: [UInt8]
+    internal let pubkey: String
+    internal let ed25519PublicKey: [UInt8]
     internal let ed25519SecretKey: [UInt8]
     private let subkey: String?
     internal let timestampMs: UInt64?

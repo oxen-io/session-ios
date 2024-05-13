@@ -107,9 +107,25 @@ public enum SyncPushTokensJob: JobExecutor {
         /// https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/HandlingRemoteNotifications.html#//apple_ref/doc/uid/TP40008194-CH6-SW1
         SNLog("[SyncPushTokensJob] Re-registering for remote notifications")
         PushRegistrationManager.shared.requestPushTokens()
-            .flatMap { (pushToken: String, voipToken: String) -> AnyPublisher<Void, Error> in
-                guard !OnionRequestAPI.paths.isEmpty else {
-                    SNLog("[SyncPushTokensJob] OS subscription completed, skipping server subscription due to lack of paths")
+            .flatMap { (pushToken: String, voipToken: String) -> AnyPublisher<(String, String)?, Error> in
+                Deferred {
+                    Future<(String, String)?, Error> { resolver in
+                        _ = LibSession.onPathsChanged(skipInitialCallbackIfEmpty: true) { paths, pathsChangedId in
+                            // Only listen for the first callback
+                            LibSession.removePathsChangedCallback(callbackId: pathsChangedId)
+                            
+                            guard !paths.isEmpty else {
+                                SNLog("[SyncPushTokensJob] OS subscription completed, skipping server subscription due to lack of paths")
+                                return resolver(Result.success(nil))
+                            }
+                            
+                            resolver(Result.success((pushToken, voipToken)))
+                        }
+                    }
+                }.eraseToAnyPublisher()
+            }
+            .flatMap { (tokenInfo: (String, String)?) -> AnyPublisher<Void, Error> in
+                guard let (pushToken, voipToken): (String, String) = tokenInfo else {
                     return Just(())
                         .setFailureType(to: Error.self)
                         .eraseToAnyPublisher()
@@ -211,7 +227,7 @@ extension SyncPushTokensJob {
 
 private func redact(_ string: String) -> String {
 #if DEBUG
-    return string
+    return "[ DEBUG_NOT_REDACTED \(string) ]" // stringlint:disable
 #else
     return "[ READACTED \(string.prefix(2))...\(string.suffix(2)) ]" // stringlint:disable
 #endif

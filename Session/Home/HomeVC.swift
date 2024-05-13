@@ -8,7 +8,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
-final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewDataSource, UITableViewDelegate, SeedReminderViewDelegate {
+final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataSource, UITableViewDelegate, SeedReminderViewDelegate {
     private static let loadingHeaderHeight: CGFloat = 40
     public static let newConversationButtonSize: CGFloat = 60
     
@@ -22,7 +22,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
     private var isAutoLoadingNextPage: Bool = false
     private var viewHasAppeared: Bool = false
     
-    // MARK: - SessionUtilRespondingViewController
+    // MARK: - LibSessionRespondingViewController
     
     let isConversationList: Bool = true
     
@@ -286,7 +286,7 @@ final class HomeVC: BaseVC, SessionUtilRespondingViewController, UITableViewData
         }
         
         // Onion request path countries cache
-        IP2Country.shared.populateCacheIfNeededAsync()
+        IP2Country.populateCacheIfNeededAsync()
     }
     
     override func viewWillAppear(_ animated: Bool) {

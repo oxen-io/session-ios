@@ -221,17 +221,14 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
                             case .finished: break
                             case .failure(let error):
                                 modalActivityIndicator.dismiss {
-                                    var messageOrNil: String?
-                                    if let error = error as? SnodeAPIError {
-                                        switch error {
-                                            case .decryptionFailed, .hashingFailed, .validationFailed:
-                                                messageOrNil = error.errorDescription
-                                            default: break
-                                        }
-                                    }
                                     let message: String = {
-                                        if let messageOrNil: String = messageOrNil {
-                                            return messageOrNil
+                                        if let error = error as? SnodeAPIError {
+                                            switch error {
+                                                case .onsDecryptionFailed, .onsHashingFailed, .onsValidationFailed:
+                                                    return "\(error)"
+                                                    
+                                                default: break
+                                            }
                                         }
                                         
                                         return (maybeSessionId?.prefix == .blinded15 || maybeSessionId?.prefix == .blinded25 ?

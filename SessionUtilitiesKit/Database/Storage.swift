@@ -370,7 +370,7 @@ open class Storage {
                         return keySpec
                     }
                     catch {
-                        SNLog("Setting keychain value failed with error: \(error.localizedDescription)")
+                        SNLog("Setting keychain value failed with error: \(error)")
                         Thread.sleep(forTimeInterval: 15)    // Sleep to allow any background behaviours to complete
                         throw StorageError.keySpecCreationFailed
                     }

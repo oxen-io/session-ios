@@ -49,8 +49,8 @@ public struct DisappearingMessagesConfiguration: Codable, Identifiable, Equatabl
             }
         }
         
-        init(sessionUtilType: CONVO_EXPIRATION_MODE) {
-            switch sessionUtilType {
+        init(libSessionType: CONVO_EXPIRATION_MODE) {
+            switch libSessionType {
                 case CONVO_EXPIRATION_AFTER_READ: self = .disappearAfterRead
                 case CONVO_EXPIRATION_AFTER_SEND: self = .disappearAfterSend
                 default:                          self = .unknown
@@ -262,7 +262,7 @@ public extension DisappearingMessagesConfiguration {
         let currentUserPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
         let wasRead: Bool = (
             authorId == currentUserPublicKey ||
-            SessionUtil.timestampAlreadyRead(
+            LibSession.timestampAlreadyRead(
                 threadId: threadId,
                 threadVariant: threadVariant,
                 timestampMs: timestampMs,

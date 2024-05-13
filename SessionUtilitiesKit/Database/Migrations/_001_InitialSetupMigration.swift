@@ -12,6 +12,7 @@ enum _001_InitialSetupMigration: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [
         Identity.self, Job.self, JobDependencies.self, Setting.self
     ]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         try db.create(table: Identity.self) { t in

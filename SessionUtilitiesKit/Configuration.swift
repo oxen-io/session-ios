@@ -26,7 +26,9 @@ public enum SNUtilitiesKit: MigratableTarget { // Just to make the external API 
                     _004_AddJobPriority.self
                 ],  // Add job priorities
                 [], // Fix thread FTS
-                []
+                [
+                    _005_AddJobUniqueHash.self
+                ]
             ]
         )
     }

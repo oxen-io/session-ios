@@ -19,7 +19,7 @@ internal extension SnodeAPI {
             
             public init<T: Encodable, R: Codable>(request: SnodeRequest<T>, responseType: R.Type) {
                 self.child = Child(request: request)
-                self.responseType = HTTP.BatchSubResponse<R>.self
+                self.responseType = Network.BatchSubResponse<R>.self
             }
             
             public init<T: Encodable>(request: SnodeRequest<T>) {
@@ -55,7 +55,7 @@ internal extension SnodeAPI {
             public func encode(to encoder: Encoder) throws {
                 var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
 
-                try container.encode(endpoint.rawValue, forKey: .method)
+                try container.encode(endpoint.path, forKey: .method)
                 try jsonBodyEncoder?(&container, .params)
             }
         }

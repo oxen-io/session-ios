@@ -41,16 +41,16 @@ public struct SnodeReceivedMessageInfo: Codable, FetchableRecord, MutablePersist
 // MARK: - Convenience
 
 public extension SnodeReceivedMessageInfo {
-    private static func key(for snode: Snode, publicKey: String, namespace: SnodeAPI.Namespace) -> String {
+    private static func key(for snode: LibSession.Snode, publicKey: String, namespace: SnodeAPI.Namespace) -> String {
         guard namespace != .default else {
-            return "\(snode.address):\(snode.port).\(publicKey)"
+            return "\(snode.address).\(publicKey)"
         }
         
-        return "\(snode.address):\(snode.port).\(publicKey).\(namespace.rawValue)"
+        return "\(snode.address).\(publicKey).\(namespace.rawValue)"
     }
     
     init(
-        snode: Snode,
+        snode: LibSession.Snode,
         publicKey: String,
         namespace: SnodeAPI.Namespace,
         hash: String,
@@ -66,7 +66,7 @@ public extension SnodeReceivedMessageInfo {
 
 public extension SnodeReceivedMessageInfo {
     static func pruneExpiredMessageHashInfo(
-        for snode: Snode,
+        for snode: LibSession.Snode,
         namespace: SnodeAPI.Namespace,
         associatedWith publicKey: String,
         using dependencies: Dependencies
@@ -109,7 +109,7 @@ public extension SnodeReceivedMessageInfo {
     /// very common for this method to be called after the hash value has been updated but before the various `read` threads
     /// have been updated, resulting in a pointless fetch for data the app has already received
     static func fetchLastNotExpired(
-        for snode: Snode,
+        for snode: LibSession.Snode,
         namespace: SnodeAPI.Namespace,
         associatedWith publicKey: String,
         using dependencies: Dependencies

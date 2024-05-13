@@ -26,7 +26,7 @@
 # request ever gets implemented: https://github.com/CocoaPods/CocoaPods/issues/8464
 
 # Need to set the path or we won't find cmake
-PATH=${PATH}:/usr/local/bin:/opt/local/bin:/opt/homebrew/bin:/sbin/md5
+PATH=${PATH}:/usr/local/bin:/opt/local/bin:/opt/homebrew/bin:/opt/homebrew/opt/m4/bin:/sbin/md5
 
 exec 3>&1 # Save original stdout
 
@@ -103,6 +103,7 @@ echo "Checking for changes to source"
 
 NEW_SOURCE_HASH=$(find "${SRCROOT}/LibSession-Util/src" -type f -exec md5 {} + | awk '{print $NF}' | sort | md5 | awk '{print $NF}')
 NEW_HEADER_HASH=$(find "${SRCROOT}/LibSession-Util/include" -type f -exec md5 {} + | awk '{print $NF}' | sort | md5 | awk '{print $NF}')
+NEW_EXTERNAL_HASH=$(find "${SRCROOT}/LibSession-Util/external" -type f -exec md5 {} + | awk '{print $NF}' | sort | md5 | awk '{print $NF}')
 
 if [ -f "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_source_hash.log" ]; then
     read -r OLD_SOURCE_HASH < "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_source_hash.log"
@@ -112,18 +113,29 @@ if [ -f "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_header_hash.log" ]; 
     read -r OLD_HEADER_HASH < "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_header_hash.log"
 fi
 
+if [ -f "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_external_hash.log" ]; then
+    read -r OLD_EXTERNAL_HASH < "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_external_hash.log"
+fi
+
 if [ -f "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_archs.log" ]; then
     read -r OLD_ARCHS < "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_archs.log"
 fi
 
-# If all of the hashes match, the archs match and there is a library file then we can just stop here
-if [ "${NEW_SOURCE_HASH}" == "${OLD_SOURCE_HASH}" ] && [ "${NEW_HEADER_HASH}" == "${OLD_HEADER_HASH}" ] && [ "${ARCHS[*]}" == "${OLD_ARCHS}" ] && [ -f "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a" ]; then
-  echo "Build is up-to-date"
-  exit 0
+# Check the current state of the build (comparing hashes to determine if there was a source change)
+if [ "${NEW_SOURCE_HASH}" != "${OLD_SOURCE_HASH}" ]; then
+    echo "Build is not up-to-date (source change) - creating new build"
+elif [ "${NEW_HEADER_HASH}" != "${OLD_HEADER_HASH}" ]; then
+    echo "Build is not up-to-date (header change) - creating new build"
+elif [ "${NEW_EXTERNAL_HASH}" != "${OLD_EXTERNAL_HASH}" ]; then
+    echo "Build is not up-to-date (external lib change) - creating new build"
+elif [ "${ARCHS[*]}" != "${OLD_ARCHS}" ]; then
+    echo "Build is not up-to-date (build architectures changed) - creating new build"
+elif [ ! -f "${TARGET_BUILD_DIR}/libSessionUtil/libSessionUtil.a" ]; then
+    echo "Build is not up-to-date (no static lib) - creating new build"
+else
+    echo "Build is up-to-date"
+    exit 0
 fi
-
-# If any of the above differ then we need to rebuild
-echo "Build is not up-to-date - creating new build"
 
 # Import settings from XCode (defaulting values if not present)
 VALID_SIM_ARCHS=(arm64 x86_64)
@@ -170,14 +182,21 @@ fi
 # Remove any old build logs (since we are doing a new build)
 rm -rf "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
 
+submodule_check=ON
+
+if [ "$CONFIGURATION" == "Debug" ]; then
+    submodule_check=OFF
+fi
+
 # Build the individual architectures
 for i in "${!TARGET_ARCHS[@]}"; do
     build="${TARGET_BUILD_DIR}/libSessionUtil/${TARGET_ARCHS[$i]}"
     platform="${TARGET_PLATFORMS[$i]}"
+    log_file="${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
     echo "Building ${TARGET_ARCHS[$i]} for $platform in $build"
     
     # Redirect the build output to a log file and only include the progress lines in the XCode output
-    exec > >(tee "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | grep --line-buffered '^\[.*%\]') 2>&1
+    exec > >(tee "$log_file" | grep --line-buffered '^\[.*%\]') 2>&1
 
     cd "${SRCROOT}/LibSession-Util"
     env -i PATH="$PATH" SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
@@ -187,8 +206,10 @@ for i in "${!TARGET_ARCHS[@]}"; do
         -DDEPLOYMENT_TARGET=$IPHONEOS_DEPLOYMENT_TARGET \
         -DENABLE_BITCODE=$ENABLE_BITCODE \
         -DBUILD_TESTS=OFF \
-        -DBUILD_STATIC_DEPS=ON
-        
+        -DBUILD_STATIC_DEPS=ON \
+        -DENABLE_VISIBILITY=ON \
+        -DSUBMODULE_CHECK=$submodule_check
+
     # Capture the exit status of the ./utils/static-bundle.sh command
     EXIT_STATUS=$?
         
@@ -197,17 +218,36 @@ for i in "${!TARGET_ARCHS[@]}"; do
     echo ""
     exec 1>&3
 
-    if [ $EXIT_STATUS -ne 0 ]; then
-      ALL_ERROR_LINES=($(grep -n "error:" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log" | cut -d ":" -f 1))
+    # Retrieve and log any submodule errors/warnings
+    ALL_CMAKE_ERROR_LINES=($(grep -nE "CMake Error" "$log_file" | cut -d ":" -f 1))
+    ALL_SUBMODULE_ISSUE_LINES=($(grep -nE "\s*Submodule '([^']+)' is not up-to-date" "$log_file" | cut -d ":" -f 1))
+    ALL_CMAKE_ERROR_LINES_STR=" ${ALL_CMAKE_ERROR_LINES[*]} "
+    ALL_SUBMODULE_ISSUE_LINES_STR=" ${ALL_SUBMODULE_ISSUE_LINES[*]} "
 
+    for i in "${!ALL_SUBMODULE_ISSUE_LINES[@]}"; do
+      line="${ALL_SUBMODULE_ISSUE_LINES[$i]}"
+      prev_line=$((line - 1))
+      value=$(sed "${line}q;d" "$log_file" | sed -E "s/.*Submodule '([^']+)'.*/Submodule '\1' is not up-to-date./")
+      
+      if [[ "$ALL_CMAKE_ERROR_LINES_STR" == *" $prev_line "* ]]; then
+        echo "error: $value"
+      else
+        echo "warning: $value"
+      fi
+    done
+
+    if [ $EXIT_STATUS -ne 0 ]; then
+      ALL_ERROR_LINES=($(grep -n "error:" "$log_file" | cut -d ":" -f 1))
+
+      # Log any other errors
       for e in "${!ALL_ERROR_LINES[@]}"; do
         error_line="${ALL_ERROR_LINES[$e]}"
-        error=$(sed "${error_line}q;d" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log")
+        error=$(sed "${error_line}q;d" "$log_file")
 
         # If it was a CMake Error then the actual error will be on the next line so we want to append that info
         if [[ $error == *'CMake Error'* ]]; then
             actual_error_line=$((error_line + 1))
-            error="${error}$(sed "${actual_error_line}q;d" "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log")"
+            error="${error}$(sed "${actual_error_line}q;d" "$log_file")"
         fi
 
         # Exclude the 'ALL_ERROR_LINES' line and the 'grep' line
@@ -245,6 +285,7 @@ fi
 # Save the updated hashes to disk to prevent rebuilds when there were no changes
 echo "${NEW_SOURCE_HASH}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_source_hash.log"
 echo "${NEW_HEADER_HASH}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_header_hash.log"
+echo "${NEW_EXTERNAL_HASH}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_external_hash.log"
 echo "${ARCHS[*]}" > "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_archs.log"
 echo "Build complete"
 

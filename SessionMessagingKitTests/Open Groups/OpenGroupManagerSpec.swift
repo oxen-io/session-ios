@@ -747,8 +747,8 @@ class OpenGroupManagerSpec: QuickSpec {
                     }
                     
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any())) }
-                        .thenReturn(OpenGroupAPI.BatchResponse.mockCapabilitiesAndRoomResponse)
+                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomResponse)
                     mockOGMCache.when { $0.pollers }.thenReturn([:])
                     
                     mockUserDefaults
@@ -768,7 +768,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                     roomToken: "testRoom",
                                     server: "testServer",
                                     publicKey: TestConstants.serverPublicKey,
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -778,7 +778,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 roomToken: "testRoom",
                                 server: "testServer",
                                 publicKey: TestConstants.serverPublicKey,
-                                calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                calledFromConfigHandling: true, // Don't trigger LibSession logic
                                 using: dependencies
                             )
                         }
@@ -806,7 +806,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                     roomToken: "testRoom",
                                     server: "testServer",
                                     publicKey: TestConstants.serverPublicKey,
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -816,7 +816,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 roomToken: "testRoom",
                                 server: "testServer",
                                 publicKey: TestConstants.serverPublicKey,
-                                calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                calledFromConfigHandling: true, // Don't trigger LibSession logic
                                 using: dependencies
                             )
                         }
@@ -850,7 +850,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                         publicKey: TestConstants.serverPublicKey
                                             .replacingOccurrences(of: "c3", with: "00")
                                             .replacingOccurrences(of: "b3", with: "00"),
-                                        calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                        calledFromConfigHandling: true, // Don't trigger LibSession logic
                                         using: dependencies
                                     )
                             }
@@ -862,7 +862,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                     publicKey: TestConstants.serverPublicKey
                                         .replacingOccurrences(of: "c3", with: "00")
                                         .replacingOccurrences(of: "b3", with: "00"),
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                             }
@@ -893,7 +893,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 context("with an invalid response") {
                     beforeEach {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any())) }
+                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
                             .thenReturn(MockNetwork.response(data: Data()))
                         
                         mockUserDefaults
@@ -915,7 +915,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                         roomToken: "testRoom",
                                         server: "testServer",
                                         publicKey: TestConstants.serverPublicKey,
-                                        calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                        calledFromConfigHandling: true, // Don't trigger LibSession logic
                                         using: dependencies
                                     )
                             }
@@ -925,14 +925,14 @@ class OpenGroupManagerSpec: QuickSpec {
                                     roomToken: "testRoom",
                                     server: "testServer",
                                     publicKey: TestConstants.serverPublicKey,
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                             }
                             .mapError { result -> Error in error.setting(to: result) }
                             .sinkAndStore(in: &disposables)
                         
-                        expect(error).to(matchError(HTTPError.parsingFailed))
+                        expect(error).to(matchError(NetworkError.parsingFailed))
                     }
                 }
             }
@@ -965,7 +965,7 @@ class OpenGroupManagerSpec: QuickSpec {
                             .delete(
                                 db,
                                 openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: "testServer"),
-                                calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                calledFromConfigHandling: true, // Don't trigger LibSession logic
                                 using: dependencies
                             )
                     }
@@ -981,7 +981,7 @@ class OpenGroupManagerSpec: QuickSpec {
                             .delete(
                                 db,
                                 openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: "testServer"),
-                                calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                calledFromConfigHandling: true, // Don't trigger LibSession logic
                                 using: dependencies
                             )
                     }
@@ -1001,7 +1001,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 .delete(
                                     db,
                                     openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: "testServer"),
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -1016,7 +1016,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 .delete(
                                     db,
                                     openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: "testServer"),
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -1057,7 +1057,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 .delete(
                                     db,
                                     openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: "testServer"),
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -1112,7 +1112,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 .delete(
                                     db,
                                     openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: OpenGroupAPI.defaultServer),
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -1128,7 +1128,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 .delete(
                                     db,
                                     openGroupId: OpenGroup.idFor(roomToken: "testRoom", server: OpenGroupAPI.defaultServer),
-                                    calledFromConfigHandling: true, // Don't trigger SessionUtil logic
+                                    calledFromConfigHandling: true, // Don't trigger LibSession logic
                                     using: dependencies
                                 )
                         }
@@ -1176,6 +1176,14 @@ class OpenGroupManagerSpec: QuickSpec {
                     }
                     
                     mockOGMCache.when { $0.pollers }.thenReturn([:])
+                    mockOGMCache.when { $0.hasPerformedInitialPoll }.thenReturn([:])
+                    mockOGMCache.when { $0.timeSinceLastPoll }.thenReturn([:])
+                    mockOGMCache
+                        .when { [dependencies = dependencies!] cache in
+                            cache.getTimeSinceLastOpen(using: dependencies)
+                        }
+                        .thenReturn(0)
+                    mockOGMCache.when { $0.isPolling }.thenReturn(false)
                     
                     mockUserDefaults
                         .when { (defaults: inout any UserDefaultsType) -> Any? in
@@ -1590,9 +1598,12 @@ class OpenGroupManagerSpec: QuickSpec {
                             })
                     }
                     
-                    // MARK: ------ does not start a new poller when already polling
-                    it("does not start a new poller when already polling") {
+                    // MARK: ------ restarts the poller if there already is one
+                    it("restarts the poller if there already is one") {
                         mockOGMCache.when { $0.pollers }.thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
+                        mockNetwork
+                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .thenReturn(Network.BatchResponse.mockBlindedPollResponse)
                         
                         mockStorage.write { db in
                             try OpenGroupManager.handlePollInfo(
@@ -1605,7 +1616,10 @@ class OpenGroupManagerSpec: QuickSpec {
                             )
                         }
                         
-                        expect(mockOGMCache).to(call(.exactly(times: 1)) { $0.pollers })
+                        expect(mockOGMCache)
+                            .to(call(matchingParameters: true) {
+                                $0.pollers = ["testserver": OpenGroupAPI.Poller(for: "testserver")]
+                            })
                     }
                 }
                 
@@ -1808,7 +1822,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     it("does nothing if it fails to retrieve the room image") {
                         mockOGMCache.when { $0.groupImagePublishers }
                             .thenReturn([
-                                OpenGroup.idFor(roomToken: "testRoom", server: "testServer"): Fail(error: HTTPError.generic).eraseToAnyPublisher()
+                                OpenGroup.idFor(roomToken: "testRoom", server: "testServer"): Fail(error: NetworkError.unknown).eraseToAnyPublisher()
                             ])
                         
                         testPollInfo = OpenGroupAPI.RoomPollInfo.mockValue.with(
@@ -3024,8 +3038,8 @@ class OpenGroupManagerSpec: QuickSpec {
             context("when getting the default rooms if needed") {
                 beforeEach {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any())) }
-                        .thenReturn(OpenGroupAPI.BatchResponse.mockCapabilitiesAndRoomsResponse)
+                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomsResponse)
                     
                     mockStorage.write { db in
                         try OpenGroup.deleteAll(db)
@@ -3129,7 +3143,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 // MARK: ---- will retry fetching rooms 8 times before it fails
                 it("will retry fetching rooms 8 times before it fails") {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any())) }
+                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
                         .thenReturn(MockNetwork.nullResponse())
                     
                     var error: Error?
@@ -3138,15 +3152,17 @@ class OpenGroupManagerSpec: QuickSpec {
                         .mapError { result -> Error in error.setting(to: result) }
                         .sinkAndStore(in: &disposables)
                     
-                    expect(error).to(matchError(HTTPError.parsingFailed))
+                    expect(error).to(matchError(NetworkError.parsingFailed))
                     expect(mockNetwork)   // First attempt + 8 retries
-                        .to(call(.exactly(times: 9)) { $0.send(.onionRequest(any(), to: any(), with: any())) })
+                        .to(call(.exactly(times: 9)) {
+                            $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies)
+                        })
                 }
                 
                 // MARK: ---- removes the cache publisher if all retries fail
                 it("removes the cache publisher if all retries fail") {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any())) }
+                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
                         .thenReturn(MockNetwork.nullResponse())
                     
                     var error: Error?
@@ -3156,7 +3172,7 @@ class OpenGroupManagerSpec: QuickSpec {
                         .sinkAndStore(in: &disposables)
                     
                     expect(error)
-                        .to(matchError(HTTPError.parsingFailed))
+                        .to(matchError(NetworkError.parsingFailed))
                     expect(mockOGMCache)
                         .to(call(matchingParameters: true) {
                             $0.defaultRoomsPublisher = nil
@@ -3171,7 +3187,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 URLRequest(url: URL(string: "https://open.getsession.org/sequence")!),
                                 to: OpenGroupAPI.defaultServer,
                                 with: OpenGroupAPI.defaultServerPublicKey
-                            ))
+                            ), using: dependencies)
                         }
                         .thenReturn(
                             MockNetwork.batchResponseData(
@@ -3199,7 +3215,8 @@ class OpenGroupManagerSpec: QuickSpec {
                                     to: OpenGroupAPI.defaultServer,
                                     with: OpenGroupAPI.defaultServerPublicKey,
                                     timeout: FileServerAPI.fileDownloadTimeout
-                                )
+                                ),
+                                using: dependencies
                             )
                         }
                         .thenReturn(MockNetwork.response(data: Data([1, 2, 3])))
@@ -3234,7 +3251,7 @@ class OpenGroupManagerSpec: QuickSpec {
             context("when getting a room image") {
                 beforeEach {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any())) }
+                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
                         .thenReturn(MockNetwork.response(data: Data([1, 2, 3])))
                     
                     mockUserDefaults
@@ -3643,7 +3660,7 @@ extension OpenGroupAPI.DirectMessage: Mocked {
     )
 }
                         
-extension OpenGroupAPI.BatchResponse {
+extension Network.BatchResponse {
     static let mockUnblindedPollResponse: AnyPublisher<(ResponseInfoType, Data?), Error> = MockNetwork.batchResponseData(
         with: [
             (OpenGroupAPI.Endpoint.capabilities, OpenGroupAPI.Capabilities.mockBatchSubResponse()),

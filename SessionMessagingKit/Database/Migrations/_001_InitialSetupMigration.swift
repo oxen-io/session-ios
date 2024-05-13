@@ -17,6 +17,7 @@ enum _001_InitialSetupMigration: Migration {
         InteractionAttachment.self, Quote.self, LinkPreview.self, ControlMessageProcessRecord.self,
         ThreadTypingIndicator.self
     ]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     public static let fullTextSearchTokenizer: FTS5TokenizerDescriptor = {
         // Define the tokenizer to be used in all the FTS tables

@@ -671,6 +671,7 @@ fileprivate enum TestInsertTestTypeMigration: Migration {
     static let minExpectedRunDuration: TimeInterval = 0
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(FetchableRecord & TableRecord).Type] = [TestType.self, MutableTestType.self]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         try db.create(table: TestType.self) { t in
@@ -691,6 +692,7 @@ fileprivate enum TestAddColumnMigration: Migration {
     static let minExpectedRunDuration: TimeInterval = 0
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(FetchableRecord & TableRecord).Type] = [TestType.self, MutableTestType.self]
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         try db.alter(table: TestType.self) { t in

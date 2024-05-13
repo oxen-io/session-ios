@@ -151,7 +151,7 @@ final class JoinOpenGroupVC: BaseVC, UIPageViewControllerDataSource, UIPageViewC
     fileprivate func joinOpenGroup(with urlString: String, onError: (() -> ())?) {
         // A V2 open group URL will look like: <optional scheme> + <host> + <optional port> + <room> + <public key>
         // The host doesn't parse if no explicit scheme is provided
-        guard let (room, server, publicKey) = SessionUtil.parseCommunity(url: urlString) else {
+        guard let (room, server, publicKey) = LibSession.parseCommunity(url: urlString) else {
             showError(
                 title: "invalid_url".localized(),
                 message: "COMMUNITY_ERROR_INVALID_URL".localized(),

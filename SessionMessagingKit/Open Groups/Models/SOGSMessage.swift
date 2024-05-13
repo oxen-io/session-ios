@@ -67,10 +67,10 @@ extension OpenGroupAPI.Message {
         // If we have data and a signature (ie. the message isn't a deletion) then validate the signature
         if let base64EncodedData: String = maybeBase64EncodedData, let base64EncodedSignature: String = maybeBase64EncodedSignature {
             guard let sender: String = maybeSender, let data = Data(base64Encoded: base64EncodedData), let signature = Data(base64Encoded: base64EncodedSignature) else {
-                throw HTTPError.parsingFailed
+                throw NetworkError.parsingFailed
             }
             guard let dependencies: Dependencies = decoder.userInfo[Dependencies.userInfoKey] as? Dependencies else {
-                throw HTTPError.parsingFailed
+                throw NetworkError.parsingFailed
             }
             
             // Verify the signature based on the SessionId.Prefix type
@@ -84,7 +84,7 @@ extension OpenGroupAPI.Message {
                         )
                     else {
                         SNLog("Ignoring message with invalid signature.")
-                        throw HTTPError.parsingFailed
+                        throw NetworkError.parsingFailed
                     }
                     
                 case .standard, .unblinded:
@@ -94,12 +94,12 @@ extension OpenGroupAPI.Message {
                         )
                     else {
                         SNLog("Ignoring message with invalid signature.")
-                        throw HTTPError.parsingFailed
+                        throw NetworkError.parsingFailed
                     }
                     
                 case .none, .group:
                     SNLog("Ignoring message with invalid sender.")
-                    throw HTTPError.parsingFailed
+                    throw NetworkError.parsingFailed
             }
         }
         

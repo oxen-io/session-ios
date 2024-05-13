@@ -351,7 +351,7 @@ public extension LinkPreview {
         
         return session
             .dataTaskPublisher(for: request)
-            .mapError { _ -> Error in HTTPError.generic }   // URLError codes are negative values
+            .mapError { _ -> Error in NetworkError.unknown }   // URLError codes are negative values
             .tryMap { data, response -> (Data, URLResponse) in
                 guard let urlResponse: HTTPURLResponse = response as? HTTPURLResponse else {
                     throw LinkPreviewError.assertionFailure

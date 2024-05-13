@@ -43,7 +43,7 @@ extension Network.RequestType: MockedGeneric {
     typealias Generic = T
     
     static func mockValue(type: T.Type) -> Network.RequestType<T> {
-        return Network.RequestType(id: "mock") { Fail(error: MockError.mockedData).eraseToAnyPublisher() }
+        return Network.RequestType(id: "mock") { _ in Fail(error: MockError.mockedData).eraseToAnyPublisher() }
     }
 }
 

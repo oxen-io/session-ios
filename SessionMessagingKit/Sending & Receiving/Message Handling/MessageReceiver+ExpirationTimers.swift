@@ -49,7 +49,7 @@ extension MessageReceiver {
                 {
                     _ = try updatedConfig.save(db)
                     
-                    try SessionUtil
+                    try LibSession
                         .update(
                             db,
                             groupPublicKey: threadId,

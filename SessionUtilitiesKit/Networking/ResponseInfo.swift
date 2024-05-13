@@ -2,12 +2,12 @@
 
 import Foundation
 
-public protocol ResponseInfoType: Codable {
+public protocol ResponseInfoType: Decodable {
     var code: Int { get }
     var headers: [String: String] { get }
 }
 
-public extension HTTP {
+public extension Network {
     struct ResponseInfo: ResponseInfoType {
         public let code: Int
         public let headers: [String: String]
@@ -18,4 +18,3 @@ public extension HTTP {
         }
     }
 }
-

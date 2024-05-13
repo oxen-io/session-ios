@@ -24,7 +24,7 @@ extension MessageReceiver {
             SnodeAPI.currentOffsetTimestampMs()
         )
         
-        let wasRead: Bool = SessionUtil.timestampAlreadyRead(
+        let wasRead: Bool = LibSession.timestampAlreadyRead(
             threadId: threadId,
             threadVariant: threadVariant,
             timestampMs: (timestampMs * 1000),

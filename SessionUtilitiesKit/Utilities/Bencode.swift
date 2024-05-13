@@ -57,7 +57,7 @@ public enum Bencode {
             decodedData.remainingData.isEmpty == true,  // Ensure there is no left over data
             let resultArray: [Any] = decodedData.value as? [Any],
             resultArray.count > 0
-        else { throw HTTPError.parsingFailed }
+        else { throw NetworkError.parsingFailed }
         
         return BencodeResponse(
             info: try Bencode.decode(T.self, decodedValue: resultArray[0], using: dependencies),
@@ -80,7 +80,7 @@ public enum Bencode {
         guard
             let decodedData: (value: Any, remainingData: Data) = decodeData(data),
             decodedData.remainingData.isEmpty == true  // Ensure there is no left over data
-        else { throw HTTPError.parsingFailed }
+        else { throw NetworkError.parsingFailed }
         
         return try Bencode.decode(T.self, decodedValue: decodedData.value, using: dependencies)
     }
@@ -95,7 +95,7 @@ public enum Bencode {
             case
                 (let bencodeString as BencodeString, is String.Type),
                 (let bencodeString as BencodeString, is Optional<String>.Type):
-                return try (bencodeString.value as? T ?? { throw HTTPError.parsingFailed }())
+                return try (bencodeString.value as? T ?? { throw NetworkError.parsingFailed }())
                 
             case (let bencodeString as BencodeString, _):
                 return try bencodeString.rawValue.decoded(as: T.self, using: dependencies)
@@ -104,7 +104,7 @@ public enum Bencode {
                 guard
                     let jsonifiedInfo: Any = try? jsonify(decodedValue),
                     let infoData: Data = try? JSONSerialization.data(withJSONObject: jsonifiedInfo)
-                else { throw HTTPError.parsingFailed }
+                else { throw NetworkError.parsingFailed }
                 
                 return try infoData.decoded(as: T.self, using: dependencies)
         }

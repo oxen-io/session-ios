@@ -1,16 +1,20 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import Reachability
 import NVActivityIndicatorView
 import SessionMessagingKit
 import SessionUIKit
 import SessionSnodeKit
+import SessionUtilitiesKit
 
 final class PathVC: BaseVC {
     public static let dotSize: CGFloat = 8
     public static let expandedDotSize: CGFloat = 16
     private static let rowHeight: CGFloat = (isIPhone5OrSmaller ? 52 : 75)
+    
+    private var pathUpdateId: UUID?
+    private var cacheUpdateId: UUID?
+    private var lastPath: Set<LibSession.Snode> = []
 
     // MARK: - Components
     
@@ -50,12 +54,16 @@ final class PathVC: BaseVC {
 
     // MARK: - Lifecycle
     
+    deinit {
+        LibSession.removeNetworkChangedCallback(callbackId: pathUpdateId)
+        IP2Country.removeCacheLoadedCallback(id: cacheUpdateId)
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
         setUpNavBar()
         setUpViewHierarchy()
-        registerObservers()
     }
 
     private func setUpNavBar() {
@@ -111,31 +119,26 @@ final class PathVC: BaseVC {
         // Set up spacer constraints
         topSpacer.heightAnchor.constraint(equalTo: bottomSpacer.heightAnchor).isActive = true
         
-        // Perform initial update
-        update()
-    }
-
-    private func registerObservers() {
-        let notificationCenter = NotificationCenter.default
-        notificationCenter.addObserver(self, selector: #selector(handleBuildingPathsNotification), name: .buildingPaths, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(handlePathsBuiltNotification), name: .pathsBuilt, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(handleOnionRequestPathCountriesLoadedNotification), name: .onionRequestPathCountriesLoaded, object: nil)
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
+        // Register for status updates (will be called immediately with current paths)
+        pathUpdateId = LibSession.onPathsChanged { [weak self] paths, _ in
+            DispatchQueue.main.async {
+                self?.update(paths: paths, force: false)
+            }
+        }
+        
+        // Register for path country updates
+        cacheUpdateId = IP2Country.onCacheLoaded { [weak self] in
+            DispatchQueue.main.async {
+                self?.update(paths: (self?.lastPath.map { [$0] } ?? []), force: true)
+            }
+        }
     }
 
     // MARK: - Updating
     
-    @objc private func handleBuildingPathsNotification() { update() }
-    @objc private func handlePathsBuiltNotification() { update() }
-    @objc private func handleOnionRequestPathCountriesLoadedNotification() { update() }
-
-    private func update() {
-        pathStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        
-        guard let pathToDisplay: [Snode] = OnionRequestAPI.paths.first else {
+    private func update(paths: [Set<LibSession.Snode>], force: Bool) {
+        guard let pathToDisplay: Set<LibSession.Snode> = paths.first else {
+            pathStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
             spinner.startAnimating()
             
             UIView.animate(withDuration: 0.25) {
@@ -143,6 +146,11 @@ final class PathVC: BaseVC {
             }
             return
         }
+        guard force || lastPath != pathToDisplay else { return }
+        
+        // Cache the path that was used to avoid recreating the UI if not needed
+        lastPath = pathToDisplay
+        pathStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         
         let dotAnimationRepeatInterval = Double(pathToDisplay.count) + 2
         let snodeRows: [UIStackView] = pathToDisplay.enumerated().map { index, snode in
@@ -217,9 +225,9 @@ final class PathVC: BaseVC {
         return stackView
     }
 
-    private func getPathRow(snode: Snode, location: LineView.Location, dotAnimationStartDelay: Double, dotAnimationRepeatInterval: Double, isGuardSnode: Bool) -> UIStackView {
-        let country: String = (IP2Country.isInitialized ?
-            IP2Country.shared.countryNamesCache.wrappedValue[snode.ip].defaulting(to: "Resolving...") :
+    private func getPathRow(snode: LibSession.Snode, location: LineView.Location, dotAnimationStartDelay: Double, dotAnimationRepeatInterval: Double, isGuardSnode: Bool) -> UIStackView {
+        let country: String = (IP2Country.isInitialized.wrappedValue ?
+            IP2Country.countryNamesCache.wrappedValue[snode.ip].defaulting(to: "Resolving...") :
             "Resolving..."
         )
         
@@ -253,7 +261,7 @@ private final class LineView: UIView {
     private var dotViewWidthConstraint: NSLayoutConstraint!
     private var dotViewHeightConstraint: NSLayoutConstraint!
     private var dotViewAnimationTimer: Timer!
-    private let reachability: Reachability? = SessionEnvironment.shared?.reachabilityManager.reachability
+    private var networkStatusCallbackId: UUID?
 
     enum Location {
         case top, middle, bottom
@@ -300,8 +308,7 @@ private final class LineView: UIView {
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self)
-        
+        LibSession.removeNetworkChangedCallback(callbackId: networkStatusCallbackId)
         dotViewAnimationTimer?.invalidate()
     }
     
@@ -337,33 +344,15 @@ private final class LineView: UIView {
                 self?.animate()
             }
         }
-        
-        switch (reachability?.isReachable(), OnionRequestAPI.paths.isEmpty) {
-            case (.some(false), _), (nil, _): setStatus(to: .error)
-            case (.some(true), true): setStatus(to: .connecting)
-            case (.some(true), false): setStatus(to: .connected)
-        }
     }
     
     private func registerObservers() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleBuildingPathsNotification),
-            name: .buildingPaths,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handlePathsBuiltNotification),
-            name: .pathsBuilt,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(reachabilityChanged),
-            name: .reachabilityChanged,
-            object: nil
-        )
+        // Register for status updates (will be called immediately with current status)
+        networkStatusCallbackId = LibSession.onNetworkStatusChanged { [weak self] status in
+            DispatchQueue.main.async {
+                self?.setStatus(to: status)
+            }
+        }
     }
 
     private func animate() {
@@ -386,40 +375,8 @@ private final class LineView: UIView {
         }
     }
     
-    private func setStatus(to status: PathStatusView.Status) {
+    private func setStatus(to status: LibSession.NetworkStatus) {
         dotView.themeBackgroundColor = status.themeColor
         dotView.layer.themeShadowColor = status.themeColor
-    }
-    
-    @objc private func handleBuildingPathsNotification() {
-        guard reachability?.isReachable() == true else {
-            setStatus(to: .error)
-            return
-        }
-        
-        setStatus(to: .connecting)
-    }
-
-    @objc private func handlePathsBuiltNotification() {
-        guard reachability?.isReachable() == true else {
-            setStatus(to: .error)
-            return
-        }
-        
-        setStatus(to: .connected)
-    }
-    
-    @objc private func reachabilityChanged() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in self?.reachabilityChanged() }
-            return
-        }
-        
-        guard reachability?.isReachable() == true else {
-            setStatus(to: .error)
-            return
-        }
-        
-        setStatus(to: (!OnionRequestAPI.paths.isEmpty ? .connected : .connecting))
     }
 }

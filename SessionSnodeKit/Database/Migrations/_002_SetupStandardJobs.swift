@@ -13,11 +13,12 @@ enum _002_SetupStandardJobs: Migration {
     static let minExpectedRunDuration: TimeInterval = 0.1
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
     static func migrate(_ db: Database) throws {
         try autoreleasepool {
             _ = try Job(
-                variant: .getSnodePool,
+                variant: ._legacy_getSnodePool,
                 behaviour: .recurringOnLaunch,
                 shouldBlock: true
             ).migrationSafeInserted(db)
@@ -25,7 +26,7 @@ enum _002_SetupStandardJobs: Migration {
             // Note: We also want this job to run both onLaunch and onActive as we want it to block
             // 'onLaunch' and 'onActive' doesn't support blocking jobs
             _ = try Job(
-                variant: .getSnodePool,
+                variant: ._legacy_getSnodePool,
                 behaviour: .recurringOnActive,
                 shouldSkipLaunchBecomeActive: true
             ).migrationSafeInserted(db)

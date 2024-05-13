@@ -26,18 +26,15 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
         case serverExpirationTimestamp
     }
     
-    public enum Variant: Int, Codable, CaseIterable, DatabaseValueConvertible {
-        /// **Note:** This value should only be used for entries created from the initial migration, when inserting
-        /// new records it will check if there is an existing legacy record and if so it will attempt to create a "legacy"
-        /// version of the new record to try and trip the unique constraint
-        case legacyEntry = 0
+    public enum Variant: Int, Codable, DatabaseValueConvertible {
+        @available(*, deprecated, message: "Removed along with legacy db migration") case legacyEntry = 0
         
         case readReceipt = 1
         case typingIndicator = 2
         case closedGroupControlMessage = 3
         case dataExtractionNotification = 4
         case expirationTimerUpdate = 5
-        case configurationMessage = 6
+        @available(*, deprecated) case configurationMessage = 6
         case unsendRequest = 7
         case messageRequestResponse = 8
         case call = 9
@@ -88,12 +85,6 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
         // message handling to make sure the messages are for the same ongoing call
         if message is CallMessage { return nil }
         
-        // We don't want to do any de-duping for SharedConfigMessages as libSession will handle
-        // the deduping for us, it also gives libSession more options to potentially recover from
-        // invalid data, conflicts or even process new changes which weren't supported from older
-        // versions of the library as it will always re-process messages
-        if message is SharedConfigMessage { return nil }
-        
         // Allow '.new' and 'encryptionKeyPair' closed group control message duplicates to avoid
         // the following situation:
         // • The app performed a background poll or received a push notification
@@ -114,7 +105,6 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
                 case is ClosedGroupControlMessage: return .closedGroupControlMessage
                 case is DataExtractionNotification: return .dataExtractionNotification
                 case is ExpirationTimerUpdate: return .expirationTimerUpdate
-                case is LegacyConfigurationMessage, is SharedConfigMessage: return .configurationMessage
                 case is UnsendRequest: return .unsendRequest
                 case is MessageRequestResponse: return .messageRequestResponse
                 case is CallMessage: return .call
@@ -124,29 +114,6 @@ public struct ControlMessageProcessRecord: Codable, FetchableRecord, Persistable
         }()
         self.timestampMs = Int64(message.sentTimestamp ?? 0)   // Default to `0` if not set
         self.serverExpirationTimestamp = serverExpirationTimestamp
-    }
-    
-    // MARK: - Custom Database Interaction
-    
-    public func willInsert(_ db: Database) throws {
-        // If this isn't a legacy entry then check if there is a single entry and, if so,
-        // try to create a "legacy entry" version of this record to see if a unique constraint
-        // conflict occurs
-        if !threadId.isEmpty && variant != .legacyEntry {
-            let legacyEntry: ControlMessageProcessRecord? = try? ControlMessageProcessRecord
-                .filter(Columns.threadId == "")
-                .filter(Columns.variant == Variant.legacyEntry)
-                .fetchOne(db)
-            
-            if legacyEntry != nil {
-                try ControlMessageProcessRecord(
-                    threadId: "",
-                    variant: .legacyEntry,
-                    timestampMs: timestampMs,
-                    serverExpirationTimestamp: (legacyEntry?.serverExpirationTimestamp ?? 0)
-                ).insert(db)
-            }
-        }
     }
 }
 
@@ -185,28 +152,6 @@ internal extension ControlMessageProcessRecord {
             (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
             ControlMessageProcessRecord.defaultExpirationSeconds
         )
-    }
-    
-    /// This method should only be used for records created during migration from the legacy
-    /// `receivedMessageTimestamps` collection which doesn't include thread or variant info
-    ///
-    /// In order to get around this but maintain the unique constraints on everything we create entries for each timestamp
-    /// for every thread and every timestamp (while this is wildly inefficient there is a garbage collection process which will
-    /// clean out these excessive entries after `defaultExpirationSeconds`)
-    static func generateLegacyProcessRecords(_ db: Database, receivedMessageTimestamps: [Int64]) throws {
-        let defaultExpirationTimestamp: TimeInterval = (
-            (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000) +
-            ControlMessageProcessRecord.defaultExpirationSeconds
-        )
-        
-        try receivedMessageTimestamps.forEach { timestampMs in
-            try ControlMessageProcessRecord(
-                threadId: "",
-                variant: .legacyEntry,
-                timestampMs: timestampMs,
-                serverExpirationTimestamp: defaultExpirationTimestamp
-            ).insert(db)
-        }
     }
     
     /// This method should only be called from either the `generateLegacyProcessRecords` method above or

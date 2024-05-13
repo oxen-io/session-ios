@@ -25,17 +25,10 @@ public enum MessageReceiveJob: JobExecutor {
             return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
         }
         
-        // Ensure no config messages are sent through this job
-        guard !details.messages.contains(where: { $0.variant == .sharedConfigMessage }) else {
-            SNLog("[MessageReceiveJob] Config messages incorrectly sent to the 'messageReceive' job")
-            return failure(job, MessageReceiverError.invalidSharedConfigMessageHandling, true, dependencies)
-        }
-        
         var updatedJob: Job = job
         var lastError: Error?
         var remainingMessagesToProcess: [Details.MessageInfo] = []
         let messageData: [(info: Details.MessageInfo, proto: SNProtoContent)] = details.messages
-            .filter { $0.variant != .sharedConfigMessage }
             .compactMap { messageInfo -> (info: Details.MessageInfo, proto: SNProtoContent)? in
                 do {
                     return (messageInfo, try SNProtoContent.parseData(messageInfo.serializedProtoData))
@@ -72,6 +65,7 @@ public enum MessageReceiveJob: JobExecutor {
                         // for open group messages) we also don't bother logging as it results in
                         // excessive logging which isn't useful)
                         case DatabaseError.SQLITE_CONSTRAINT_UNIQUE,
+                            DatabaseError.SQLITE_CONSTRAINT,    // Sometimes thrown for UNIQUE
                             MessageReceiverError.duplicateMessage,
                             MessageReceiverError.duplicateControlMessage,
                             MessageReceiverError.selfSend:
@@ -125,8 +119,6 @@ public enum MessageReceiveJob: JobExecutor {
 
 extension MessageReceiveJob {
     public struct Details: Codable {
-        typealias SharedConfigInfo = (message: SharedConfigMessage, serializedProtoData: Data)
-        
         public struct MessageInfo: Codable {
             private enum CodingKeys: String, CodingKey {
                 case message
@@ -228,6 +220,19 @@ extension MessageReceiveJob {
         // Renamed variable for clarity (and didn't want to migrate old MessageReceiveJob
         // values so didn't rename the original)
         public var calledFromBackgroundPoller: Bool { isBackgroundPoll }
+        
+        public init(
+            messages: [ProcessedMessage],
+            calledFromBackgroundPoller: Bool
+        ) {
+            self.messages = messages.compactMap { processedMessage in
+                switch processedMessage {
+                    case .config: return nil
+                    case .standard(_, _, _, let messageInfo): return messageInfo
+                }
+            }
+            self.isBackgroundPoll = calledFromBackgroundPoller
+        }
         
         public init(
             messages: [MessageInfo],

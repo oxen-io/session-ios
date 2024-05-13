@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 
@@ -14,7 +16,7 @@ public extension Data {
             
             return try decoder.decode(type, from: self)
         }
-        catch { throw HTTPError.parsingFailed }
+        catch { throw NetworkError.parsingFailed }
     }
 
     func removingIdPrefixIfNeeded() -> Data {

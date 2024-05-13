@@ -31,7 +31,7 @@ public enum ExpirationUpdateJob: JobExecutor {
         let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
         SnodeAPI
             .updateExpiry(
-                publicKey: userPublicKey,
+                swarmPublicKey: userPublicKey,
                 serverHashes: details.serverHashes,
                 updatedExpiryMs: details.expirationTimestampMs,
                 shortenOnly: true,

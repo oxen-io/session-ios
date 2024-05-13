@@ -26,7 +26,7 @@ public struct Version: Comparable {
     
     public static func from(_ versionString: String) -> Version {
         var tokens: [Int] = versionString
-            .split(separator: ".")
+            .split(separator: ".")  // stringlint:disable
             .map { (Int($0) ?? 0) }
         
         // Extend to '{major}.{minor}.{patch}' if any parts were omitted

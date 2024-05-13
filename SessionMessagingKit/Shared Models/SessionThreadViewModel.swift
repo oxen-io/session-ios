@@ -236,7 +236,8 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
             for: .contact,
             id: threadId,
             name: threadContactNameInternal,
-            nickname: nil,  // Folded into 'threadContactNameInternal' within the Query
+            nickname: nil,      // Folded into 'threadContactNameInternal' within the Query
+            suppressId: true,   // Don't include the account id in the name in the conversation list
             customFallback: "Anonymous"
         )
     }
@@ -251,7 +252,8 @@ public struct SessionThreadViewModel: FetchableRecordWithRowId, Decodable, Equat
             for: threadVariant,
             id: (authorId ?? threadId),
             name: authorNameInternal,
-            nickname: nil,  // Folded into 'authorName' within the Query
+            nickname: nil,      // Folded into 'authorName' within the Query
+            suppressId: true,   // Don't include the account id in the name in the conversation list
             customFallback: (threadVariant == .contact ?
                 "Anonymous" :
                 nil
@@ -363,6 +365,7 @@ public extension SessionThreadViewModel {
         threadIsBlocked: Bool? = nil,
         contactProfile: Profile? = nil,
         currentUserIsClosedGroupMember: Bool? = nil,
+        currentUserIsClosedGroupAdmin: Bool? = nil,
         openGroupPermissions: OpenGroup.Permissions? = nil,
         unreadCount: UInt = 0,
         hasUnreadMessagesOfAnyKind: Bool = false,
@@ -402,7 +405,7 @@ public extension SessionThreadViewModel {
         self.closedGroupName = nil
         self.closedGroupUserCount = nil
         self.currentUserIsClosedGroupMember = currentUserIsClosedGroupMember
-        self.currentUserIsClosedGroupAdmin = nil
+        self.currentUserIsClosedGroupAdmin = currentUserIsClosedGroupAdmin
         self.openGroupName = nil
         self.openGroupServer = nil
         self.openGroupRoomToken = nil
@@ -997,6 +1000,16 @@ public extension SessionThreadViewModel {
                         \(SQL("\(groupMember[.profileId]) = \(userPublicKey)"))
                     )
                 ) AS \(ViewModel.Columns.currentUserIsClosedGroupMember),
+        
+                EXISTS (
+                    SELECT 1
+                    FROM \(GroupMember.self)
+                    WHERE (
+                        \(groupMember[.groupId]) = \(closedGroup[.threadId]) AND
+                        \(SQL("\(groupMember[.role]) = \(GroupMember.Role.admin)")) AND
+                        \(SQL("\(groupMember[.profileId]) = \(userPublicKey)"))
+                    )
+                ) AS \(ViewModel.Columns.currentUserIsClosedGroupAdmin),
                 
                 \(openGroup[.name]) AS \(ViewModel.Columns.openGroupName),
                 \(openGroup[.server]) AS \(ViewModel.Columns.openGroupServer),

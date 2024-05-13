@@ -80,6 +80,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             initialUnreadInteractionInfo: Interaction.TimestampInfo?,
             threadIsBlocked: Bool,
             currentUserIsClosedGroupMember: Bool?,
+            currentUserIsClosedGroupAdmin: Bool?,
             openGroupPermissions: OpenGroup.Permissions?,
             blinded15Key: String?,
             blinded25Key: String?
@@ -107,13 +108,23 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                     .fetchOne(db)
                     .defaulting(to: false)
             )
-            let currentUserIsClosedGroupMember: Bool? = (![.legacyGroup, .group].contains(threadVariant) ? nil :
+            let currentUserIsClosedGroupAdmin: Bool? = (![.legacyGroup, .group].contains(threadVariant) ? nil :
                 GroupMember
+                    .filter(groupMember[.groupId] == threadId)
+                    .filter(groupMember[.profileId] == currentUserPublicKey)
+                    .filter(groupMember[.role] == GroupMember.Role.admin)
+                    .isNotEmpty(db)
+            )
+            let currentUserIsClosedGroupMember: Bool? = {
+                guard [.legacyGroup, .group].contains(threadVariant) else { return nil }
+                guard currentUserIsClosedGroupAdmin != true else { return true }
+                
+                return GroupMember
                     .filter(groupMember[.groupId] == threadId)
                     .filter(groupMember[.profileId] == currentUserPublicKey)
                     .filter(groupMember[.role] == GroupMember.Role.standard)
                     .isNotEmpty(db)
-            )
+            }()
             let openGroupPermissions: OpenGroup.Permissions? = (threadVariant != .community ? nil :
                 try OpenGroup
                     .filter(id: threadId)
@@ -139,6 +150,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 initialUnreadInteractionInfo,
                 threadIsBlocked,
                 currentUserIsClosedGroupMember,
+                currentUserIsClosedGroupAdmin,
                 openGroupPermissions,
                 blinded15Key,
                 blinded25Key
@@ -157,6 +169,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 threadIsNoteToSelf: (initialData?.currentUserPublicKey == threadId),
                 threadIsBlocked: initialData?.threadIsBlocked,
                 currentUserIsClosedGroupMember: initialData?.currentUserIsClosedGroupMember,
+                currentUserIsClosedGroupAdmin: initialData?.currentUserIsClosedGroupAdmin,
                 openGroupPermissions: initialData?.openGroupPermissions
             ).populatingCurrentUserBlindedKeys(
                 currentUserBlinded15PublicKeyForThisThread: initialData?.blinded15Key,

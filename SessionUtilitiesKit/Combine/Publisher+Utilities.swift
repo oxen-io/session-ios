@@ -158,7 +158,7 @@ public extension Publisher where Output == (ResponseInfoType, Data?), Failure ==
     ) -> AnyPublisher<(ResponseInfoType, R), Error> {
         self
             .tryMap { responseInfo, maybeData -> (ResponseInfoType, R) in
-                guard let data: Data = maybeData else { throw HTTPError.parsingFailed }
+                guard let data: Data = maybeData else { throw NetworkError.parsingFailed }
                 
                 return (responseInfo, try data.decoded(as: type, using: dependencies))
             }

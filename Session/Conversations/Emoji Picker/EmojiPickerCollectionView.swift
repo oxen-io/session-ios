@@ -137,8 +137,7 @@ class EmojiPickerCollectionView: UICollectionView {
 
     func nameForSection(_ section: Int) -> String? {
         guard section > 0 || !hasRecentEmoji else {
-            return NSLocalizedString("EMOJI_CATEGORY_RECENTS_NAME",
-                                     comment: "The name for the emoji category 'Recents'")
+            return "EMOJI_CATEGORY_RECENTS_NAME".localized()
         }
 
         guard let category = Emoji.Category.allCases[safe: section - categoryIndexOffset] else {
@@ -298,7 +297,7 @@ extension EmojiPickerCollectionView: UICollectionViewDelegateFlowLayout {
 }
 
 private class EmojiCell: UICollectionViewCell {
-    static let reuseIdentifier = "EmojiCell"
+    static let reuseIdentifier = "EmojiCell" // stringlint:disable
 
     let emojiLabel = UILabel()
 
@@ -328,7 +327,7 @@ private class EmojiCell: UICollectionViewCell {
 }
 
 private class EmojiSectionHeader: UICollectionReusableView {
-    static let reuseIdentifier = "EmojiSectionHeader"
+    static let reuseIdentifier = "EmojiSectionHeader" // stringlint:disable
 
     let label = UILabel()
 

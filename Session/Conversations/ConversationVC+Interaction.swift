@@ -132,6 +132,7 @@ extension ConversationVC:
         let callVC = CallVC(for: call)
         callVC.conversationVC = self
         hideInputAccessoryView()
+        resignFirstResponder()
         
         present(callVC, animated: true, completion: nil)
     }
@@ -940,7 +941,7 @@ extension ConversationVC:
                 ) { [weak self] _ in
                     dependencies.storage.writeAsync { db in
                         try messageDisappearingConfig.save(db)
-                        try SessionUtil
+                        try LibSession
                             .update(
                                 db,
                                 sessionId: cellViewModel.threadId,
@@ -1359,7 +1360,7 @@ extension ConversationVC:
         guard cellViewModel.threadVariant == .community else { return }
         
         Storage.shared
-            .readPublisher { db -> (OpenGroupAPI.PreparedSendData<OpenGroupAPI.ReactionRemoveAllResponse>, OpenGroupAPI.PendingChange) in
+            .readPublisher { db -> (Network.PreparedRequest<OpenGroupAPI.ReactionRemoveAllResponse>, OpenGroupAPI.PendingChange) in
                 guard
                     let openGroup: OpenGroup = try? OpenGroup
                         .fetchOne(db, id: cellViewModel.threadId),
@@ -1370,13 +1371,14 @@ extension ConversationVC:
                         .fetchOne(db)
                 else { throw StorageError.objectNotFound }
                 
-                let sendData: OpenGroupAPI.PreparedSendData<OpenGroupAPI.ReactionRemoveAllResponse> = try OpenGroupAPI
+                let preparedRequest: Network.PreparedRequest<OpenGroupAPI.ReactionRemoveAllResponse> = try OpenGroupAPI
                     .preparedReactionDeleteAll(
                         db,
                         emoji: emoji,
                         id: openGroupServerMessageId,
                         in: openGroup.roomToken,
-                        on: openGroup.server
+                        on: openGroup.server,
+                        using: dependencies
                     )
                 let pendingChange: OpenGroupAPI.PendingChange = OpenGroupManager
                     .addPendingReaction(
@@ -1387,11 +1389,11 @@ extension ConversationVC:
                         type: .removeAll
                     )
                 
-                return (sendData, pendingChange)
+                return (preparedRequest, pendingChange)
             }
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .flatMap { sendData, pendingChange in
-                OpenGroupAPI.send(data: sendData)
+            .flatMap { preparedRequest, pendingChange in
+                preparedRequest.send(using: dependencies)
                     .handleEvents(
                         receiveOutput: { _, response in
                             OpenGroupManager
@@ -1459,7 +1461,7 @@ extension ConversationVC:
         typealias OpenGroupInfo = (
             pendingReaction: Reaction?,
             pendingChange: OpenGroupAPI.PendingChange,
-            sendData: OpenGroupAPI.PreparedSendData<Int64?>
+            preparedRequest: Network.PreparedRequest<Int64?>
         )
         
         /// Perform the sending logic, we generate the pending reaction first in a deferred future closure to prevent the OpenGroup
@@ -1546,7 +1548,7 @@ extension ConversationVC:
                             OpenGroupManager.doesOpenGroupSupport(db, capability: .reactions, on: openGroupServer)
                         else { throw MessageSenderError.invalidMessage }
                         
-                        let sendData: OpenGroupAPI.PreparedSendData<Int64?> = try {
+                        let preparedRequest: Network.PreparedRequest<Int64?> = try {
                             guard !remove else {
                                 return try OpenGroupAPI
                                     .preparedReactionDelete(
@@ -1554,7 +1556,8 @@ extension ConversationVC:
                                         emoji: emoji,
                                         id: serverMessageId,
                                         in: openGroupRoom,
-                                        on: openGroupServer
+                                        on: openGroupServer,
+                                        using: dependencies
                                     )
                                     .map { _, response in response.seqNo }
                             }
@@ -1565,12 +1568,13 @@ extension ConversationVC:
                                     emoji: emoji,
                                     id: serverMessageId,
                                     in: openGroupRoom,
-                                    on: openGroupServer
+                                    on: openGroupServer,
+                                    using: dependencies
                                 )
                                 .map { _, response in response.seqNo }
                         }()
                         
-                        return (nil, (pendingReaction, pendingChange, sendData))
+                        return (nil, (pendingReaction, pendingChange, preparedRequest))
                         
                     default:
                         let sendData: MessageSender.PreparedSendData = try MessageSender.preparedSendData(
@@ -1610,7 +1614,7 @@ extension ConversationVC:
                     return MessageSender.sendImmediate(data: sendData, using: dependencies)
                     
                 case (_, .some(let info)):
-                    return OpenGroupAPI.send(data: info.sendData)
+                    return info.preparedRequest.send(using: dependencies)
                         .handleEvents(
                             receiveOutput: { _, seqNo in
                                 OpenGroupManager
@@ -1749,7 +1753,7 @@ extension ConversationVC:
                         return
                     }
                     
-                    guard let (room, server, publicKey) = SessionUtil.parseCommunity(url: url) else {
+                    guard let (room, server, publicKey) = LibSession.parseCommunity(url: url) else {
                         let errorModal: ConfirmationModal = ConfirmationModal(
                             info: ConfirmationModal.Info(
                                 title: "COMMUNITY_ERROR_GENERIC".localized(),
@@ -2087,7 +2091,7 @@ extension ConversationVC:
                     let targetJob: Job? = jobs.first(where: { JobRunner.isCurrentlyRunning($0) })
                     
                     guard targetJob == nil else {
-                        JobRunner.afterCurrentlyRunningJob(targetJob) { [weak self] result in
+                        JobRunner.afterJob(targetJob, state: .running) { [weak self] result in
                             switch result {
                                 // If it succeeded then we'll need to delete from the server so re-run
                                 // this function (if we still don't have the server id for some reason
@@ -2130,10 +2134,11 @@ extension ConversationVC:
                                 db,
                                 id: openGroupServerMessageId,
                                 in: openGroup.roomToken,
-                                on: openGroup.server
+                                on: openGroup.server,
+                                using: dependencies
                             )
                         }
-                        .flatMap { OpenGroupAPI.send(data: $0) }
+                        .flatMap { $0.send(using: dependencies) }
                         .map { _ in () }
                         .eraseToAnyPublisher()
                 ) { [weak self] in
@@ -2251,7 +2256,7 @@ extension ConversationVC:
                         from: self,
                         request: SnodeAPI
                             .deleteMessages(
-                                publicKey: targetPublicKey,
+                                swarmPublicKey: targetPublicKey,
                                 serverHashes: [serverHash]
                             )
                             .map { _ in () }
@@ -2327,7 +2332,7 @@ extension ConversationVC:
                 cancelStyle: .alert_text,
                 onConfirm: { [weak self] _ in
                     Storage.shared
-                        .readPublisher { db -> OpenGroupAPI.PreparedSendData<NoResponse> in
+                        .readPublisher { db -> Network.PreparedRequest<NoResponse> in
                             guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
                                 throw StorageError.objectNotFound
                             }
@@ -2337,10 +2342,11 @@ extension ConversationVC:
                                     db,
                                     sessionId: cellViewModel.authorId,
                                     from: [openGroup.roomToken],
-                                    on: openGroup.server
+                                    on: openGroup.server,
+                                    using: dependencies
                                 )
                         }
-                        .flatMap { OpenGroupAPI.send(data: $0) }
+                        .flatMap { $0.send(using: dependencies) }
                         .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                         .receive(on: DispatchQueue.main)
                         .sinkUntilComplete(
@@ -2393,10 +2399,11 @@ extension ConversationVC:
                                     db,
                                     sessionId: cellViewModel.authorId,
                                     in: openGroup.roomToken,
-                                    on: openGroup.server
+                                    on: openGroup.server,
+                                    using: dependencies
                                 )
                         }
-                        .flatMap { OpenGroupAPI.send(data: $0) }
+                        .flatMap { $0.send(using: dependencies) }
                         .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                         .receive(on: DispatchQueue.main)
                         .sinkUntilComplete(
@@ -2708,7 +2715,7 @@ extension ConversationVC {
             )
     }
 
-    @objc func acceptMessageRequest() {
+    func acceptMessageRequest() {
         self.approveMessageRequestIfNeeded(
             for: self.viewModel.threadData.threadId,
             threadVariant: self.viewModel.threadData.threadVariant,
@@ -2717,7 +2724,7 @@ extension ConversationVC {
         )
     }
 
-    @objc func deleteMessageRequest() {
+    func declineMessageRequest() {
         let actions: [UIContextualAction]? = UIContextualAction.generateSwipeActions(
             [.delete],
             for: .trailing,
@@ -2740,7 +2747,7 @@ extension ConversationVC {
         })
     }
     
-    @objc func blockMessageRequest() {
+    func blockMessageRequest() {
         let actions: [UIContextualAction]? = UIContextualAction.generateSwipeActions(
             [.block],
             for: .trailing,

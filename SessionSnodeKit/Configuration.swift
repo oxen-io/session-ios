@@ -22,14 +22,10 @@ public enum SNSnodeKit: MigratableTarget { // Just to make the external API nice
                 [], // Add job priorities
                 [], // Fix thread FTS
                 [
-                    _005_AddSnodeReveivedMessageInfoPrimaryKey.self
+                    _005_AddSnodeReveivedMessageInfoPrimaryKey.self,
+                    _006_DropSnodeCache.self
                 ]
             ]
         )
-    }
-
-    public static func configure() {
-        // Configure the job executors
-        JobRunner.setExecutor(GetSnodePoolJob.self, for: .getSnodePool)
     }
 }

@@ -192,9 +192,13 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     
     public static func suspendDatabaseIfCallEndedInBackground() {
         if Singleton.hasAppContext && Singleton.appContext.isInBackground {
+            // FIXME: Initialise the `SessionCallManager` with a dependencies instance
+            let dependencies: Dependencies = Dependencies()
+            
             // Stop all jobs except for message sending and when completed suspend the database
-            JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend) {
+            JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) {
                 Storage.suspendDatabaseAccess()
+                LibSession.closeNetworkConnections()
             }
         }
     }

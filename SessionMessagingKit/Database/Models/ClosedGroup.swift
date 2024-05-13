@@ -198,14 +198,14 @@ public extension ClosedGroup {
         // If we weren't called from config handling then we need to remove the group
         // data from the config
         if !calledFromConfigHandling {
-            try SessionUtil.remove(
+            try LibSession.remove(
                 db,
                 legacyGroupIds: threadVariants
                     .filter { $0.variant == .legacyGroup }
                     .map { $0.id }
             )
             
-            try SessionUtil.remove(
+            try LibSession.remove(
                 db,
                 groupIds: threadVariants
                     .filter { $0.variant == .group }

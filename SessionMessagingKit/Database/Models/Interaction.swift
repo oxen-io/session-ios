@@ -725,7 +725,7 @@ public extension Interaction {
         
         // Update the last read timestamp if needed
         if !calledFromConfigHandling {
-            try SessionUtil.syncThreadLastReadIfNeeded(
+            try LibSession.syncThreadLastReadIfNeeded(
                 db,
                 threadId: threadId,
                 threadVariant: threadVariant,

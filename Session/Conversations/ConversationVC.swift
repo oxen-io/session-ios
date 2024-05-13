@@ -9,7 +9,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
-final class ConversationVC: BaseVC, SessionUtilRespondingViewController, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
+final class ConversationVC: BaseVC, LibSessionRespondingViewController, ConversationSearchControllerDelegate, UITableViewDataSource, UITableViewDelegate {
     private static let loadingHeaderHeight: CGFloat = 40
     
     internal let viewModel: ConversationViewModel
@@ -57,6 +57,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
     /// from trying to animate (as the animations can cause buggy transitions)
     var viewIsDisappearing = false
     var viewIsAppearing = false
+    var lastPresentedViewController: UIViewController?
     
     // Reaction
     var currentReactionListSheet: ReactionListSheet?
@@ -118,10 +119,11 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
 
     // MARK: - UI
     
+    var lastKnownKeyboardFrame: CGRect?
+    
     var scrollButtonBottomConstraint: NSLayoutConstraint?
     var scrollButtonMessageRequestsBottomConstraint: NSLayoutConstraint?
     var messageRequestsViewBotomConstraint: NSLayoutConstraint?
-    var messageRequestDescriptionLabelBottomConstraint: NSLayoutConstraint?
     var emptyStateLabelTopConstraint: NSLayoutConstraint?
     
     lazy var titleView: ConversationTitleView = {
@@ -162,6 +164,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         result.sectionFooterHeight = 0
         result.dataSource = self
         result.delegate = self
+        result.contentInsetAdjustmentBehavior = .never  // We custom handle it to prevent bugs
 
         return result
     }()
@@ -292,102 +295,21 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             self?.scrollToBottom(isAnimated: true)
         }
         result.alpha = 0
+        result.accessibilityIdentifier = "Scroll button"
+        result.isAccessibilityElement = true
         
         return result
     }()
     
-    lazy var messageRequestBackgroundView: UIView = {
-        let result: UIView = UIView()
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.themeBackgroundColor = .backgroundPrimary
-        result.isHidden = messageRequestStackView.isHidden
-
-        return result
-    }()
-    
-    lazy var messageRequestStackView: UIStackView = {
-        let result: UIStackView = UIStackView()
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.axis = .vertical
-        result.alignment = .fill
-        result.distribution = .fill
-        result.isHidden = (
-            self.viewModel.threadData.threadIsMessageRequest == false ||
-            self.viewModel.threadData.threadRequiresApproval == true
-        )
-
-        return result
-    }()
-    
-    private lazy var messageRequestDescriptionContainerView: UIView = {
-        let result: UIView = UIView()
-        result.translatesAutoresizingMaskIntoConstraints = false
-        
-        return result
-    }()
-
-    private lazy var messageRequestDescriptionLabel: UILabel = {
-        let result: UILabel = UILabel()
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.setContentCompressionResistancePriority(.required, for: .vertical)
-        result.font = UIFont.systemFont(ofSize: 12)
-        result.text = (self.viewModel.threadData.threadRequiresApproval == false ?
-            "MESSAGE_REQUESTS_INFO".localized() :
-            "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
-        )
-        result.themeTextColor = .textSecondary
-        result.textAlignment = .center
-        result.numberOfLines = 0
-
-        return result
-    }()
-    
-    private lazy var messageRequestActionStackView: UIStackView = {
-        let result: UIStackView = UIStackView()
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.axis = .horizontal
-        result.alignment = .fill
-        result.distribution = .fill
-        result.spacing = (UIDevice.current.isIPad ? Values.iPadButtonSpacing : 20)
-
-        return result
-    }()
-
-    private lazy var messageRequestAcceptButton: UIButton = {
-        let result: SessionButton = SessionButton(style: .bordered, size: .medium)
-        result.accessibilityLabel = "Accept message request"
-        result.isAccessibilityElement = true
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("TXT_DELETE_ACCEPT".localized(), for: .normal)
-        result.addTarget(self, action: #selector(acceptMessageRequest), for: .touchUpInside)
-
-        return result
-    }()
-
-    private lazy var messageRequestDeleteButton: UIButton = {
-        let result: SessionButton = SessionButton(style: .destructive, size: .medium)
-        result.accessibilityLabel = "Delete message request"
-        result.isAccessibilityElement = true
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("TXT_DELETE_TITLE".localized(), for: .normal)
-        result.addTarget(self, action: #selector(deleteMessageRequest), for: .touchUpInside)
-
-        return result
-    }()
-    
-    private lazy var messageRequestBlockButton: UIButton = {
-        let result: UIButton = UIButton()
-        result.accessibilityLabel = "Block message request"
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.clipsToBounds = true
-        result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 16)
-        result.setTitle("TXT_BLOCK_USER_TITLE".localized(), for: .normal)
-        result.setThemeTitleColor(.danger, for: .normal)
-        result.addTarget(self, action: #selector(blockMessageRequest), for: .touchUpInside)
-        result.isHidden = (self.viewModel.threadData.threadVariant != .contact)
-
-        return result
-    }()
+    lazy var messageRequestFooterView: MessageRequestFooterView = MessageRequestFooterView(
+        threadVariant: self.viewModel.threadData.threadVariant,
+        canWrite: self.viewModel.threadData.canWrite,
+        threadIsMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true),
+        threadRequiresApproval: (self.viewModel.threadData.threadRequiresApproval == true),
+        onBlock: { [weak self] in self?.blockMessageRequest() },
+        onAccept: { [weak self] in self?.acceptMessageRequest() },
+        onDecline: { [weak self] in self?.declineMessageRequest() }
+    )
 
     // MARK: - Settings
     
@@ -450,40 +372,20 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         // Message requests view & scroll to bottom
         view.addSubview(scrollButton)
         view.addSubview(stateStackView)
-        view.addSubview(messageRequestBackgroundView)
-        view.addSubview(messageRequestStackView)
+        view.addSubview(messageRequestFooterView)
         
         stateStackView.pin(.top, to: .top, of: view, withInset: 0)
         stateStackView.pin(.leading, to: .leading, of: view, withInset: 0)
         stateStackView.pin(.trailing, to: .trailing, of: view, withInset: 0)
         self.emptyStateLabelTopConstraint = emptyStateLabel.pin(.top, to: .top, of: emptyStateLabelContainer, withInset: Values.largeSpacing)
         
-        messageRequestStackView.addArrangedSubview(messageRequestBlockButton)
-        messageRequestStackView.addArrangedSubview(messageRequestDescriptionContainerView)
-        messageRequestStackView.addArrangedSubview(messageRequestActionStackView)
-        messageRequestDescriptionContainerView.addSubview(messageRequestDescriptionLabel)
-        messageRequestActionStackView.addArrangedSubview(messageRequestAcceptButton)
-        messageRequestActionStackView.addArrangedSubview(messageRequestDeleteButton)
-        
         scrollButton.pin(.trailing, to: .trailing, of: view, withInset: -20)
-        messageRequestStackView.pin(.leading, to: .leading, of: view, withInset: 16)
-        messageRequestStackView.pin(.trailing, to: .trailing, of: view, withInset: -16)
-        self.messageRequestsViewBotomConstraint = messageRequestStackView.pin(.bottom, to: .bottom, of: view, withInset: -16)
+        messageRequestFooterView.pin(.leading, to: .leading, of: view, withInset: 16)
+        messageRequestFooterView.pin(.trailing, to: .trailing, of: view, withInset: -16)
+        self.messageRequestsViewBotomConstraint = messageRequestFooterView.pin(.bottom, to: .bottom, of: view, withInset: -16)
         self.scrollButtonBottomConstraint = scrollButton.pin(.bottom, to: .bottom, of: view, withInset: -16)
         self.scrollButtonBottomConstraint?.isActive = false // Note: Need to disable this to avoid a conflict with the other bottom constraint
-        self.scrollButtonMessageRequestsBottomConstraint = scrollButton.pin(.bottom, to: .top, of: messageRequestStackView, withInset: -4)
-        
-        messageRequestDescriptionLabel.pin(.top, to: .top, of: messageRequestDescriptionContainerView, withInset: 4)
-        messageRequestDescriptionLabel.pin(.leading, to: .leading, of: messageRequestDescriptionContainerView, withInset: 20)
-        messageRequestDescriptionLabel.pin(.trailing, to: .trailing, of: messageRequestDescriptionContainerView, withInset: -20)
-        self.messageRequestDescriptionLabelBottomConstraint = messageRequestDescriptionLabel.pin(.bottom, to: .bottom, of: messageRequestDescriptionContainerView, withInset: -20)
-        messageRequestActionStackView.pin(.top, to: .bottom, of: messageRequestDescriptionContainerView)
-
-        messageRequestDeleteButton.set(.width, to: .width, of: messageRequestAcceptButton)
-        messageRequestBackgroundView.pin(.top, to: .top, of: messageRequestStackView)
-        messageRequestBackgroundView.pin(.leading, to: .leading, of: view)
-        messageRequestBackgroundView.pin(.trailing, to: .trailing, of: view)
-        messageRequestBackgroundView.pin(.bottom, to: .bottom, of: view)
+        self.scrollButtonMessageRequestsBottomConstraint = scrollButton.pin(.bottom, to: .top, of: messageRequestFooterView, withInset: -4)
 
         // Unread count view
         view.addSubview(unreadCountView)
@@ -509,22 +411,28 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleKeyboardWillChangeFrameNotification(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleKeyboardWillHideNotification(_:)),
-            name: UIResponder.keyboardWillHideNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(sendScreenshotNotification),
             name: UIApplication.userDidTakeScreenshotNotification,
             object: nil
         )
+        
+        // Observe keyboard notifications
+        let keyboardNotifications: [Notification.Name] = [
+            UIResponder.keyboardWillShowNotification,
+            UIResponder.keyboardDidShowNotification,
+            UIResponder.keyboardWillChangeFrameNotification,
+            UIResponder.keyboardDidChangeFrameNotification,
+            UIResponder.keyboardWillHideNotification,
+            UIResponder.keyboardDidHideNotification
+        ]
+        keyboardNotifications.forEach { notification in
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleKeyboardNotification(_:)),
+                name: notification,
+                object: nil
+            )
+        }
         
         // The first time the view loads we should mark the thread as read (in case it was manually
         // marked as unread) - doing this here means if we add a "mark as unread" action within the
@@ -567,12 +475,20 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 )?.becomeFirstResponder()
             }
         }
+        else if !self.isFirstResponder && hasLoadedInitialThreadData && lastPresentedViewController == nil {
+            // After we have loaded the initial data if the user starts and cancels the interactive pop
+            // gesture the input view will disappear (but if we are returning from a presented view controller
+            // the keyboard will automatically reappear and calling this will break the first responder state
+            // so don't do it in that case)
+            self.becomeFirstResponder()
+        }
         
         recoverInputView { [weak self] in
             // Flag that the initial layout has been completed (the flag blocks and unblocks a number
             // of different behaviours)
             self?.didFinishInitialLayout = true
             self?.viewIsAppearing = false
+            self?.lastPresentedViewController = nil
         }
     }
 
@@ -590,6 +506,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         }
         
         viewIsDisappearing = true
+        lastPresentedViewController = self.presentedViewController
         
         // Don't set the draft or resign the first responder if we are replacing the thread (want the keyboard
         // to appear to remain focussed)
@@ -619,7 +536,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
             ) &&
             viewModel.threadData.threadIsNoteToSelf == false &&
             viewModel.threadData.threadShouldBeVisible == false &&
-            !SessionUtil.conversationInConfig(
+            !LibSession.conversationInConfig(
                 threadId: threadId,
                 threadVariant: viewModel.threadData.threadVariant,
                 visibleOnly: false
@@ -684,7 +601,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                         // nearest conversation list
                         let maybeTargetViewController: UIViewController? = self?.navigationController?
                             .viewControllers
-                            .last(where: { ($0 as? SessionUtilRespondingViewController)?.isConversationList == true })
+                            .last(where: { ($0 as? LibSessionRespondingViewController)?.isConversationList == true })
                         
                         if let targetViewController: UIViewController = maybeTargetViewController {
                             self?.navigationController?.popToViewController(targetViewController, animated: true)
@@ -810,9 +727,8 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         if
             initialLoad ||
             viewModel.threadData.threadVariant != updatedThreadData.threadVariant ||
+            viewModel.threadData.threadIsNoteToSelf != updatedThreadData.threadIsNoteToSelf ||
             viewModel.threadData.threadIsBlocked != updatedThreadData.threadIsBlocked ||
-            viewModel.threadData.threadRequiresApproval != updatedThreadData.threadRequiresApproval ||
-            viewModel.threadData.threadIsMessageRequest != updatedThreadData.threadIsMessageRequest ||
             viewModel.threadData.profile != updatedThreadData.profile
         {
             updateNavBarButtons(
@@ -821,35 +737,26 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 initialIsNoteToSelf: viewModel.threadData.threadIsNoteToSelf,
                 initialIsBlocked: (viewModel.threadData.threadIsBlocked == true)
             )
-            
-            messageRequestDescriptionLabel.text = (updatedThreadData.threadRequiresApproval == false ?
-                "MESSAGE_REQUESTS_INFO".localized() :
-                "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
-            )
-            
-            let messageRequestsViewWasVisible: Bool = (
-                messageRequestStackView.isHidden == false
-            )
+        }
+        
+        if
+            initialLoad ||
+            viewModel.threadData.canWrite != updatedThreadData.canWrite ||
+            viewModel.threadData.threadVariant != updatedThreadData.threadVariant ||
+            viewModel.threadData.threadIsMessageRequest != updatedThreadData.threadIsMessageRequest ||
+            viewModel.threadData.threadRequiresApproval != updatedThreadData.threadRequiresApproval
+        {
+            let messageRequestsViewWasVisible: Bool = (self.messageRequestFooterView.isHidden == false)
             
             UIView.animate(withDuration: 0.3) { [weak self] in
-                self?.messageRequestBlockButton.isHidden = (
-                    self?.viewModel.threadData.threadVariant != .contact ||
-                    updatedThreadData.threadRequiresApproval == true
+                self?.messageRequestFooterView.update(
+                    threadVariant: updatedThreadData.threadVariant,
+                    canWrite: updatedThreadData.canWrite,
+                    threadIsMessageRequest: (updatedThreadData.threadIsMessageRequest == true),
+                    threadRequiresApproval: (updatedThreadData.threadRequiresApproval == true)
                 )
-                self?.messageRequestActionStackView.isHidden = (
-                    updatedThreadData.threadRequiresApproval == true
-                )
-                self?.messageRequestStackView.isHidden = (
-                    !updatedThreadData.canWrite || (
-                        updatedThreadData.threadIsMessageRequest == false &&
-                        updatedThreadData.threadRequiresApproval == false
-                    )
-                )
-                self?.messageRequestBackgroundView.isHidden = (self?.messageRequestStackView.isHidden == true)
-                self?.messageRequestDescriptionLabelBottomConstraint?.constant = (updatedThreadData.threadRequiresApproval == true ? -4 : -20)
-            
                 self?.scrollButtonMessageRequestsBottomConstraint?.isActive = (
-                    self?.messageRequestStackView.isHidden == false
+                    self?.messageRequestFooterView.isHidden == false
                 )
                 self?.scrollButtonBottomConstraint?.isActive = (
                     self?.scrollButtonMessageRequestsBottomConstraint?.isActive == false
@@ -857,8 +764,8 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
                 
                 // Update the table content inset and offset to account for
                 // the dissapearance of the messageRequestsView
-                if messageRequestsViewWasVisible != (self?.messageRequestStackView.isHidden == false) {
-                    let messageRequestsOffset: CGFloat = ((self?.messageRequestStackView.bounds.height ?? 0) + 12)
+                if messageRequestsViewWasVisible != (self?.messageRequestFooterView.isHidden == false) {
+                    let messageRequestsOffset: CGFloat = (self?.messageRequestFooterView.bounds.height ?? 0)
                     let oldContentInset: UIEdgeInsets = (self?.tableView.contentInset ?? UIEdgeInsets.zero)
                     self?.tableView.contentInset = UIEdgeInsets(
                         top: 0,
@@ -1433,96 +1340,93 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         }
     }
     
-    // MARK: - Notifications
+    // MARK: - Keyboard Avoidance
 
-    @objc func handleKeyboardWillChangeFrameNotification(_ notification: Notification) {
+    @objc func handleKeyboardNotification(_ notification: Notification) {
         guard !viewIsDisappearing else { return }
+        guard
+            !viewIsDisappearing,
+            let userInfo: [AnyHashable: Any] = notification.userInfo,
+            var keyboardEndFrame: CGRect = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        else { return }
+        
+        // If reduce motion+crossfade transitions is on, in iOS 14 UIKit vends out a keyboard end frame
+        // of CGRect zero. This breaks the math below.
+        //
+        // If our keyboard end frame is CGRectZero, build a fake rect that's translated off the bottom edge.
+        if keyboardEndFrame == .zero {
+            keyboardEndFrame = CGRect(
+                x: UIScreen.main.bounds.minX,
+                y: UIScreen.main.bounds.maxY,
+                width: UIScreen.main.bounds.width,
+                height: 0
+            )
+        }
+        
+        // No nothing if there was no change
+        let keyboardEndFrameConverted: CGRect = self.view.convert(keyboardEndFrame, from: nil)
+        guard keyboardEndFrameConverted != lastKnownKeyboardFrame else { return }
+        
+        self.lastKnownKeyboardFrame = keyboardEndFrameConverted
         
         // Please refer to https://github.com/mapbox/mapbox-navigation-ios/issues/1600
         // and https://stackoverflow.com/a/25260930 to better understand what we are
         // doing with the UIViewAnimationOptions
-        let userInfo: [AnyHashable: Any] = (notification.userInfo ?? [:])
-        let duration = ((userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval) ?? 0)
         let curveValue: Int = ((userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? Int(UIView.AnimationOptions.curveEaseInOut.rawValue))
         let options: UIView.AnimationOptions = UIView.AnimationOptions(rawValue: UInt(curveValue << 16))
-        let keyboardRect: CGRect = ((userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? CGRect.zero)
-
-        // Calculate new positions (Need the ensure the 'messageRequestView' has been layed out as it's
-        // needed for proper calculations, so force an initial layout if it doesn't have a size)
-        var hasDoneLayout: Bool = true
-
-        if messageRequestStackView.bounds.height <= CGFloat.leastNonzeroMagnitude {
-            hasDoneLayout = false
-
-            UIView.performWithoutAnimation {
-                self.view.layoutIfNeeded()
-            }
-        }
+        let duration = ((userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval) ?? 0)
         
-        let keyboardTop = (UIScreen.main.bounds.height - keyboardRect.minY)
-        let messageRequestsOffset: CGFloat = (messageRequestStackView.isHidden ? 0 : messageRequestStackView.bounds.height + 12)
-        let oldContentInset: UIEdgeInsets = tableView.contentInset
-        let newContentInset: UIEdgeInsets = UIEdgeInsets(
-            top: 0,
-            leading: 0,
-            bottom: (Values.mediumSpacing + keyboardTop + messageRequestsOffset),
-            trailing: 0
-        )
-        let newContentOffsetY: CGFloat = (tableView.contentOffset.y + (newContentInset.bottom - oldContentInset.bottom))
-        let changes = { [weak self] in
-            self?.scrollButtonBottomConstraint?.constant = -(keyboardTop + 12)
-            self?.messageRequestsViewBotomConstraint?.constant = -(keyboardTop + 12)
-            self?.tableView.contentInset = newContentInset
-            self?.tableView.contentOffset.y = newContentOffsetY
-            self?.updateScrollToBottom()
-
-            self?.view.setNeedsLayout()
-            self?.view.layoutIfNeeded()
-        }
-
-        // Perform the changes (don't animate if the initial layout hasn't been completed)
-        guard hasDoneLayout && didFinishInitialLayout && !viewIsAppearing else {
+        guard didFinishInitialLayout && !viewIsAppearing, duration > 0, !UIAccessibility.isReduceMotionEnabled else {
+            // UIKit by default (sometimes? never?) animates all changes in response to keyboard events.
+            // We want to suppress those animations if the view isn't visible,
+            // otherwise presentation animations don't work properly.
             UIView.performWithoutAnimation {
-                changes()
+                self.updateKeyboardAvoidance()
             }
             return
         }
-
-        UIView.animate(
-            withDuration: duration,
-            delay: 0,
-            options: options,
-            animations: changes,
-            completion: nil
-        )
-    }
-
-    @objc func handleKeyboardWillHideNotification(_ notification: Notification) {
-        // Please refer to https://github.com/mapbox/mapbox-navigation-ios/issues/1600
-        // and https://stackoverflow.com/a/25260930 to better understand what we are
-        // doing with the UIViewAnimationOptions
-        let userInfo: [AnyHashable: Any] = (notification.userInfo ?? [:])
-        let duration = ((userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval) ?? 0)
-        let curveValue: Int = ((userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? Int(UIView.AnimationOptions.curveEaseInOut.rawValue))
-        let options: UIView.AnimationOptions = UIView.AnimationOptions(rawValue: UInt(curveValue << 16))
-
-        let keyboardRect: CGRect = ((userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? CGRect.zero)
-        let keyboardTop = (UIScreen.main.bounds.height - keyboardRect.minY)
-
+        
         UIView.animate(
             withDuration: duration,
             delay: 0,
             options: options,
             animations: { [weak self] in
-                self?.scrollButtonBottomConstraint?.constant = -(keyboardTop + 12)
-                self?.messageRequestsViewBotomConstraint?.constant = -(keyboardTop + 12)
-                self?.updateScrollToBottom()
-
-                self?.view.setNeedsLayout()
+                self?.updateKeyboardAvoidance()
                 self?.view.layoutIfNeeded()
             },
             completion: nil
         )
+    }
+    
+    private func updateKeyboardAvoidance() {
+        guard let lastKnownKeyboardFrame: CGRect = self.lastKnownKeyboardFrame else { return }
+        
+        let messageRequestsOffset: CGFloat = (messageRequestFooterView.isHidden ? 0 :
+            messageRequestFooterView.bounds.height)
+        let viewIntersection = view.bounds.intersection(lastKnownKeyboardFrame)
+        let bottomOffset: CGFloat = (viewIntersection.isEmpty ? 0 : view.bounds.maxY - viewIntersection.minY)
+        let contentInsets = UIEdgeInsets(
+            top: 0,
+            left: 0,
+            bottom: bottomOffset + Values.mediumSpacing + messageRequestsOffset,
+            right: 0
+        )
+        let insetDifference: CGFloat = (contentInsets.bottom - tableView.contentInset.bottom)
+        scrollButtonBottomConstraint?.constant = -(bottomOffset + 12)
+        messageRequestsViewBotomConstraint?.constant = -bottomOffset
+        tableView.contentInset = contentInsets
+        tableView.scrollIndicatorInsets = contentInsets
+        
+        // Only modify the contentOffset if we aren't at the bottom of the tableView, with a little
+        // buffer (if we are at the bottom then it'll automatically scroll for us and modifying the
+        // value will break things)
+        let tableViewBottom: CGFloat = (tableView.contentSize.height - tableView.bounds.height + tableView.contentInset.bottom)
+        
+        if tableView.contentOffset.y < (tableViewBottom - 5) {
+            tableView.contentOffset.y += insetDifference
+        }
+        
+        updateScrollToBottom()
     }
 
     // MARK: - General
@@ -2166,7 +2070,7 @@ final class ConversationVC: BaseVC, SessionUtilRespondingViewController, Convers
         }
     }
     
-    // MARK: - SessionUtilRespondingViewController
+    // MARK: - LibSessionRespondingViewController
     
     func isConversation(in threadIds: [String]) -> Bool {
         return threadIds.contains(self.viewModel.threadData.threadId)

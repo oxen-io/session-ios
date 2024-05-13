@@ -45,7 +45,7 @@ extension MessageReceiver {
         if author == message.sender, let serverHash: String = interaction.serverHash {
             SnodeAPI
                 .deleteMessages(
-                    publicKey: author,
+                    swarmPublicKey: author,
                     serverHashes: [serverHash]
                 )
                 .subscribe(on: DispatchQueue.global(qos: .background))

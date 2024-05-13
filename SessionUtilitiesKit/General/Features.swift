@@ -3,6 +3,5 @@
 import Foundation
 
 public final class Features {
-    public static let useOnionRequests: Bool = true
     public static let useTestnet: Bool = false
 }

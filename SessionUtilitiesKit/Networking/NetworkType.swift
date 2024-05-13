@@ -4,10 +4,12 @@ import Foundation
 import Combine
 
 public protocol NetworkType {
-    func send<T>(_ request: Network.RequestType<T>) -> AnyPublisher<(ResponseInfoType, T), Error>
+    func send<T>(_ request: Network.RequestType<T>, using dependencies: Dependencies) -> AnyPublisher<(ResponseInfoType, T), Error>
 }
 
 public class Network: NetworkType {
+    public static let defaultTimeout: TimeInterval = 10
+    
     public struct RequestType<T> {
         public let id: String
         public let url: String?
@@ -15,7 +17,7 @@ public class Network: NetworkType {
         public let headers: [String: String]?
         public let body: Data?
         public let args: [Any?]
-        public let generatePublisher: () -> AnyPublisher<(ResponseInfoType, T), Error>
+        public let generatePublisher: (Dependencies) -> AnyPublisher<(ResponseInfoType, T), Error>
         
         public init(
             id: String,
@@ -24,7 +26,7 @@ public class Network: NetworkType {
             headers: [String: String]? = nil,
             body: Data? = nil,
             args: [Any?] = [],
-            generatePublisher: @escaping () -> AnyPublisher<(ResponseInfoType, T), Error>
+            generatePublisher: @escaping (Dependencies) -> AnyPublisher<(ResponseInfoType, T), Error>
         ) {
             self.id = id
             self.url = url
@@ -36,7 +38,7 @@ public class Network: NetworkType {
         }
     }
     
-    public func send<T>(_ request: RequestType<T>) -> AnyPublisher<(ResponseInfoType, T), Error> {
-        return request.generatePublisher()
+    public func send<T>(_ request: RequestType<T>, using dependencies: Dependencies) -> AnyPublisher<(ResponseInfoType, T), Error> {
+        return request.generatePublisher(dependencies)
     }
 }

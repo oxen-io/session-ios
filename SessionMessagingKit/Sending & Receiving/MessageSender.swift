@@ -17,7 +17,6 @@ public final class MessageSender {
         
         let message: Message?
         let interactionId: Int64?
-        let isSyncMessage: Bool?
         let totalAttachmentsUploaded: Int
         
         let snodeMessage: SnodeMessage?
@@ -30,7 +29,6 @@ public final class MessageSender {
             destination: Message.Destination,
             namespace: SnodeAPI.Namespace?,
             interactionId: Int64?,
-            isSyncMessage: Bool?,
             totalAttachmentsUploaded: Int = 0,
             snodeMessage: SnodeMessage?,
             plaintext: Data?,
@@ -42,7 +40,6 @@ public final class MessageSender {
             self.destination = destination
             self.namespace = namespace
             self.interactionId = interactionId
-            self.isSyncMessage = isSyncMessage
             self.totalAttachmentsUploaded = totalAttachmentsUploaded
             
             self.snodeMessage = snodeMessage
@@ -56,7 +53,6 @@ public final class MessageSender {
             destination: Message.Destination,
             namespace: SnodeAPI.Namespace,
             interactionId: Int64?,
-            isSyncMessage: Bool?,
             snodeMessage: SnodeMessage
         ) {
             self.shouldSend = true
@@ -65,7 +61,6 @@ public final class MessageSender {
             self.destination = destination
             self.namespace = namespace
             self.interactionId = interactionId
-            self.isSyncMessage = isSyncMessage
             self.totalAttachmentsUploaded = 0
             
             self.snodeMessage = snodeMessage
@@ -86,7 +81,6 @@ public final class MessageSender {
             self.destination = destination
             self.namespace = nil
             self.interactionId = interactionId
-            self.isSyncMessage = false
             self.totalAttachmentsUploaded = 0
             
             self.snodeMessage = nil
@@ -107,7 +101,6 @@ public final class MessageSender {
             self.destination = destination
             self.namespace = nil
             self.interactionId = interactionId
-            self.isSyncMessage = false
             self.totalAttachmentsUploaded = 0
             
             self.snodeMessage = nil
@@ -124,7 +117,6 @@ public final class MessageSender {
                 destination: destination.with(fileIds: fileIds),
                 namespace: namespace,
                 interactionId: interactionId,
-                isSyncMessage: isSyncMessage,
                 totalAttachmentsUploaded: fileIds.count,
                 snodeMessage: snodeMessage,
                 plaintext: plaintext,
@@ -139,7 +131,6 @@ public final class MessageSender {
         to destination: Message.Destination,
         namespace: SnodeAPI.Namespace?,
         interactionId: Int64?,
-        isSyncMessage: Bool = false,
         using dependencies: Dependencies = Dependencies()
     ) throws -> PreparedSendData {
         // Common logic for all destinations
@@ -154,7 +145,7 @@ public final class MessageSender {
         )
         
         switch destination {
-            case .contact, .closedGroup:
+            case .contact, .syncMessage, .closedGroup:
                 return try prepareSendToSnodeDestination(
                     db,
                     message: updatedMessage,
@@ -163,7 +154,6 @@ public final class MessageSender {
                     interactionId: interactionId,
                     userPublicKey: currentUserPublicKey,
                     messageSendTimestamp: messageSendTimestamp,
-                    isSyncMessage: isSyncMessage,
                     using: dependencies
                 )
 
@@ -198,13 +188,13 @@ public final class MessageSender {
         interactionId: Int64?,
         userPublicKey: String,
         messageSendTimestamp: Int64,
-        isSyncMessage: Bool = false,
         using dependencies: Dependencies
     ) throws -> PreparedSendData {
         message.sender = userPublicKey
         message.recipient = {
             switch destination {
                 case .contact(let publicKey): return publicKey
+                case .syncMessage: return userPublicKey
                 case .closedGroup(let groupPublicKey): return groupPublicKey
                 case .openGroup, .openGroupInbox: preconditionFailure()
             }
@@ -215,6 +205,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .invalidMessage,
                 interactionId: interactionId,
                 using: dependencies
@@ -223,25 +214,25 @@ public final class MessageSender {
         
         // Attach the user's profile if needed (no need to do so for 'Note to Self' or sync
         // messages as they will be managed by the user config handling
-        let isSelfSend: Bool = (message.recipient == userPublicKey)
-
-        if !isSelfSend, !isSyncMessage, var messageWithProfile: MessageWithProfile = message as? MessageWithProfile {
-            let profile: Profile = Profile.fetchOrCreateCurrentUser(db)
-            
-            if let profileKey: Data = profile.profileEncryptionKey, let profilePictureUrl: String = profile.profilePictureUrl {
-                messageWithProfile.profile = VisibleMessage.VMProfile(
-                    displayName: profile.name,
-                    profileKey: profileKey,
-                    profilePictureUrl: profilePictureUrl
-                )
-            }
-            else {
-                messageWithProfile.profile = VisibleMessage.VMProfile(displayName: profile.name)
-            }
+        switch (destination, (message.recipient == userPublicKey), message as? MessageWithProfile) {
+            case (.syncMessage, _, _), (_, true, _), (_, _, .none): break
+            case (_, _, .some(var messageWithProfile)):
+                let profile: Profile = Profile.fetchOrCreateCurrentUser(db)
+                
+                if let profileKey: Data = profile.profileEncryptionKey, let profilePictureUrl: String = profile.profilePictureUrl {
+                    messageWithProfile.profile = VisibleMessage.VMProfile(
+                        displayName: profile.name,
+                        profileKey: profileKey,
+                        profilePictureUrl: profilePictureUrl
+                    )
+                }
+                else {
+                    messageWithProfile.profile = VisibleMessage.VMProfile(displayName: profile.name)
+                }
         }
         
         // Perform any pre-send actions
-        handleMessageWillSend(db, message: message, interactionId: interactionId, isSyncMessage: isSyncMessage)
+        handleMessageWillSend(db, message: message, destination: destination, interactionId: interactionId)
         
         // Convert it to protobuf
         let threadId: String = Message.threadId(forMessage: message, destination: destination)
@@ -250,6 +241,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .protoConversionFailed,
                 interactionId: interactionId,
                 using: dependencies
@@ -267,6 +259,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .other(error),
                 interactionId: interactionId,
                 using: dependencies
@@ -279,6 +272,9 @@ public final class MessageSender {
             switch destination {
                 case .contact(let publicKey):
                     ciphertext = try encryptWithSessionProtocol(db, plaintext: plaintext, for: publicKey, using: dependencies)
+                    
+                case .syncMessage:
+                    ciphertext = try encryptWithSessionProtocol(db, plaintext: plaintext, for: userPublicKey, using: dependencies)
                     
                 case .closedGroup(let groupPublicKey):
                     guard let encryptionKeyPair: ClosedGroupKeyPair = try? ClosedGroupKeyPair.fetchLatestKeyPair(db, threadId: groupPublicKey) else {
@@ -300,6 +296,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .other(error),
                 interactionId: interactionId,
                 using: dependencies
@@ -311,7 +308,7 @@ public final class MessageSender {
         let senderPublicKey: String
         
         switch destination {
-            case .contact:
+            case .contact, .syncMessage:
                 kind = .sessionMessage
                 senderPublicKey = ""
                 
@@ -336,6 +333,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .other(error),
                 interactionId: interactionId,
                 using: dependencies
@@ -350,13 +348,7 @@ public final class MessageSender {
             data: base64EncodedData,
             ttl: Message.getSpecifiedTTL(
                 message: message,
-                isGroupMessage: {
-                    switch destination {
-                        case .closedGroup: return true
-                        default: return false
-                    }
-                }(),
-                isSyncMessage: isSyncMessage
+                destination: destination
             ),
             timestampMs: UInt64(messageSendTimestamp)
         )
@@ -366,7 +358,6 @@ public final class MessageSender {
             destination: destination,
             namespace: namespace,
             interactionId: interactionId,
-            isSyncMessage: isSyncMessage,
             snodeMessage: snodeMessage
         )
     }
@@ -382,7 +373,7 @@ public final class MessageSender {
         let threadId: String
         
         switch destination {
-            case .contact, .closedGroup, .openGroupInbox: preconditionFailure()
+            case .contact, .syncMessage, .closedGroup, .openGroupInbox: preconditionFailure()
             case .openGroup(let roomToken, let server, let whisperTo, let whisperMods, _):
                 threadId = OpenGroup.idFor(roomToken: roomToken, server: server)
                 message.recipient = [
@@ -439,6 +430,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .invalidMessage,
                 interactionId: interactionId,
                 using: dependencies
@@ -455,6 +447,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .noUsername,
                 interactionId: interactionId,
                 using: dependencies
@@ -462,13 +455,14 @@ public final class MessageSender {
         }
         
         // Perform any pre-send actions
-        handleMessageWillSend(db, message: message, interactionId: interactionId)
+        handleMessageWillSend(db, message: message, destination: destination, interactionId: interactionId)
         
         // Convert it to protobuf
         guard let proto = message.toProto(db, threadId: threadId) else {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .protoConversionFailed,
                 interactionId: interactionId,
                 using: dependencies
@@ -486,6 +480,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .other(error),
                 interactionId: interactionId,
                 using: dependencies
@@ -533,13 +528,14 @@ public final class MessageSender {
         }
         
         // Perform any pre-send actions
-        handleMessageWillSend(db, message: message, interactionId: interactionId)
+        handleMessageWillSend(db, message: message, destination: destination, interactionId: interactionId)
         
         // Convert it to protobuf
         guard let proto = message.toProto(db, threadId: recipientBlindedPublicKey) else {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .protoConversionFailed,
                 interactionId: interactionId,
                 using: dependencies
@@ -557,6 +553,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .other(error),
                 interactionId: interactionId,
                 using: dependencies
@@ -580,6 +577,7 @@ public final class MessageSender {
             throw MessageSender.handleFailedMessageSend(
                 db,
                 message: message,
+                destination: destination,
                 with: .other(error),
                 interactionId: interactionId,
                 using: dependencies
@@ -628,9 +626,9 @@ public final class MessageSender {
                             MessageSender.handleFailedMessageSend(
                                 db,
                                 message: message,
+                                destination: data.destination,
                                 with: .attachmentsNotUploaded,
                                 interactionId: data.interactionId,
-                                isSyncMessage: (data.isSyncMessage == true),
                                 using: dependencies
                             )
                         }
@@ -646,7 +644,7 @@ public final class MessageSender {
         }
         
         switch data.destination {
-            case .contact, .closedGroup: return sendToSnodeDestination(data: data, using: dependencies)
+            case .contact, .syncMessage, .closedGroup: return sendToSnodeDestination(data: data, using: dependencies)
             case .openGroup: return sendToOpenGroupDestination(data: data, using: dependencies)
             case .openGroupInbox: return sendToOpenGroupInbox(data: data, using: dependencies)
         }
@@ -661,7 +659,6 @@ public final class MessageSender {
         guard
             let message: Message = data.message,
             let namespace: SnodeAPI.Namespace = data.namespace,
-            let isSyncMessage: Bool = data.isSyncMessage,
             let snodeMessage: SnodeMessage = data.snodeMessage
         else {
             return Fail(error: MessageSenderError.invalidMessage)
@@ -669,7 +666,7 @@ public final class MessageSender {
         }
         
         return dependencies.network
-            .send(.message(snodeMessage, in: namespace, using: dependencies))
+            .send(.message(snodeMessage, in: namespace), using: dependencies)
             .flatMap { info, response -> AnyPublisher<Void, Error> in
                 let updatedMessage: Message = message
                 updatedMessage.serverHash = response.hash
@@ -680,9 +677,10 @@ public final class MessageSender {
                     details: NotifyPushServerJob.Details(message: snodeMessage)
                 )
                 let shouldNotify: Bool = {
-                    switch updatedMessage {
-                        case is VisibleMessage, is UnsendRequest: return !isSyncMessage
-                        case let callMessage as CallMessage:
+                    switch (updatedMessage, data.destination) {
+                        case (is VisibleMessage, .syncMessage), (is UnsendRequest, .syncMessage): return false
+                        case (is VisibleMessage, _), (is UnsendRequest, _): return true
+                        case (let callMessage as CallMessage, _):
                             // Note: Other 'CallMessage' types are too big to send as push notifications
                             // so only send the 'preOffer' message as a notification
                             switch callMessage.kind {
@@ -701,7 +699,6 @@ public final class MessageSender {
                             message: updatedMessage,
                             to: data.destination,
                             interactionId: data.interactionId,
-                            isSyncMessage: isSyncMessage,
                             using: dependencies
                         )
 
@@ -758,6 +755,7 @@ public final class MessageSender {
                                 MessageSender.handleFailedMessageSend(
                                     db,
                                     message: message,
+                                    destination: data.destination,
                                     with: .other(error),
                                     interactionId: data.interactionId,
                                     using: dependencies
@@ -800,7 +798,7 @@ public final class MessageSender {
                         using: dependencies
                     )
             }
-            .flatMap { OpenGroupAPI.send(data: $0, using: dependencies) }
+            .flatMap { $0.send(using: dependencies) }
             .flatMap { (responseInfo, responseData) -> AnyPublisher<Void, Error> in
                 let serverTimestampMs: UInt64? = responseData.posted.map { UInt64(floor($0 * 1000)) }
                 let updatedMessage: Message = message
@@ -829,6 +827,7 @@ public final class MessageSender {
                                 MessageSender.handleFailedMessageSend(
                                     db,
                                     message: message,
+                                    destination: data.destination,
                                     with: .other(error),
                                     interactionId: data.interactionId,
                                     using: dependencies
@@ -865,7 +864,7 @@ public final class MessageSender {
                         using: dependencies
                     )
             }
-            .flatMap { OpenGroupAPI.send(data: $0, using: dependencies) }
+            .flatMap { $0.send(using: dependencies) }
             .flatMap { (responseInfo, responseData) -> AnyPublisher<Void, Error> in
                 let updatedMessage: Message = message
                 updatedMessage.openGroupServerMessageId = UInt64(responseData.id)
@@ -893,6 +892,7 @@ public final class MessageSender {
                                 MessageSender.handleFailedMessageSend(
                                     db,
                                     message: message,
+                                    destination: data.destination,
                                     with: .other(error),
                                     interactionId: data.interactionId,
                                     using: dependencies
@@ -909,27 +909,33 @@ public final class MessageSender {
     public static func handleMessageWillSend(
         _ db: Database,
         message: Message,
-        interactionId: Int64?,
-        isSyncMessage: Bool = false
+        destination: Message.Destination,
+        interactionId: Int64?
     ) {
         // If the message was a reaction then we don't want to do anything to the original
         // interaction (which the 'interactionId' is pointing to
         guard (message as? VisibleMessage)?.reaction == nil else { return }
         
         // Mark messages as "sending"/"syncing" if needed (this is for retries)
-        _ = try? RecipientState
-            .filter(RecipientState.Columns.interactionId == interactionId)
-            .filter(isSyncMessage ?
-                RecipientState.Columns.state == RecipientState.State.failedToSync :
-                RecipientState.Columns.state == RecipientState.State.failed
-            )
-            .updateAll(
-                db,
-                RecipientState.Columns.state.set(to: isSyncMessage ?
-                    RecipientState.State.syncing :
-                    RecipientState.State.sending
-                )
-            )
+        switch destination {
+            case .syncMessage:
+                _ = try? RecipientState
+                    .filter(RecipientState.Columns.interactionId == interactionId)
+                    .filter(RecipientState.Columns.state == RecipientState.State.failedToSync)
+                    .updateAll(
+                        db,
+                        RecipientState.Columns.state.set(to: RecipientState.State.syncing)
+                    )
+                
+            default:
+                _ = try? RecipientState
+                    .filter(RecipientState.Columns.interactionId == interactionId)
+                    .filter(RecipientState.Columns.state == RecipientState.State.failed)
+                    .updateAll(
+                        db,
+                        RecipientState.Columns.state.set(to: RecipientState.State.sending)
+                    )
+        }
     }
     
     private static func handleSuccessfulMessageSend(
@@ -938,7 +944,6 @@ public final class MessageSender {
         to destination: Message.Destination,
         interactionId: Int64?,
         serverTimestampMs: UInt64? = nil,
-        isSyncMessage: Bool = false,
         using dependencies: Dependencies
     ) throws {
         // If the message was a reaction then we want to update the reaction instead of the original
@@ -957,59 +962,61 @@ public final class MessageSender {
             // Get the visible message if possible
             if let interaction: Interaction = interaction {
                 // Only store the server hash of a sync message if the message is self send valid
-                if (message.isSelfSendValid && isSyncMessage || !isSyncMessage) {
-                    try interaction.with(
-                        serverHash: message.serverHash,
-                        // Track the open group server message ID and update server timestamp (use server
-                        // timestamp for open group messages otherwise the quote messages may not be able
-                        // to be found by the timestamp on other devices
-                        timestampMs: (message.openGroupServerMessageId == nil ?
-                            nil :
-                            serverTimestampMs.map { Int64($0) }
-                        ),
-                        openGroupServerMessageId: message.openGroupServerMessageId.map { Int64($0) }
-                    ).update(db)
-                    
-                    if interaction.isExpiringMessage {
-                        // Start disappearing messages job after a message is successfully sent.
-                        // For DAR and DAS outgoing messages, the expiration start time are the
-                        // same as message sentTimestamp. So do this once, DAR and DAS messages
-                        // should all be covered.
-                        dependencies.jobRunner.upsert(
-                            db,
-                            job: DisappearingMessagesJob.updateNextRunIfNeeded(
-                                db,
-                                interaction: interaction,
-                                startedAtMs: Double(interaction.timestampMs)
+                switch (message.isSelfSendValid, destination) {
+                    case (false, .syncMessage): break
+                    case (true, .syncMessage), (_, .contact), (_, .closedGroup), (_, .openGroup), (_, .openGroupInbox):
+                        try interaction.with(
+                            serverHash: message.serverHash,
+                            // Track the open group server message ID and update server timestamp (use server
+                            // timestamp for open group messages otherwise the quote messages may not be able
+                            // to be found by the timestamp on other devices
+                            timestampMs: (message.openGroupServerMessageId == nil ?
+                                nil :
+                                serverTimestampMs.map { Int64($0) }
                             ),
-                            canStartJob: true,
-                            using: dependencies
-                        )
+                            openGroupServerMessageId: message.openGroupServerMessageId.map { Int64($0) }
+                        ).update(db)
                         
-                        if
-                            isSyncMessage,
-                            let startedAtMs: Double = interaction.expiresStartedAtMs,
-                            let expiresInSeconds: TimeInterval = interaction.expiresInSeconds,
-                            let serverHash: String = message.serverHash
-                        {
-                            let expirationTimestampMs: Int64 = Int64(startedAtMs + expiresInSeconds * 1000)
-                            dependencies.jobRunner.add(
+                        if interaction.isExpiringMessage {
+                            // Start disappearing messages job after a message is successfully sent.
+                            // For DAR and DAS outgoing messages, the expiration start time are the
+                            // same as message sentTimestamp. So do this once, DAR and DAS messages
+                            // should all be covered.
+                            dependencies.jobRunner.upsert(
                                 db,
-                                job: Job(
-                                    variant: .expirationUpdate,
-                                    behaviour: .runOnce,
-                                    threadId: interaction.threadId,
-                                    details: ExpirationUpdateJob.Details(
-                                        serverHashes: [serverHash],
-                                        expirationTimestampMs: expirationTimestampMs
-                                    )
+                                job: DisappearingMessagesJob.updateNextRunIfNeeded(
+                                    db,
+                                    interaction: interaction,
+                                    startedAtMs: Double(interaction.timestampMs)
                                 ),
                                 canStartJob: true,
                                 using: dependencies
                             )
+                            
+                            if
+                                case .syncMessage = destination,
+                                let startedAtMs: Double = interaction.expiresStartedAtMs,
+                                let expiresInSeconds: TimeInterval = interaction.expiresInSeconds,
+                                let serverHash: String = message.serverHash
+                            {
+                                let expirationTimestampMs: Int64 = Int64(startedAtMs + expiresInSeconds * 1000)
+                                dependencies.jobRunner.add(
+                                    db,
+                                    job: Job(
+                                        variant: .expirationUpdate,
+                                        behaviour: .runOnce,
+                                        threadId: interaction.threadId,
+                                        details: ExpirationUpdateJob.Details(
+                                            serverHashes: [serverHash],
+                                            expirationTimestampMs: expirationTimestampMs
+                                        )
+                                    ),
+                                    canStartJob: true,
+                                    using: dependencies
+                                )
+                            }
                         }
                     }
-                }
                 
                 // Mark the message as sent
                 try interaction.recipientStates
@@ -1038,7 +1045,6 @@ public final class MessageSender {
             destination: destination,
             threadId: threadId,
             interactionId: interactionId,
-            isAlreadySyncMessage: isSyncMessage,
             using: dependencies
         )
     }
@@ -1046,32 +1052,47 @@ public final class MessageSender {
     @discardableResult internal static func handleFailedMessageSend(
         _ db: Database,
         message: Message,
+        destination: Message.Destination?,
         with error: MessageSenderError,
         interactionId: Int64?,
-        isSyncMessage: Bool = false,
         using dependencies: Dependencies
     ) -> Error {
-        // If the message was a reaction then we don't want to do anything to the original
-        // interaciton (which the 'interactionId' is pointing to
-        guard (message as? VisibleMessage)?.reaction == nil else { return error }
+        // Only 'VisibleMessage' messages can show a status so don't bother updating
+        // the other cases (if the VisibleMessage was a reaction then we also don't
+        // want to do anything as the `interactionId` points to the original message
+        // which has it's own status)
+        switch message {
+            case let message as VisibleMessage where message.reaction != nil: return error
+            case is VisibleMessage: break
+            default: return error
+        }
         
         // Check if we need to mark any "sending" recipients as "failed"
         //
         // Note: The 'db' could be either read-only or writeable so we determine
         // if a change is required, and if so dispatch to a separate queue for the
         // actual write
-        let rowIds: [Int64] = (try? RecipientState
-            .select(Column.rowID)
-            .filter(RecipientState.Columns.interactionId == interactionId)
-            .filter(!isSyncMessage ?
-                RecipientState.Columns.state == RecipientState.State.sending : (
-                    RecipientState.Columns.state == RecipientState.State.syncing ||
-                    RecipientState.Columns.state == RecipientState.State.sent
-                )
-            )
-            .asRequest(of: Int64.self)
-            .fetchAll(db))
-            .defaulting(to: [])
+        let rowIds: [Int64] = (try? {
+            switch destination {
+                case .syncMessage:
+                    return RecipientState
+                        .select(Column.rowID)
+                        .filter(RecipientState.Columns.interactionId == interactionId)
+                        .filter(
+                            RecipientState.Columns.state == RecipientState.State.syncing ||
+                            RecipientState.Columns.state == RecipientState.State.sent
+                        )
+                    
+                default:
+                    return RecipientState
+                        .select(Column.rowID)
+                        .filter(RecipientState.Columns.interactionId == interactionId)
+                        .filter(RecipientState.Columns.state == RecipientState.State.sending)
+            }
+        }()
+        .asRequest(of: Int64.self)
+        .fetchAll(db))
+        .defaulting(to: [])
         
         guard !rowIds.isEmpty else { return error }
         
@@ -1079,15 +1100,25 @@ public final class MessageSender {
         // issue from occuring in some cases
         DispatchQueue.global(qos: .background).async {
             dependencies.storage.write { db in
-                try RecipientState
-                    .filter(rowIds.contains(Column.rowID))
-                    .updateAll(
-                        db,
-                        RecipientState.Columns.state.set(
-                            to: (isSyncMessage ? RecipientState.State.failedToSync : RecipientState.State.failed)
-                        ),
-                        RecipientState.Columns.mostRecentFailureText.set(to: error.localizedDescription)
-                    )
+                switch destination {
+                    case .syncMessage:
+                        try RecipientState
+                            .filter(rowIds.contains(Column.rowID))
+                            .updateAll(
+                                db,
+                                RecipientState.Columns.state.set(to: RecipientState.State.failedToSync),
+                                RecipientState.Columns.mostRecentFailureText.set(to: "\(error)")
+                            )
+                        
+                    default:
+                        try RecipientState
+                            .filter(rowIds.contains(Column.rowID))
+                            .updateAll(
+                                db,
+                                RecipientState.Columns.state.set(to: RecipientState.State.failed),
+                                RecipientState.Columns.mostRecentFailureText.set(to: "\(error)")
+                            )
+                }
             }
         }
         
@@ -1116,7 +1147,6 @@ public final class MessageSender {
         destination: Message.Destination,
         threadId: String?,
         interactionId: Int64?,
-        isAlreadySyncMessage: Bool,
         using dependencies: Dependencies
     ) {
         // Sync the message if it's not a sync message, wasn't already sent to the current user and
@@ -1125,7 +1155,6 @@ public final class MessageSender {
         
         if
             case .contact(let publicKey) = destination,
-            !isAlreadySyncMessage,
             publicKey != currentUserPublicKey,
             Message.shouldSync(message: message)
         {
@@ -1138,9 +1167,8 @@ public final class MessageSender {
                     threadId: threadId,
                     interactionId: interactionId,
                     details: MessageSendJob.Details(
-                        destination: .contact(publicKey: currentUserPublicKey),
-                        message: message,
-                        isSyncMessage: true
+                        destination: .syncMessage(originalRecipientPublicKey: publicKey),
+                        message: message
                     )
                 ),
                 canStartJob: true,

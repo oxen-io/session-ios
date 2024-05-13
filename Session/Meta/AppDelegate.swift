@@ -52,6 +52,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             appSpecificBlock: {
                 // Create AppEnvironment
                 AppEnvironment.shared.setup()
+                LibSession.addLogger()
+                LibSession.createNetworkIfNeeded()
                 
                 // Note: Intentionally dispatching sync as we want to wait for these to complete before
                 // continuing
@@ -195,10 +197,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // but answers the call on another device
         stopPollers(shouldStopUserPoller: !self.hasCallOngoing())
         
+        // FIXME: Move this to be initialised as part of `AppDelegate`
+        let dependencies: Dependencies = Dependencies()
+        
         // Stop all jobs except for message sending and when completed suspend the database
-        JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend) {
+        JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) {
             if !self.hasCallOngoing() {
                 Storage.suspendDatabaseAccess()
+                LibSession.closeNetworkConnections()
             }
         }
     }
@@ -279,6 +285,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             
             if Singleton.hasAppContext && Singleton.appContext.isInBackground {
                 Storage.suspendDatabaseAccess()
+                LibSession.closeNetworkConnections()
             }
             
             SNLog("Background poll failed due to manual timeout")
@@ -305,6 +312,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 
                 if Singleton.hasAppContext && Singleton.appContext.isInBackground {
                     Storage.suspendDatabaseAccess()
+                    LibSession.closeNetworkConnections()
                 }
                 
                 cancelTimer.invalidate()
@@ -392,7 +400,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         // May as well run these on the background thread
         SessionEnvironment.shared?.audioSession.setup()
-        SessionEnvironment.shared?.reachabilityManager.setup()
     }
     
     private func showFailedStartupAlert(
@@ -510,18 +517,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         /// There is a _fun_ behaviour here where if the user launches the app, sends it to the background at the right time and then
         /// opens it again the `AppReadiness` closures can be triggered before `applicationDidBecomeActive` has been
         /// called again - this can result in odd behaviours so hold off on running this logic until it's properly called again
-        guard
-            Identity.userExists() &&
-            UserDefaults.sharedLokiProject?[.isMainAppActive] == true
-        else { return }
+        guard UserDefaults.sharedLokiProject?[.isMainAppActive] == true else { return }
         
-        enableBackgroundRefreshIfNecessary()
-        JobRunner.appDidBecomeActive()
-        
-        startPollersIfNeeded()
-        
-        if Singleton.hasAppContext && Singleton.appContext.isMainApp {
-            handleAppActivatedWithOngoingCallIfNeeded()
+        /// There is a warning which can happen on launch because the Database read can be blocked by another database operation
+        /// which could result in this blocking the main thread, as a result we want to check the identity exists on a background thread
+        /// and then return to the main thread only when required
+        DispatchQueue.global(qos: .default).async { [weak self] in
+            guard Identity.userExists() else { return }
+            
+            self?.enableBackgroundRefreshIfNecessary()
+            JobRunner.appDidBecomeActive()
+            
+            self?.startPollersIfNeeded()
+            
+            if Singleton.hasAppContext && Singleton.appContext.isMainApp {
+                DispatchQueue.main.async {
+                    self?.handleAppActivatedWithOngoingCallIfNeeded()
+                }
+            }
         }
     }
     
@@ -856,9 +869,9 @@ private enum LifecycleMethod: Equatable {
     
     var timingName: String {
         switch self {
-            case .finishLaunching: return "Launch"
-            case .enterForeground: return "EnterForeground"
-            case .didBecomeActive: return "BecomeActive"
+            case .finishLaunching: return "Launch"              // stringlint:disable
+            case .enterForeground: return "EnterForeground"     // stringlint:disable
+            case .didBecomeActive: return "BecomeActive"        // stringlint:disable
         }
     }
     

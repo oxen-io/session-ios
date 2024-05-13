@@ -24,7 +24,6 @@ final class MentionSelectionView: UIView, UITableViewDataSource, UITableViewDele
     
     private lazy var tableView: UITableView = {
         let result: UITableView = UITableView()
-        result.accessibilityLabel = "Contact"
         result.dataSource = self
         result.delegate = self
         result.separatorStyle = .none

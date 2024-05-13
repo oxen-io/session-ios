@@ -306,7 +306,8 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             for: self.threadVariant,
             id: self.authorId,
             name: self.authorNameInternal,
-            nickname: nil  // Folded into 'authorName' within the Query
+            nickname: nil,      // Folded into 'authorName' within the Query
+            suppressId: false   // Show the id next to the author name if desired
         )
         let shouldShowDateBeforeThisModel: Bool = {
             guard self.isTypingIndicator != true else { return false }
@@ -404,7 +405,8 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
                         for: self.threadVariant,
                         id: self.threadId,
                         name: self.threadContactNameInternal,
-                        nickname: nil  // Folded into 'threadContactNameInternal' within the Query
+                        nickname: nil,      // Folded into 'threadContactNameInternal' within the Query
+                        suppressId: false   // Show the id next to the author name if desired
                     ),
                     authorDisplayName: authorDisplayName,
                     attachmentDescriptionInfo: self.attachments?.first.map { firstAttachment in

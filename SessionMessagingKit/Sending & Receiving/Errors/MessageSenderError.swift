@@ -4,7 +4,7 @@
 
 import Foundation
 
-public enum MessageSenderError: LocalizedError, Equatable {
+public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
     case invalidMessage
     case protoConversionFailed
     case noUserX25519KeyPair
@@ -33,24 +33,24 @@ public enum MessageSenderError: LocalizedError, Equatable {
         }
     }
     
-    public var errorDescription: String? {
+    public var description: String {
         switch self {
-            case .invalidMessage: return "Invalid message."
-            case .protoConversionFailed: return "Couldn't convert message to proto."
-            case .noUserX25519KeyPair: return "Couldn't find user X25519 key pair."
-            case .noUserED25519KeyPair: return "Couldn't find user ED25519 key pair."
-            case .signingFailed: return "Couldn't sign message."
-            case .encryptionFailed: return "Couldn't encrypt message."
-            case .noUsername: return "Missing username."
-            case .attachmentsNotUploaded: return "Attachments for this message have not been uploaded."
-            case .blindingFailed: return "Couldn't blind the sender"
-            case .sendJobTimeout: return "Send job timeout (likely due to path building taking too long)."
+            case .invalidMessage: return "Invalid message (MessageSenderError.invalidMessage)."
+            case .protoConversionFailed: return "Couldn't convert message to proto (MessageSenderError.protoConversionFailed)."
+            case .noUserX25519KeyPair: return "Couldn't find user X25519 key pair (MessageSenderError.noUserX25519KeyPair)."
+            case .noUserED25519KeyPair: return "Couldn't find user ED25519 key pair (MessageSenderError.noUserED25519KeyPair)."
+            case .signingFailed: return "Couldn't sign message (MessageSenderError.signingFailed)."
+            case .encryptionFailed: return "Couldn't encrypt message (MessageSenderError.encryptionFailed)."
+            case .noUsername: return "Missing username (MessageSenderError.noUsername)."
+            case .attachmentsNotUploaded: return "Attachments for this message have not been uploaded (MessageSenderError.attachmentsNotUploaded)."
+            case .blindingFailed: return "Couldn't blind the sender (MessageSenderError.blindingFailed)."
+            case .sendJobTimeout: return "Send job timeout (likely due to path building taking too long - MessageSenderError.sendJobTimeout)."
             
             // Closed groups
-            case .noThread: return "Couldn't find a thread associated with the given group public key."
-            case .noKeyPair: return "Couldn't find a private key associated with the given group public key."
-            case .invalidClosedGroupUpdate: return "Invalid group update."
-            case .other(let error): return error.localizedDescription
+            case .noThread: return "Couldn't find a thread associated with the given group public key (MessageSenderError.noThread)."
+            case .noKeyPair: return "Couldn't find a private key associated with the given group public key (MessageSenderError.noKeyPair)."
+            case .invalidClosedGroupUpdate: return "Invalid group update (MessageSenderError.invalidClosedGroupUpdate)."
+            case .other(let error): return "\(error)"
         }
     }
     

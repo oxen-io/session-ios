@@ -63,7 +63,7 @@ extension SnodeAPI {
             /// namespace), or `("retrieve" || timestamp)` when fetching from the default namespace.  Both
             /// namespace and timestamp are the base10 expressions of the relevant values.  Must be base64
             /// encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getMessages.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getMessages.path.bytes
                 .appending(contentsOf: namespace?.verificationString.bytes)
                 .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
             

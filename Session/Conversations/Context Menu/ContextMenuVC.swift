@@ -302,6 +302,7 @@ final class ContextMenuVC: UIViewController {
         let ratio: CGFloat = (frame.width / frame.height)
         
         // FIXME: Need to update this when an appropriate replacement is added (see https://teng.pub/technical/2021/11/9/uiapplication-key-window-replacement)
+        // FIXME: Still an issue in 04/2024 (see comments in https://stackoverflow.com/a/58031897 re. split screen or multi-window on iPad)
         let topMargin = max((UIApplication.shared.keyWindow?.safeAreaInsets.top ?? 0), Values.mediumSpacing)
         let bottomMargin = max((UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? 0), Values.mediumSpacing)
         let diffY = finalFrame.height + menuHeight + Self.actionViewHeight + 2 * spacing + topMargin + bottomMargin - UIScreen.main.bounds.height

@@ -21,6 +21,8 @@ public struct ConfigDump: Codable, Equatable, Hashable, FetchableRecord, Persist
         case contacts
         case convoInfoVolatile
         case userGroups
+        
+        case invalid    // Should only be used when failing to convert a namespace to a variant
     }
     
     /// The type of config this dump is for
@@ -57,14 +59,19 @@ public extension ConfigDump.Variant {
         .userProfile, .contacts, .convoInfoVolatile, .userGroups
     ]
     
-    var configMessageKind: SharedConfigMessage.Kind {
-        switch self {
-            case .userProfile: return .userProfile
-            case .contacts: return .contacts
-            case .convoInfoVolatile: return .convoInfoVolatile
-            case .userGroups: return .userGroups
+    init(namespace: SnodeAPI.Namespace) {
+        switch namespace {
+            case .configUserProfile: self = .userProfile
+            case .configContacts: self = .contacts
+            case .configConvoInfoVolatile: self = .convoInfoVolatile
+            case .configUserGroups: self = .userGroups
+            
+            default: self = .invalid
         }
     }
+    
+    /// Config messages should last for 30 days rather than the standard 14
+    var ttl: UInt64 { 30 * 24 * 60 * 60 * 1000 }
     
     var namespace: SnodeAPI.Namespace {
         switch self {
@@ -72,19 +79,23 @@ public extension ConfigDump.Variant {
             case .contacts: return SnodeAPI.Namespace.configContacts
             case .convoInfoVolatile: return SnodeAPI.Namespace.configConvoInfoVolatile
             case .userGroups: return SnodeAPI.Namespace.configUserGroups
+                
+            case .invalid: return SnodeAPI.Namespace.unknown
         }
     }
-    
-    /// This value defines the order that the SharedConfigMessages should be processed in, while we re-process config
-    /// messages every time we poll this will prevent an edge-case where data/logic between different config messages
-    /// could be dependant on each other (eg. there could be `convoInfoVolatile` data related to a new conversation
-    /// which hasn't been created yet because it's associated `contacts`/`userGroups` message hasn't yet been
-    /// processed (without this we would have to wait until the next poll for it to be processed correctly)
-    var processingOrder: Int {
+}
+
+// MARK: - CustomStringConvertible
+
+extension ConfigDump.Variant: CustomStringConvertible {
+    public var description: String {
         switch self {
-            case .userProfile, .contacts: return 0
-            case .userGroups: return 1
-            case .convoInfoVolatile: return 2
+            case .userProfile: return "userProfile"
+            case .contacts: return "contacts"
+            case .convoInfoVolatile: return "convoInfoVolatile"
+            case .userGroups: return "userGroups"
+                
+            case .invalid: return "invalid"
         }
     }
 }

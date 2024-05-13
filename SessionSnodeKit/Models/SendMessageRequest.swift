@@ -57,7 +57,7 @@ extension SnodeAPI {
             /// base64 encoded for json requests; binary for OMQ requests.  For non-05 type pubkeys (i.e. non
             /// session ids) the signature will be verified using `pubkey`.  For 05 pubkeys, see the following
             /// option.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.sendMessage.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.sendMessage.path.bytes
                 .appending(contentsOf: namespace.verificationString.bytes)
                 .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
             

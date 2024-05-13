@@ -32,19 +32,17 @@ enum Onboarding {
     ) -> AnyPublisher<String?, Error> {
         let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
         
-        return SnodeAPI.getSwarm(for: userPublicKey)
-            .tryFlatMapWithRandomSnode { snode -> AnyPublisher<[Message], Error> in
-                CurrentUserPoller
-                    .poll(
-                        namespaces: [.configUserProfile],
-                        from: snode,
-                        for: userPublicKey,
-                        // Note: These values mean the received messages will be
-                        // processed immediately rather than async as part of a Job
-                        calledFromBackgroundPoller: true,
-                        isBackgroundPollValid: { true }
-                    )
-            }
+        return CurrentUserPoller()
+            .poll(
+                namespaces: [.configUserProfile],
+                for: userPublicKey,
+                // Note: These values mean the received messages will be
+                // processed immediately rather than async as part of a Job
+                calledFromBackgroundPoller: true,
+                isBackgroundPollValid: { true },
+                drainBehaviour: .alwaysRandom,
+                using: dependencies
+            )
             .map { _ -> String? in
                 guard requestId == profileNameRetrievalIdentifier.wrappedValue else { return nil }
                 
@@ -93,8 +91,8 @@ enum Onboarding {
         /// If the user returns to an earlier screen during Onboarding we might need to clear out a partially created
         /// account (eg. returning from the PN setting screen to the seed entry screen when linking a device)
         func unregister(using dependencies: Dependencies = Dependencies()) {
-            // Clear the in-memory state from SessionUtil
-            SessionUtil.clearMemoryState()
+            // Clear the in-memory state from LibSession
+            LibSession.clearMemoryState()
             
             // Clear any data which gets set during Onboarding
             Storage.shared.write { db in
@@ -123,7 +121,7 @@ enum Onboarding {
             
             // Create the initial shared util state (won't have been created on
             // launch due to lack of ed25519 key)
-            SessionUtil.loadState(
+            LibSession.loadState(
                 userPublicKey: x25519PublicKey,
                 ed25519SecretKey: ed25519KeyPair.secretKey
             )
@@ -178,7 +176,7 @@ enum Onboarding {
             // Only continue if this isn't a new account
             guard self != .register else { return }
             
-            // Fetch the
+            // Fetch any existing profile name
             Onboarding.profileNamePublisher
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .sinkUntilComplete()
@@ -200,10 +198,6 @@ enum Onboarding {
             
             // Notify the app that registration is complete
             Identity.didRegister()
-            
-            // Now that we have registered get the Snode pool (just in case) - other non-blocking
-            // launch jobs will automatically be run because the app activation was triggered
-            GetSnodePoolJob.run()
         }
     }
 }

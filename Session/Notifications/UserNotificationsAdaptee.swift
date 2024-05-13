@@ -265,8 +265,7 @@ public class UserNotificationActionHandler: NSObject {
                         case .finished: break
                         case .failure(let error):
                             completionHandler()
-                            owsFailDebug("error: \(error)")
-                            Logger.error("error: \(error)")
+                            OWSLogger.error("Failed to handle notification response: \(error)")
                     }
                 },
                 receiveValue: { _ in completionHandler() }
@@ -282,14 +281,14 @@ public class UserNotificationActionHandler: NSObject {
 
         switch response.actionIdentifier {
             case UNNotificationDefaultActionIdentifier:
-                Logger.debug("default action")
+                OWSLogger.debug("Notification response: default action")
                 return actionHandler.showThread(userInfo: userInfo)
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
                 
             case UNNotificationDismissActionIdentifier:
                 // TODO - mark as read?
-                Logger.debug("dismissed notification")
+                OWSLogger.debug("Notification response: dismissed notification")
                 return Just(())
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()

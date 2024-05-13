@@ -12,6 +12,7 @@ import SignalCoreKit
 final class ShareNavController: UINavigationController, ShareViewDelegate {
     public static var attachmentPrepPublisher: AnyPublisher<[SignalAttachment], Error>?
     private let versionMigrationsComplete: Atomic<Bool> = Atomic(false)
+    private var fileLogger: DDFileLogger?
     
     // MARK: - Error
     
@@ -52,10 +53,20 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         }
 
         AppSetup.setupEnvironment(
-            appSpecificBlock: {
+            appSpecificBlock: { [weak self] in
                 SessionEnvironment.shared?.notificationsManager.mutate {
                     $0 = NoopNotificationsManager()
                 }
+                
+                // Add the file logger
+                let logFileManager: DDLogFileManagerDefault = DDLogFileManagerDefault(
+                    logsDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/ShareExtension"  // stringlint:disable
+                )
+                let fileLogger: DDFileLogger = DDFileLogger(logFileManager: logFileManager)
+                fileLogger.rollingFrequency = kDayInterval // Refresh everyday
+                fileLogger.logFileManager.maximumNumberOfLogFiles = 3 // Save 3 days' log files
+                DDLog.add(fileLogger)
+                self?.fileLogger = fileLogger
             },
             migrationsCompletion: { [weak self] result, needsConfigSync in
                 switch result {
@@ -163,6 +174,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     @objc
     public func applicationDidEnterBackground() {
         AssertIsOnMainThread()
+        DDLog.flushLog()
 
         Logger.info("")
 
@@ -176,6 +188,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        DDLog.flushLog()
 
         // Share extensions reside in a process that may be reused between usages.
         // That isn't safe; the codebase is full of statics (e.g. singletons) which

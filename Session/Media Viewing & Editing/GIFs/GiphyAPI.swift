@@ -280,7 +280,7 @@ enum GiphyAPI {
         let urlString = "/v1/gifs/trending?api_key=\(kGiphyApiKey)&limit=\(kGiphyPageSize)"      // stringlint:disable
         
         guard let url: URL = URL(string: "\(kGiphyBaseURL)\(urlString)") else {
-            return Fail(error: HTTPError.invalidURL)
+            return Fail(error: NetworkError.invalidURL)
                 .eraseToAnyPublisher()
         }
         
@@ -290,7 +290,7 @@ enum GiphyAPI {
                 Logger.error("search request failed: \(urlError)")
                 
                 // URLError codes are negative values
-                return HTTPError.generic
+                return NetworkError.unknown
             }
             .map { data, _ in
                 Logger.debug("search request succeeded")
@@ -320,15 +320,15 @@ enum GiphyAPI {
                 ].joined()
             )
         else {
-            return Fail(error: HTTPError.invalidURL)
+            return Fail(error: NetworkError.invalidURL)
                 .eraseToAnyPublisher()
         }
         
         var request: URLRequest = URLRequest(url: url)
         
         guard ContentProxy.configureProxiedRequest(request: &request) else {
-            owsFailDebug("Could not configure query: \(query).")
-            return Fail(error: HTTPError.generic)
+            SNLog("Could not configure query: \(query).")
+            return Fail(error: NetworkError.invalidPreparedRequest)
                 .eraseToAnyPublisher()
         }
         
@@ -338,13 +338,13 @@ enum GiphyAPI {
                 Logger.error("search request failed: \(urlError)")
                 
                 // URLError codes are negative values
-                return HTTPError.generic
+                return NetworkError.unknown
             }
             .tryMap { data, _ -> [GiphyImageInfo] in
                 Logger.debug("search request succeeded")
                 
                 guard let imageInfos = self.parseGiphyImages(responseData: data) else {
-                    throw HTTPError.invalidResponse
+                    throw NetworkError.invalidResponse
                 }
                 
                 return imageInfos

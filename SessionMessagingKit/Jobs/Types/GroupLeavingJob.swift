@@ -51,7 +51,6 @@ public enum GroupLeavingJob: JobExecutor {
                     to: destination,
                     namespace: destination.defaultNamespace,
                     interactionId: job.interactionId,
-                    isSyncMessage: false,
                     using: dependencies
                 )
             }

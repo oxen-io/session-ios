@@ -42,7 +42,7 @@ extension SnodeAPI {
         override func generateSignature() throws -> [UInt8] {
             /// Ed25519 signature of `("revoke_subkey" || subkey)`; this signs the subkey tag,
             /// using `pubkey` to sign. Must be base64 encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.revokeSubkey.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.revokeSubaccount.path.bytes
                 .appending(contentsOf: subkeyToRevoke.bytes)
             
             guard

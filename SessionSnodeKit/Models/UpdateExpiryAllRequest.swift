@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 
@@ -61,7 +63,7 @@ extension SnodeAPI {
             /// base64 encoded (json) or bytes (OMQ).  namespace should be the stringified namespace for
             /// non-default namespace expiries (i.e. "42", "-99", "all"), or an empty string for the default
             /// namespace (whether or not explicitly provided).
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.expireAll.rawValue.bytes
+            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.expireAll.path.bytes
                 .appending(
                     contentsOf: (namespace == nil ?
                         "all" :

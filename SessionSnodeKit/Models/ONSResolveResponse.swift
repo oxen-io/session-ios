@@ -50,12 +50,12 @@ extension SnodeAPI {
                         memLimit: sodium.pwHash.MemLimitModerate,
                         alg: .Argon2ID13
                     )
-                else { throw SnodeAPIError.hashingFailed }
+                else { throw SnodeAPIError.onsHashingFailed }
                 
                 let nonce: [UInt8] = Data(repeating: 0, count: sodium.secretBox.NonceBytes).bytes
                 
                 guard let sessionIdAsData: [UInt8] = sodium.secretBox.open(authenticatedCipherText: ciphertext, secretKey: key, nonce: nonce) else {
-                    throw SnodeAPIError.decryptionFailed
+                    throw SnodeAPIError.onsDecryptionFailed
                 }
 
                 return sessionIdAsData.toHexString()
@@ -66,7 +66,7 @@ extension SnodeAPI {
             // xchacha-based encryption
             // key = H(name, key=H(name))
             guard let key: [UInt8] = sodium.genericHash.hash(message: nameBytes, key: nameHashBytes) else {
-                throw SnodeAPIError.hashingFailed
+                throw SnodeAPIError.onsHashingFailed
             }
             guard
                 // Should always be equal in practice
@@ -76,7 +76,7 @@ extension SnodeAPI {
                     secretKey: key,
                     nonce: nonceBytes
                 )
-            else { throw SnodeAPIError.decryptionFailed }
+            else { throw SnodeAPIError.onsDecryptionFailed }
 
             return sessionIdAsData.toHexString()
         }

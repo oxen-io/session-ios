@@ -519,9 +519,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
                     assetDescription: assetDescription,
                     priority: priority,
                     success: { request, asset in resolver(Result.success((asset, request))) },
-                    failure: { request in
-                        resolver(Result.failure(HTTPError.generic))
-                    }
+                    failure: { request in resolver(Result.failure(NetworkError.invalidResponse)) }
                 )
                 assetRequest.shouldIgnoreSignalProxy = shouldIgnoreSignalProxy
                 self?.assetRequestQueue.append(assetRequest)

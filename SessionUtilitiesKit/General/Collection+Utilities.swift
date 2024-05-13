@@ -16,6 +16,22 @@ public extension Collection {
         _ = copy.initialize(from: self)
         return copy
     }
+    
+    /// This creates an UnsafePointer to access data in memory directly. This result pointer provides no automated
+    /// memory management so after use you are responsible for handling the life cycle and need to call `deallocate()`.
+    func unsafeCopy() -> UnsafePointer<Element>? {
+        let copy = UnsafeMutableBufferPointer<Element>.allocate(capacity: self.underestimatedCount)
+        _ = copy.initialize(from: self)
+        return UnsafePointer(copy.baseAddress)
+    }
+    
+    /// This creates an UnsafePointer to access data in memory directly. This result pointer provides no automated
+    /// memory management so after use you are responsible for handling the life cycle and need to call `deallocate()`.
+    func unsafeCopy() -> UnsafeMutablePointer<Element>? {
+        let copy = UnsafeMutableBufferPointer<Element>.allocate(capacity: self.underestimatedCount)
+        _ = copy.initialize(from: self)
+        return UnsafeMutablePointer(copy.baseAddress)
+    }
 }
 
 public extension Collection where Element == [CChar] {

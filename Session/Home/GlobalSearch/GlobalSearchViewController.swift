@@ -9,7 +9,7 @@ import SessionUtilitiesKit
 import SignalUtilitiesKit
 import SignalCoreKit
 
-class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, UITableViewDelegate, UITableViewDataSource {
+class GlobalSearchViewController: BaseVC, LibSessionRespondingViewController, UITableViewDelegate, UITableViewDataSource {
     fileprivate typealias SectionModel = ArraySection<SearchSection, SessionThreadViewModel>
     
     // MARK: - SearchSection
@@ -20,7 +20,7 @@ class GlobalSearchViewController: BaseVC, SessionUtilRespondingViewController, U
         case messages
     }
     
-    // MARK: - SessionUtilRespondingViewController
+    // MARK: - LibSessionRespondingViewController
     
     let isConversationList: Bool = true
     

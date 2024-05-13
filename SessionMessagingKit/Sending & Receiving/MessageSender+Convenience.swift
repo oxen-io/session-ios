@@ -70,7 +70,6 @@ extension MessageSender {
                 destination: destination,
                 threadId: threadId,
                 interactionId: interactionId,
-                isAlreadySyncMessage: false,
                 using: dependencies
             )
             return
@@ -84,8 +83,7 @@ extension MessageSender {
                 interactionId: interactionId,
                 details: MessageSendJob.Details(
                     destination: destination,
-                    message: message,
-                    isSyncMessage: isSyncMessage
+                    message: message
                 )
             ),
             canStartJob: true,
@@ -132,6 +130,7 @@ extension MessageSender {
         let threadId: String = {
             switch preparedSendData.destination {
                 case .contact(let publicKey): return publicKey
+                case .syncMessage(let originalRecipientPublicKey): return originalRecipientPublicKey
                 case .closedGroup(let groupPublicKey): return groupPublicKey
                 case .openGroup(let roomToken, let server, _, _, _):
                     return OpenGroup.idFor(roomToken: roomToken, server: server)

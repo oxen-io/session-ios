@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import SessionUtilitiesKit
@@ -10,10 +12,11 @@ public struct SnodeReceivedMessage: CustomDebugStringConvertible {
     
     public let info: SnodeReceivedMessageInfo
     public let namespace: SnodeAPI.Namespace
+    public let timestampMs: Int64
     public let data: Data
     
     init?(
-        snode: Snode,
+        snode: LibSession.Snode,
         publicKey: String,
         namespace: SnodeAPI.Namespace,
         rawMessage: GetMessagesResponse.RawMessage
@@ -31,10 +34,18 @@ public struct SnodeReceivedMessage: CustomDebugStringConvertible {
             expirationDateMs: (rawMessage.expiration ?? SnodeReceivedMessage.defaultExpirationSeconds)
         )
         self.namespace = namespace
+        self.timestampMs = rawMessage.timestampMs
         self.data = data
     }
     
     public var debugDescription: String {
-        return "{\"hash\":\(info.hash),\"expiration\":\(info.expirationDateMs),\"data\":\"\(data.base64EncodedString())\"}"
+        """
+        SnodeReceivedMessage(
+            hash: \(info.hash),
+            expirationMs: \(info.expirationDateMs),
+            timestampMs: \(timestampMs),
+            data: \(data.base64EncodedString())
+        )
+        """
     }
 }

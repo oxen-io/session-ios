@@ -1,4 +1,6 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import SessionSnodeKit

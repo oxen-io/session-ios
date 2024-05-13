@@ -11,7 +11,7 @@ public struct JobDependencies: Codable, Equatable, Hashable, FetchableRecord, Pe
     public static let dependant = hasOne(Job.self, using: Job.dependencyForeignKey)
     
     public typealias Columns = CodingKeys
-    public enum CodingKeys: String, CodingKey, ColumnExpression {
+    public enum CodingKeys: String, CodingKey, ColumnExpression, CaseIterable {
         case jobId
         case dependantId
     }

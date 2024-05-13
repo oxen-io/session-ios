@@ -2,7 +2,6 @@
 
 import UIKit
 import Combine
-import Reachability
 import SignalUtilitiesKit
 import SessionUIKit
 import SignalCoreKit
@@ -37,11 +36,12 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     var hasSelectedCell: Bool = false
     var imageInfos = [GiphyImageInfo]()
     
-    private let kCellReuseIdentifier = "kCellReuseIdentifier"
+    private let kCellReuseIdentifier = "kCellReuseIdentifier"   // stringlint:disable
 
     var progressiveSearchTimer: Timer?
     
     private var disposables: Set<AnyCancellable> = Set()
+    private var networkStatusCallbackId: UUID?
 
     // MARK: - Initialization
 
@@ -61,6 +61,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     }
 
     deinit {
+        LibSession.removeNetworkChangedCallback(callbackId: networkStatusCallbackId)
         NotificationCenter.default.removeObserver(self)
 
         progressiveSearchTimer?.invalidate()
@@ -72,15 +73,6 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         Logger.info("")
 
         // Prod cells to try to load when app becomes active.
-        ensureCellState()
-    }
-
-    @objc func reachabilityChanged() {
-        AssertIsOnMainThread()
-
-        Logger.info("")
-
-        // Prod cells to try to load when connectivity changes.
         ensureCellState()
     }
 
@@ -113,13 +105,14 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         navigationItem.titleView = titleLabel
 
         createViews()
+        
+        networkStatusCallbackId = LibSession.onNetworkStatusChanged { [weak self] _ in
+            DispatchQueue.main.async {
+                // Prod cells to try to load when connectivity changes.
+                self?.ensureCellState()
+            }
+        }
 
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(reachabilityChanged),
-            name: .reachabilityChanged,
-            object: nil
-        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(didBecomeActive),

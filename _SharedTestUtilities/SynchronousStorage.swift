@@ -120,10 +120,10 @@ class SynchronousStorage: Storage {
     ) {
         do {
             let result: T = try write(using: dependencies, updates: updates) ?? { throw StorageError.failedToSave }()
-            write { db in try completion(db, Result.success(result)) }
+            write(using: dependencies) { db in try completion(db, Result.success(result)) }
         }
         catch {
-            write { db in try completion(db, Result.failure(error)) }
+            write(using: dependencies) { db in try completion(db, Result.failure(error)) }
         }
     }
     
