@@ -95,7 +95,6 @@ public enum MessageReceiver {
                         threadIdGenerator = { message in
                             switch message {
                                 case let message as VisibleMessage: return (message.syncTarget ?? sender)
-                                case let message as ExpirationTimerUpdate: return (message.syncTarget ?? sender)
                                 default: return sender
                             }
                         }

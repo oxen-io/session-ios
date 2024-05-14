@@ -287,42 +287,9 @@ extension MessageSendJob {
                 throw StorageError.decodingFailed
             }
             
-            let message: Message = try variant.decode(from: container, forKey: .message)
-            var destination: Message.Destination = try container.decode(Message.Destination.self, forKey: .destination)
-            
-            /// Handle the legacy 'isSyncMessage' flag - this flag was deprecated in `2.5.2` (April 2024) and can be removed in a
-            /// subsequent release after May 2024
-            if ((try? container.decode(Bool.self, forKey: .isSyncMessage)) ?? false) {
-                switch (destination, message) {
-                    case (.contact, let message as VisibleMessage):
-                        guard let targetPublicKey: String = message.syncTarget else {
-                            SNLog("Unable to decode messageSend job due to missing syncTarget")
-                            throw StorageError.decodingFailed
-                        }
-                        
-                        destination = .syncMessage(originalRecipientPublicKey: targetPublicKey)
-                        
-                    case (.contact, let message as ExpirationTimerUpdate):
-                        guard let targetPublicKey: String = message.syncTarget else {
-                            SNLog("Unable to decode messageSend job due to missing syncTarget")
-                            throw StorageError.decodingFailed
-                        }
-                        
-                        destination = .syncMessage(originalRecipientPublicKey: targetPublicKey)
-                        
-                    case (.contact(let publicKey), _):
-                        SNLog("Sync message in messageSend job was missing explicit syncTarget (falling back to specified value)")
-                        destination = .syncMessage(originalRecipientPublicKey: publicKey)
-                        
-                    default:
-                        SNLog("Unable to decode messageSend job due to invalid sync message state")
-                        throw StorageError.decodingFailed
-                }
-            }
-            
             self = Details(
-                destination: destination,
-                message: message
+                destination: try container.decode(Message.Destination.self, forKey: .destination),
+                message: try variant.decode(from: container, forKey: .message)
             )
         }
         
