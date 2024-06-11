@@ -27,6 +27,7 @@
 
 # Need to set the path or we won't find cmake
 PATH=${PATH}:/usr/local/bin:/opt/local/bin:/opt/homebrew/bin:/opt/homebrew/opt/m4/bin:/sbin/md5
+required_packages=("cmake" "m4" "pkg-config")
 
 exec 3>&1 # Save original stdout
 
@@ -34,14 +35,22 @@ exec 3>&1 # Save original stdout
 mkdir -p "${TARGET_BUILD_DIR}/libSessionUtil"
 
 echo "Validating build requirements"
+missing_packages=()
+
+for package in "${required_packages[@]}"; do
+  if ! which "$package" > /dev/null; then
+    missing_packages+=("$package")
+  fi
+done
+
+if [ ${#missing_packages[@]} -ne 0 ]; then
+  packages=$(echo "${missing_packages[@]}")
+  echo "error: Some build dependencies are not installed, please install them ('brew install ${packages}'):"
+  exit 1
+fi
 
 # Ensure the build directory exists (in case we need it before XCode creates it)
 mkdir -p "${TARGET_BUILD_DIR}"
-
-if ! which cmake > /dev/null; then
-  echo "error: cmake is required to build, please install (can install via homebrew with 'brew install cmake')."
-  exit 0
-fi
 
 # Check if we have the `LibSession-Util` submodule checked out and if not (depending on the 'SHOULD_AUTO_INIT_SUBMODULES' argument) perform the checkout
 if [ ! -d "${SRCROOT}/LibSession-Util" ] || [ ! -d "${SRCROOT}/LibSession-Util/src" ] || [ ! "$(ls -A "${SRCROOT}/LibSession-Util")" ]; then
@@ -187,6 +196,8 @@ submodule_check=ON
 if [ "$CONFIGURATION" == "Debug" ]; then
     submodule_check=OFF
 fi
+
+echo "CMake build logs: ${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
 
 # Build the individual architectures
 for i in "${!TARGET_ARCHS[@]}"; do
