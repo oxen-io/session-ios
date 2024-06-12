@@ -178,14 +178,16 @@ internal extension LibSession {
         guard conf != nil else { throw LibSessionError.nilConfigObject }
         
         // Update the name
-        var updatedName: [CChar] = profile.name.cArray.nullTerminated()
+        var updatedName: [CChar] = try profile.name.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
         user_profile_set_name(conf, &updatedName)
+        try LibSessionError.throwIfNeeded(conf)
         
         // Either assign the updated profile pic, or sent a blank profile pic (to remove the current one)
         var profilePic: user_profile_pic = user_profile_pic()
         profilePic.url = profile.profilePictureUrl.toLibSession()
         profilePic.key = profile.profileEncryptionKey.toLibSession()
         user_profile_set_pic(conf, profilePic)
+        try LibSessionError.throwIfNeeded(conf)
     }
     
     static func updateNoteToSelf(

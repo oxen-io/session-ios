@@ -39,25 +39,24 @@ public final class OpenGroupManager {
                 .defaulting(to: [])
             
             // Update the cache state and re-create all of the pollers
-            dependencies.caches.mutate(cache: .openGroupManager) { cache in
+            let pollers: [OpenGroupAPI.PollerType] = dependencies.caches.mutate(cache: .openGroupManager) { cache in
                 cache.isPolling = true
-                cache.pollers = servers
-                    .reduce(into: [:]) { result, server in
-                        result[server.lowercased()]?.stop() // Should never occur
-                        result[server.lowercased()] = OpenGroupAPI.Poller(for: server.lowercased())
-                    }
+                
+                return servers.map { server -> OpenGroupAPI.PollerType in cache.getOrCreatePoller(for: server.lowercased()) }
             }
             
-            // Now that the pollers have been created actually start them
-            dependencies.caches[.openGroupManager].pollers
-                .forEach { _, poller in poller.startIfNeeded(using: dependencies) }
+            // Need to do this outside of the mutate as the poller will attempt to read from the
+            // 'openGroupManager' cache which is not allowed
+            pollers.forEach { poller in
+                poller.stop() // Should never be an issue
+                poller.startIfNeeded(using: dependencies)
+            }
         }
     }
 
     public func stopPolling(using dependencies: Dependencies = Dependencies()) {
         dependencies.caches.mutate(cache: .openGroupManager) {
-            $0.pollers.forEach { _, openGroupPoller in openGroupPoller.stop() }
-            $0.pollers.removeAll()
+            $0.stopAndRemoveAllPollers()
             $0.isPolling = false
         }
     }
@@ -142,7 +141,7 @@ public final class OpenGroupManager {
         }
         
         // First check if there is no poller for the specified server
-        if Set(dependencies.caches[.openGroupManager].pollers.keys).intersection(serverOptions).isEmpty {
+        if Set(dependencies.caches[.openGroupManager].serversBeingPolled).intersection(serverOptions).isEmpty {
             return false
         }
         
@@ -291,6 +290,20 @@ public final class OpenGroupManager {
                             on: targetServer,
                             using: dependencies
                         ) {
+                            // Dispatch async to the workQueue to prevent holding up the thread
+                            OpenGroupAPI.workQueue.async(using: dependencies) {
+                                // (Re)start the poller if needed (want to force it to poll immediately in the next
+                                // run loop to avoid a big delay before the next poll)
+                                let poller: OpenGroupAPI.PollerType = dependencies.caches.mutate(cache: .openGroupManager) {
+                                    $0.getOrCreatePoller(for: server.lowercased())
+                                }
+                                
+                                // Need to do this outside of the mutate as the poller will attempt to read from the
+                                // 'openGroupManager' cache which is not allowed
+                                poller.stop()
+                                poller.startIfNeeded(using: dependencies)
+                            }
+                            
                             resolver(Result.success(()))
                         }
                     }
@@ -336,9 +349,9 @@ public final class OpenGroupManager {
             .defaulting(to: 1)
         
         if numActiveRooms == 1, let server: String = server?.lowercased() {
-            let poller = dependencies.caches[.openGroupManager].pollers[server]
-            poller?.stop()
-            dependencies.caches.mutate(cache: .openGroupManager) { $0.pollers[server] = nil }
+            dependencies.caches.mutate(cache: .openGroupManager) {
+                $0.stopAndRemovePoller(for: server)
+            }
         }
         
         // Remove all the data (everything should cascade delete)
@@ -498,17 +511,6 @@ public final class OpenGroupManager {
             // Dispatch async to the workQueue to prevent holding up the DBWrite thread from the
             // above transaction
             OpenGroupAPI.workQueue.async(using: dependencies) {
-                // (Re)start the poller if needed (want to force it to poll immediately in the next
-                // run loop to avoid a big delay before the next poll)
-                dependencies.caches.mutate(cache: .openGroupManager) {
-                    $0.pollers[server.lowercased()]?.stop()
-                    $0.pollers[server.lowercased()] = OpenGroupAPI.Poller(for: server.lowercased())
-                }
-                OpenGroupAPI.workQueue.async(using: dependencies) {
-                    dependencies.caches[.openGroupManager].pollers[server.lowercased()]?
-                        .startIfNeeded(using: dependencies)
-                }
-                
                 /// Start downloading the room image (if we don't have one or it's been updated)
                 if
                     let imageId: String = (pollInfo.details?.imageId ?? openGroup.imageId),
@@ -1127,7 +1129,7 @@ public final class OpenGroupManager {
                 DispatchQueue.global(qos: .background).async(using: dependencies) {
                     // Hold on to the publisher until it has completed at least once
                     dependencies.storage
-                        .readPublisher { db -> (Data?, Network.PreparedRequest<Data>?) in
+                        .readPublisher { db -> (Data?, Network.Destination) in
                             if canUseExistingImage {
                                 let maybeExistingData: Data? = try? OpenGroup
                                     .select(.imageData)
@@ -1136,36 +1138,38 @@ public final class OpenGroupManager {
                                     .fetchOne(db)
                                 
                                 if let existingData: Data = maybeExistingData {
-                                    return (existingData, nil)
+                                    return (existingData, .fileServer)
                                 }
+                            }
+                            
+                            guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
+                                throw StorageError.objectNotFound
                             }
                             
                             return (
                                 nil,
-                                try OpenGroupAPI
-                                    .preparedDownloadFile(
-                                        db,
-                                        fileId: fileId,
-                                        from: roomToken,
-                                        on: server,
-                                        using: dependencies
-                                    )
+                                try OpenGroupAPI.downloadDestination(
+                                    db,
+                                    fileId: fileId,
+                                    openGroup: openGroup,
+                                    using: dependencies
+                                )
                             )
                         }
-                        .flatMap { info in
-                            switch info {
-                                case (.some(let existingData), _):
+                        .flatMap { existingData, destination in
+                            switch existingData {
+                                case .some(let existingData):
                                     return Just(existingData)
                                         .setFailureType(to: Error.self)
                                         .eraseToAnyPublisher()
                                     
-                                case (_, .some(let preparedRequest)):
-                                    return preparedRequest.send(using: dependencies)
+                                case .none:
+                                    return dependencies.network
+                                        .send(
+                                            .downloadFile(from: destination),
+                                            using: dependencies
+                                        )
                                         .map { _, imageData in imageData }
-                                        .eraseToAnyPublisher()
-                                    
-                                default:
-                                    return Fail(error: NetworkError.invalidPreparedRequest)
                                         .eraseToAnyPublisher()
                             }
                         }
@@ -1216,12 +1220,31 @@ public extension OpenGroupManager {
         public var defaultRoomsPublisher: AnyPublisher<[DefaultRoomInfo], Error>?
         public var groupImagePublishers: [String: AnyPublisher<Data, Error>] = [:]
         
-        public var pollers: [String: OpenGroupAPI.Poller] = [:] // One for each server
         public var isPolling: Bool = false
+        public var serversBeingPolled: Set<String> { return Set(_pollers.keys) }
         
         /// Server URL to value
         public var hasPerformedInitialPoll: [String: Bool] = [:]
         public var timeSinceLastPoll: [String: TimeInterval] = [:]
+        
+        private var _pollers: [String: OpenGroupAPI.PollerType] = [:] // One for each server
+        public func getOrCreatePoller(for server: String) -> OpenGroupAPI.PollerType {
+            guard let poller: OpenGroupAPI.PollerType = _pollers[server.lowercased()] else {
+                let poller: OpenGroupAPI.Poller = OpenGroupAPI.Poller(for: server.lowercased())
+                _pollers[server.lowercased()] = poller
+                return poller
+            }
+            
+            return poller
+        }
+        public func stopAndRemovePoller(for server: String) {
+            _pollers[server.lowercased()]?.stop()
+            _pollers[server.lowercased()] = nil
+        }
+        public func stopAndRemoveAllPollers() {
+            _pollers.forEach { _, poller in poller.stop() }
+            _pollers.removeAll()
+        }
 
         fileprivate var _timeSinceLastOpen: TimeInterval?
         public func getTimeSinceLastOpen(using dependencies: Dependencies) -> TimeInterval {
@@ -1258,8 +1281,8 @@ public protocol OGMImmutableCacheType: ImmutableCacheType {
     var defaultRoomsPublisher: AnyPublisher<[OpenGroupManager.DefaultRoomInfo], Error>? { get }
     var groupImagePublishers: [String: AnyPublisher<Data, Error>] { get }
     
-    var pollers: [String: OpenGroupAPI.Poller] { get }
     var isPolling: Bool { get }
+    var serversBeingPolled: Set<String> { get }
     
     var hasPerformedInitialPoll: [String: Bool] { get }
     var timeSinceLastPoll: [String: TimeInterval] { get }
@@ -1271,13 +1294,17 @@ public protocol OGMCacheType: OGMImmutableCacheType, MutableCacheType {
     var defaultRoomsPublisher: AnyPublisher<[OpenGroupManager.DefaultRoomInfo], Error>? { get set }
     var groupImagePublishers: [String: AnyPublisher<Data, Error>] { get set }
     
-    var pollers: [String: OpenGroupAPI.Poller] { get set }
     var isPolling: Bool { get set }
+    var serversBeingPolled: Set<String> { get }
     
     var hasPerformedInitialPoll: [String: Bool] { get set }
     var timeSinceLastPoll: [String: TimeInterval] { get set }
     
     var pendingChanges: [OpenGroupAPI.PendingChange] { get set }
+    
+    func getOrCreatePoller(for server: String) -> OpenGroupAPI.PollerType
+    func stopAndRemovePoller(for server: String)
+    func stopAndRemoveAllPollers()
     
     func getTimeSinceLastOpen(using dependencies: Dependencies) -> TimeInterval
 }

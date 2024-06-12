@@ -200,6 +200,11 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         }
     }
     
+    deinit {
+        // Stop any audio playing when leaving the screen
+        stopAudio()
+    }
+    
     // MARK: - Thread Data
     
     private var _threadData: Atomic<SessionThreadViewModel>
@@ -411,7 +416,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         initialUnreadInteractionId: self?.initialUnreadInteractionId
                     ),
                     currentDataRetriever: { self?.interactionData },
-                    onDataChange: self?.onInteractionChange,
+                    onDataChangeRetriever: { self?.onInteractionChange },
                     onUnobservedDataChange: { updatedData, changeset in
                         self?.unobservedInteractionDataChanges = (changeset.isEmpty ?
                             nil :
@@ -539,6 +544,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         let currentUserProfile: Profile = Profile.fetchOrCreateCurrentUser()
         let interaction: Interaction = Interaction(
             threadId: threadData.threadId,
+            threadVariant: threadData.threadVariant,
             authorId: (threadData.currentUserBlinded15PublicKey ?? threadData.currentUserPublicKey),
             variant: .standardOutgoing,
             body: text,
@@ -666,6 +672,11 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     }
     
     private func forceUpdateDataIfPossible() {
+        // Ensure this is on the main thread as we access properties that could be accessed on other threads
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.async { [weak self] in self?.forceUpdateDataIfPossible() }
+        }
+        
         // If we can't get the current page data then don't bother trying to update (it's not going to work)
         guard let currentPageInfo: PagedData.PageInfo = self.pagedDataObserver?.pageInfo.wrappedValue else { return }
         
@@ -680,7 +691,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 initialUnreadInteractionId: initialUnreadInteractionId
             ),
             currentDataRetriever: { [weak self] in self?.interactionData },
-            onDataChange: self.onInteractionChange,
+            onDataChangeRetriever: { [weak self] in self?.onInteractionChange },
             onUnobservedDataChange: { [weak self] updatedData, changeset in
                 self?.unobservedInteractionDataChanges = (changeset.isEmpty ?
                     nil :
@@ -947,6 +958,12 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     }
     
     public func playOrPauseAudio(for viewModel: MessageViewModel) {
+        /// Ensure the `OWSAudioPlayer` logic is run on the main thread as it calls `MainAppContext.ensureSleepBlocking`
+        /// must run on the main thread (also there is no guarantee that `AVAudioPlayer` is thread safe so better safe than sorry)
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.sync { [weak self] in self?.playOrPauseAudio(for: viewModel) }
+        }
+        
         guard
             let attachment: Attachment = viewModel.attachments?.first,
             let originalFilePath: String = attachment.originalFilePath,
@@ -1000,6 +1017,12 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     }
     
     public func speedUpAudio(for viewModel: MessageViewModel) {
+        /// Ensure the `OWSAudioPlayer` logic is run on the main thread as it calls `MainAppContext.ensureSleepBlocking`
+        /// must run on the main thread (also there is no guarantee that `AVAudioPlayer` is thread safe so better safe than sorry)
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.sync { [weak self] in self?.speedUpAudio(for: viewModel) }
+        }
+        
         // If we aren't playing the specified item then just start playing it
         guard viewModel.id == currentPlayingInteraction.wrappedValue else {
             playOrPauseAudio(for: viewModel)
@@ -1016,7 +1039,19 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         updatedPlaybackInfo?.updateCallback(updatedPlaybackInfo, nil)
     }
     
+    public func stopAudioIfNeeded(for viewModel: MessageViewModel) {
+        guard viewModel.id == currentPlayingInteraction.wrappedValue else { return }
+        
+        stopAudio()
+    }
+    
     public func stopAudio() {
+        /// Ensure the `OWSAudioPlayer` logic is run on the main thread as it calls `MainAppContext.ensureSleepBlocking`
+        /// must run on the main thread (also there is no guarantee that `AVAudioPlayer` is thread safe so better safe than sorry)
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.sync { [weak self] in self?.stopAudio() }
+        }
+        
         audioPlayer.wrappedValue?.stop()
         
         currentPlayingInteraction.mutate { $0 = nil }
@@ -1072,13 +1107,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         updatedPlaybackInfo?.updateCallback(updatedPlaybackInfo, nil)
         
         // Clear out the currently playing record
-        currentPlayingInteraction.mutate { $0 = nil }
-        audioPlayer.mutate {
-            // Note: We clear the delegate and explicitly set to nil here as when the OWSAudioPlayer
-            // gets deallocated it triggers state changes which cause UI bugs when auto-playing
-            $0?.delegate = nil
-            $0 = nil
-        }
+        stopAudio()
         
         // If the next interaction is another voice message then autoplay it
         guard
@@ -1105,7 +1134,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 playbackRate: 1
             )
         
-        currentPlayingInteraction.mutate { $0 = nil }
+        stopAudio()
         playbackInfo.mutate { $0[interactionId] = updatedPlaybackInfo }
         updatedPlaybackInfo?.updateCallback(updatedPlaybackInfo, AttachmentError.invalidData)
     }

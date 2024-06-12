@@ -179,13 +179,11 @@ class HelpViewModel: SessionTableViewModel, NavigatableStateHolder, ObservableTa
         animated: Bool = true,
         onShareComplete: (() -> ())? = nil
     ) {
-        OWSLogger.info("[Version] \(SessionApp.versionInfo)")
-        DDLog.flushLog()
-        
-        let logFilePaths: [String] = AppEnvironment.shared.fileLogger.logFileManager.sortedLogFilePaths
+        Log.info("[Version] \(SessionApp.versionInfo)")
+        Log.flush()
         
         guard
-            let latestLogFilePath: String = logFilePaths.first,
+            let latestLogFilePath: String = Log.logFilePath(),
             Singleton.hasAppContext,
             let viewController: UIViewController = Singleton.appContext.frontmostViewController
         else { return }

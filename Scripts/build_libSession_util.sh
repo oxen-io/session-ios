@@ -192,9 +192,11 @@ fi
 rm -rf "${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
 
 submodule_check=ON
+build_type="Release"
 
 if [ "$CONFIGURATION" == "Debug" ]; then
     submodule_check=OFF
+    build_type="Debug"
 fi
 
 echo "CMake build logs: ${TARGET_BUILD_DIR}/libSessionUtil/libsession_util_output.log"
@@ -219,7 +221,8 @@ for i in "${!TARGET_ARCHS[@]}"; do
         -DBUILD_TESTS=OFF \
         -DBUILD_STATIC_DEPS=ON \
         -DENABLE_VISIBILITY=ON \
-        -DSUBMODULE_CHECK=$submodule_check
+        -DSUBMODULE_CHECK=$submodule_check \
+        -DCMAKE_BUILD_TYPE=$build_type
 
     # Capture the exit status of the ./utils/static-bundle.sh command
     EXIT_STATUS=$?

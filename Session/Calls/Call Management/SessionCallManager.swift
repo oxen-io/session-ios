@@ -146,7 +146,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             
             if Singleton.hasAppContext && Singleton.appContext.isInBackground {
                 (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()
-                DDLog.flushLog()
+                Log.flush()
             }
         }
         
@@ -197,8 +197,9 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             
             // Stop all jobs except for message sending and when completed suspend the database
             JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) {
+                LibSession.suspendNetworkAccess()
                 Storage.suspendDatabaseAccess()
-                LibSession.closeNetworkConnections()
+                Log.flush()
             }
         }
     }

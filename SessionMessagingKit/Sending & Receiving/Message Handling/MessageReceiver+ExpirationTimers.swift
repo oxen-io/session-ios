@@ -16,6 +16,7 @@ extension MessageReceiver {
     ) throws {
         guard proto.hasExpirationType || proto.hasExpirationTimer else { return }
         guard
+            threadVariant != .community,
             let sender: String = message.sender,
             let timestampMs: UInt64 = message.sentTimestamp
         else {

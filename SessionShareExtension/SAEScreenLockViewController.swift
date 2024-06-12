@@ -26,10 +26,6 @@ final class SAEScreenLockViewController: ScreenLockViewController {
         fatalError("init(coder:) has not been implemented")
     }
     
-    deinit {
-        OWSLogger.verbose("Dealloc: \(type(of: self))")
-    }
-    
     // MARK: - UI
     
     private lazy var titleLabel: UILabel = {
@@ -107,21 +103,21 @@ final class SAEScreenLockViewController: ScreenLockViewController {
         // If we're already showing the auth UI; abort.
         if self.isShowingAuthUI { return }
         
-        OWSLogger.info("try to unlock screen lock")
+        Log.info("try to unlock screen lock")
 
         isShowingAuthUI = true
         
         ScreenLock.shared.tryToUnlockScreenLock(
             success: { [weak self] in
                 AssertIsOnMainThread()
-                OWSLogger.info("unlock screen lock succeeded.")
+                Log.info("unlock screen lock succeeded.")
                 
                 self?.isShowingAuthUI = false
                 self?.shareViewDelegate?.shareViewWasUnlocked()
             },
             failure: { [weak self] error in
                 AssertIsOnMainThread()
-                OWSLogger.info("unlock screen lock failed.")
+                Log.info("unlock screen lock failed.")
                 
                 self?.isShowingAuthUI = false
                 self?.ensureUI()
@@ -129,7 +125,7 @@ final class SAEScreenLockViewController: ScreenLockViewController {
             },
             unexpectedFailure: { [weak self] error in
                 AssertIsOnMainThread()
-                OWSLogger.info("unlock screen lock unexpectedly failed.")
+                Log.info("unlock screen lock unexpectedly failed.")
                 
                 self?.isShowingAuthUI = false
                 
@@ -142,7 +138,7 @@ final class SAEScreenLockViewController: ScreenLockViewController {
             },
             cancel: { [weak self] in
                 AssertIsOnMainThread()
-                OWSLogger.info("unlock screen lock cancelled.")
+                Log.info("unlock screen lock cancelled.")
                 
                 self?.isShowingAuthUI = false
                 self?.ensureUI()
@@ -174,7 +170,7 @@ final class SAEScreenLockViewController: ScreenLockViewController {
     
     func unlockButtonWasTapped() {
         AssertIsOnMainThread()
-        OWSLogger.info("unlockButtonWasTapped")
+        Log.info("unlockButtonWasTapped")
         
         self.tryToPresentAuthUIToUnlockScreenLock()
     }
@@ -182,7 +178,7 @@ final class SAEScreenLockViewController: ScreenLockViewController {
     // MARK: - Transitions
     
     @objc private func dismissPressed() {
-        OWSLogger.debug("unlock screen lock cancelled.")
+        Log.debug("unlock screen lock cancelled.")
         
         self.cancelShareExperience()
     }

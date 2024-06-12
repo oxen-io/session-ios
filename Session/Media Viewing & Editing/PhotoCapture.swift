@@ -503,7 +503,7 @@ class CaptureOutput {
         movieOutput.movieFragmentInterval = CMTime.invalid
         
         // Ensure the recorded movie can't go over the maximum file server size
-        movieOutput.maxRecordedFileSize = Int64(FileServerAPI.maxFileSize)
+        movieOutput.maxRecordedFileSize = Int64(Network.maxFileSize)
     }
 
     var photoOutput: AVCaptureOutput? {

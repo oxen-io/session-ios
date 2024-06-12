@@ -142,6 +142,7 @@ extension MessageReceiver {
         _ = try Interaction(
             serverHash: message.serverHash,
             threadId: unblindedThread.id,
+            threadVariant: unblindedThread.variant,
             authorId: senderId,
             variant: .infoMessageRequestAccepted,
             timestampMs: (

@@ -167,7 +167,11 @@ public enum MessageReceiver {
         message.sentTimestamp = sentTimestamp
         message.receivedTimestamp = UInt64(SnodeAPI.currentOffsetTimestampMs())
         message.openGroupServerMessageId = openGroupServerMessageId
-        message.attachDisappearingMessagesConfiguration(from: proto)
+        
+        // Ignore disappearing message settings in communities (in case of modified clients)
+        if threadVariant != .community {
+            message.attachDisappearingMessagesConfiguration(from: proto)
+        }
         
         // Don't process the envelope any further if the sender is blocked
         guard (try? Contact.fetchOne(db, id: sender))?.isBlocked != true || message.processWithBlockedSender else {
@@ -324,12 +328,13 @@ public enum MessageReceiver {
         }
         
         // Perform any required post-handling logic
-        try MessageReceiver.postHandleMessage(db, threadId: threadId, message: message)
+        try MessageReceiver.postHandleMessage(db, threadId: threadId, threadVariant: threadVariant, message: message)
     }
     
     public static func postHandleMessage(
         _ db: Database,
         threadId: String,
+        threadVariant: SessionThread.Variant,
         message: Message
     ) throws {
         // When handling any message type which has related UI we want to make sure the thread becomes
@@ -360,15 +365,17 @@ public enum MessageReceiver {
                 
                 // Start the disappearing messages timer if needed
                 // For disappear after send, this is necessary so the message will disappear even if it is not read
-                db.afterNextTransactionNestedOnce(
-                    dedupeId: "PostInsertDisappearingMessagesJob",  // stringlint:disable
-                    onCommit: { db in
-                        JobRunner.upsert(
-                            db,
-                            job: DisappearingMessagesJob.updateNextRunIfNeeded(db)
-                        )
-                    }
-                )
+                if threadVariant != .community {
+                    db.afterNextTransactionNestedOnce(
+                        dedupeId: "PostInsertDisappearingMessagesJob",  // stringlint:disable
+                        onCommit: { db in
+                            JobRunner.upsert(
+                                db,
+                                job: DisappearingMessagesJob.updateNextRunIfNeeded(db)
+                            )
+                        }
+                    )
+                }
 
                 guard !isCurrentlyVisible else { return }
                 

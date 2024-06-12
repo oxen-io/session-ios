@@ -76,7 +76,6 @@ public final class ClosedGroupPoller: Poller {
         let limit: Double = (12 * 60 * 60)
         let a: TimeInterval = ((ClosedGroupPoller.maxPollInterval - minPollInterval) / limit)
         let nextPollInterval: TimeInterval = a * min(timeSinceLastMessage, limit) + minPollInterval
-        SNLog("Next poll interval for closed group with public key: \(publicKey) is \(nextPollInterval) s.")
         
         return nextPollInterval
     }

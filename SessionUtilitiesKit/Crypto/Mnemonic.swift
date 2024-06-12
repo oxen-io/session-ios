@@ -118,7 +118,9 @@ public enum Mnemonic {
     }
     
     public static func decode(mnemonic: String, language: Language = .english) throws -> String {
-        var words: [String] = mnemonic.components(separatedBy: .whitespacesAndNewlines)
+        var words: [String] = mnemonic
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
         let truncatedWordSet: [String] = language.loadTruncatedWordSet()
         let prefixLength: Int = language.prefixLength
         var result = ""
@@ -130,6 +132,13 @@ public enum Mnemonic {
         
         // Get checksum word
         let checksumWord = words.popLast()!
+        
+        // Limit the words to a multiple of 3 to avoid index-out-of-bounds issues
+        let remainder: Int = (words.count % 3)
+        
+        if remainder > 0 {
+            words.removeLast(remainder)
+        }
         
         // Decode
         for chunkStartIndex in stride(from: 0, to: words.count, by: 3) {

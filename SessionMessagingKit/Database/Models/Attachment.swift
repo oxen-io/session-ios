@@ -1065,7 +1065,7 @@ extension Attachment {
         // dependant on the attachment being uploaded (in this case the attachment has
         // already been uploaded so just succeed)
         guard state != .uploaded else {
-            return Just(Attachment.fileId(for: self.downloadUrl))
+            return Just(self.downloadUrl)
                 .setFailureType(to: Error.self)
                 .eraseToAnyPublisher()
         }
@@ -1079,8 +1079,8 @@ extension Attachment {
         
         let attachmentId: String = self.id
         
-        return Storage.shared
-            .writePublisher { db -> (Network.PreparedRequest<FileUploadResponse>?, String?, Data?, Data?) in
+        return Just(())
+            .tryFlatMap { _ -> AnyPublisher<(Network.Destination?, String?, Data?, Data?), Error> in
                 // If the attachment is a downloaded attachment, check if it came from
                 // the server and if so just succeed immediately (no use re-uploading
                 // an attachment that is already present on the server) - or if we want
@@ -1096,11 +1096,13 @@ extension Attachment {
                     digest == nil
                 else {
                     // Save the final upload info
-                    _ = try? Attachment
-                        .filter(id: attachmentId)
-                        .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploaded))
-                    
-                    return (nil, Attachment.fileId(for: self.downloadUrl), nil, nil)
+                    return Storage.shared.writePublisher { db -> (Network.Destination?, String?, Data?, Data?) in
+                        _ = try? Attachment
+                            .filter(id: attachmentId)
+                            .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploaded))
+                        
+                        return (nil, self.downloadUrl, nil, nil)
+                    }
                 }
                 
                 var encryptionKey: NSData = NSData()
@@ -1118,38 +1120,35 @@ extension Attachment {
                 
                 // Check the file size
                 SNLog("File size: \(data.count) bytes.")
-                if data.count > FileServerAPI.maxFileSize { throw NetworkError.maxFileSizeExceeded }
+                if data.count > Network.maxFileSize { throw NetworkError.maxFileSizeExceeded }
                 
-                // Update the attachment to the 'uploading' state
-                _ = try? Attachment
-                    .filter(id: attachmentId)
-                    .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploading))
-                
-                // We need database access for OpenGroup uploads so generate prepared data
-                let preparedSendData: Network.PreparedRequest<FileUploadResponse>? = try {
+                return Storage.shared.writePublisher { db -> (Network.Destination?, String?, Data?, Data?) in
+                    // Update the attachment to the 'uploading' state
+                    _ = try? Attachment
+                        .filter(id: attachmentId)
+                        .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploading))
+                    
+                    
                     switch destination {
                         case .openGroup(let openGroup):
-                            return try OpenGroupAPI
-                                .preparedUploadFile(
+                            return (
+                                try OpenGroupAPI.uploadDestination(
                                     db,
-                                    bytes: data.bytes,
-                                    to: openGroup.roomToken,
-                                    on: openGroup.server,
+                                    data: data,
+                                    openGroup: openGroup,
                                     using: dependencies
-                                )
+                                ),
+                                nil,
+                                nil,
+                                nil
+                            )
                         
-                        default: return nil
+                        default:
+                            return (.fileServer, nil, encryptionKey as Data, digest as Data)
                     }
-                }()
-                
-                return (
-                    preparedSendData,
-                    nil,
-                    (destination.shouldEncrypt ? encryptionKey as Data : nil),
-                    (destination.shouldEncrypt ? digest as Data : nil)
-                )
+                }
             }
-            .flatMap { preparedRequest, existingFileId, encryptionKey, digest -> AnyPublisher<(String?, Data?, Data?), Error> in
+            .tryFlatMap { maybeDestination, existingFileId, encryptionKey, digest -> AnyPublisher<(String?, Data?, Data?), Error> in
                 // No need to upload if the file was already uploaded
                 if let fileId: String = existingFileId {
                     return Just((fileId, encryptionKey, digest))
@@ -1157,24 +1156,31 @@ extension Attachment {
                         .eraseToAnyPublisher()
                 }
                 
-                switch destination {
-                    case .openGroup:
-                        return preparedRequest.send(using: dependencies)
-                            .map { _, response -> (String, Data?, Data?) in (response.id, encryptionKey, digest) }
-                            .eraseToAnyPublisher()
-                        
-                    case .fileServer:
-                        return FileServerAPI.upload(data)
-                            .map { response -> (String, Data?, Data?) in (response.id, encryptionKey, digest) }
-                            .eraseToAnyPublisher()
-                }
+                guard let destination: Network.Destination = maybeDestination else { throw NetworkError.invalidURL }
+                
+                return LibSession.uploadToServer(data, to: destination, fileName: nil, using: dependencies)
+                    .map { _, response -> (String, Data?, Data?) in (response.id, encryptionKey, digest) }
+                    .eraseToAnyPublisher()
             }
-            .flatMap { fileId, encryptionKey, digest -> AnyPublisher<String?, Error> in
+            .tryFlatMap { fileId, encryptionKey, digest -> AnyPublisher<String?, Error> in
+                let downloadUrl: URL? = try fileId.map { fileId in
+                    switch destination {
+                        case .fileServer: return try Network.fileServerDownloadUrlFor(fileId: fileId)
+                        case .openGroup(let openGroup):
+                            return try OpenGroupAPI
+                                .downloadUrlFor(
+                                    fileId: fileId,
+                                    server: openGroup.server,
+                                    roomToken: openGroup.roomToken
+                                )
+                    }
+                }
+                
                 /// Save the final upload info
                 ///
                 /// **Note:** We **MUST** use the `.with` function here to ensure the `isValid` flag is
                 /// updated correctly
-                Storage.shared
+                return Storage.shared
                     .writePublisher { db in
                         try self
                             .with(
@@ -1184,13 +1190,13 @@ extension Attachment {
                                     self.creationTimestamp ??
                                     (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000)
                                 ),
-                                downloadUrl: fileId.map { "\(FileServerAPI.server)/file/\($0)" },
+                                downloadUrl: downloadUrl?.absoluteString,
                                 encryptionKey: encryptionKey,
                                 digest: digest
                             )
                             .saved(db)
                     }
-                    .map { _ in fileId }
+                    .map { _ in downloadUrl?.absoluteString }
                     .eraseToAnyPublisher()
             }
             .handleEvents(

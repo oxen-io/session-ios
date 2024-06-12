@@ -152,6 +152,7 @@ extension MessageReceiver {
             )
         )
         let messageExpirationInfo: Message.MessageExpirationInfo = Message.getMessageExpirationInfo(
+            threadVariant: thread.variant,
             wasRead: wasRead,
             serverExpirationTimestamp: serverExpirationTimestamp,
             expiresInSeconds: message.expiresInSeconds,
@@ -161,6 +162,7 @@ extension MessageReceiver {
             interaction = try Interaction(
                 serverHash: message.serverHash, // Keep track of server hash
                 threadId: thread.id,
+                threadVariant: thread.variant,
                 authorId: sender,
                 variant: variant,
                 body: message.text,
@@ -219,6 +221,7 @@ extension MessageReceiver {
                     Message.getExpirationForOutgoingDisappearingMessages(
                         db,
                         threadId: threadId,
+                        threadVariant: threadVariant,
                         variant: variant,
                         serverHash: message.serverHash,
                         expireInSeconds: message.expiresInSeconds
@@ -246,6 +249,7 @@ extension MessageReceiver {
             Message.updateExpiryForDisappearAfterReadMessages(
                 db,
                 threadId: threadId,
+                threadVariant: threadVariant,
                 serverHash: message.serverHash,
                 expiresInSeconds: message.expiresInSeconds,
                 expiresStartedAtMs: message.expiresStartedAtMs
@@ -255,6 +259,7 @@ extension MessageReceiver {
         Message.getExpirationForOutgoingDisappearingMessages(
             db,
             threadId: threadId,
+            threadVariant: threadVariant,
             variant: variant,
             serverHash: message.serverHash,
             expireInSeconds: message.expiresInSeconds

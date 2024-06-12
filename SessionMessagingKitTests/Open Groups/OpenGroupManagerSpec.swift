@@ -174,11 +174,20 @@ class OpenGroupManagerSpec: QuickSpec {
                 cache.when { $0.encodedPublicKey }.thenReturn("05\(TestConstants.publicKey)")
             }
         )
+        @TestState var mockPoller: MockOGPoller! = MockOGPoller(
+            initialSetup: { poller in
+                poller.when { $0.stop() }.thenReturn(())
+                poller.when { $0.startIfNeeded(using: any()) }.thenReturn(())
+            }
+        )
         @TestState var mockOGMCache: MockOGMCache! = MockOGMCache(
             initialSetup: { cache in
                 cache.when { $0.pendingChanges }.thenReturn([])
-                cache.when { $0.pollers = any() }.thenReturn(())
                 cache.when { $0.isPolling = any() }.thenReturn(())
+                cache.when { $0.serversBeingPolled }.thenReturn([])
+                cache.when { $0.hasPerformedInitialPoll }.thenReturn([:])
+                cache.when { $0.timeSinceLastPoll }.thenReturn([:])
+                cache.when { $0.getTimeSinceLastOpen(using: any()) }.thenReturn(0)
                 cache
                     .when { $0.defaultRoomsPublisher = any(type: [OpenGroupManager.DefaultRoomInfo].self) }
                     .thenReturn(())
@@ -188,6 +197,9 @@ class OpenGroupManagerSpec: QuickSpec {
                 cache
                     .when { $0.pendingChanges = any(type: OpenGroupAPI.PendingChange.self) }
                     .thenReturn(())
+                cache.when { $0.getOrCreatePoller(for: any()) }.thenReturn(mockPoller)
+                cache.when { $0.stopAndRemovePoller(for: any()) }.thenReturn(())
+                cache.when { $0.stopAndRemoveAllPollers() }.thenReturn(())
             }
         )
         @TestState var mockCaches: MockCaches! = MockCaches()
@@ -209,13 +221,6 @@ class OpenGroupManagerSpec: QuickSpec {
         
         // MARK: - an OpenGroupManager
         describe("an OpenGroupManager") {
-            
-            afterEach {
-                // Just in case the shared instance had pollers created we should stop them
-                OpenGroupManager.shared.stopPolling()
-                openGroupManager.stopPolling()
-            }
-            
             // MARK: -- cache data
             context("cache data") {
                 // MARK: ---- defaults the time since last open to greatestFiniteMagnitude
@@ -293,7 +298,6 @@ class OpenGroupManagerSpec: QuickSpec {
                         }
                         .thenReturn(0)
                     mockOGMCache.when { $0.isPolling }.thenReturn(false)
-                    mockOGMCache.when { $0.pollers }.thenReturn([:])
                     
                     mockUserDefaults
                         .when { (defaults: inout any UserDefaultsType) -> Any? in
@@ -308,10 +312,11 @@ class OpenGroupManagerSpec: QuickSpec {
                     
                     expect(mockOGMCache)
                         .to(call(matchingParameters: true) {
-                            $0.pollers = [
-                                "testserver": OpenGroupAPI.Poller(for: "testserver"),
-                                "testserver1": OpenGroupAPI.Poller(for: "testserver1")
-                            ]
+                            $0.getOrCreatePoller(for: "testserver")
+                        })
+                    expect(mockOGMCache)
+                        .to(call(matchingParameters: true) {
+                            $0.getOrCreatePoller(for: "testserver1")
                         })
                 }
                 
@@ -329,7 +334,7 @@ class OpenGroupManagerSpec: QuickSpec {
                     
                     openGroupManager.startPolling(using: dependencies)
                     
-                    expect(mockOGMCache).toNot(call { $0.pollers })
+                    expect(mockOGMCache).toNot(call { $0.getOrCreatePoller(for: any()) })
                 }
             }
             
@@ -352,14 +357,13 @@ class OpenGroupManagerSpec: QuickSpec {
                     }
                     
                     mockOGMCache.when { $0.isPolling }.thenReturn(true)
-                    mockOGMCache.when { $0.pollers }.thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
                 }
                 
                 // MARK: ---- removes all pollers
                 it("removes all pollers") {
                     openGroupManager.stopPolling(using: dependencies)
                     
-                    expect(mockOGMCache).to(call(matchingParameters: true) { $0.pollers = [:] })
+                    expect(mockOGMCache).to(call(matchingParameters: true) { $0.stopAndRemoveAllPollers() })
                 }
                 
                 // MARK: ---- updates the isPolling flag
@@ -443,13 +447,12 @@ class OpenGroupManagerSpec: QuickSpec {
             context("when checking it has an existing open group") {
                 // MARK: ---- when there is a thread for the room and the cache has a poller
                 context("when there is a thread for the room and the cache has a poller") {
+                    beforeEach {
+                        mockOGMCache.when { $0.serversBeingPolled }.thenReturn(["testserver"])
+                    }
+                    
                     // MARK: ------ for the no-scheme variant
                     context("for the no-scheme variant") {
-                        beforeEach {
-                            mockOGMCache.when { $0.pollers }
-                                .thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
-                        }
-                        
                         // MARK: -------- returns true when no scheme is provided
                         it("returns true when no scheme is provided") {
                             expect(
@@ -501,11 +504,6 @@ class OpenGroupManagerSpec: QuickSpec {
                     
                     // MARK: ------ for the http variant
                     context("for the http variant") {
-                        beforeEach {
-                            mockOGMCache.when { $0.pollers }
-                                .thenReturn(["http://testserver": OpenGroupAPI.Poller(for: "http://testserver")])
-                        }
-                        
                         // MARK: -------- returns true when no scheme is provided
                         it("returns true when no scheme is provided") {
                             expect(
@@ -557,11 +555,6 @@ class OpenGroupManagerSpec: QuickSpec {
                     
                     // MARK: ------ for the https variant
                     context("for the https variant") {
-                        beforeEach {
-                            mockOGMCache.when { $0.pollers }
-                                .thenReturn(["https://testserver": OpenGroupAPI.Poller(for: "https://testserver")])
-                        }
-                        
                         // MARK: -------- returns true when no scheme is provided
                         it("returns true when no scheme is provided") {
                             expect(
@@ -616,8 +609,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 context("when given the legacy DNS host and there is a cached poller for the default server") {
                     // MARK: ------ returns true
                     it("returns true") {
-                        mockOGMCache.when { $0.pollers }
-                            .thenReturn(["http://116.203.70.33": OpenGroupAPI.Poller(for: "http://116.203.70.33")])
+                        mockOGMCache.when { $0.serversBeingPolled }.thenReturn(["http://116.203.70.33"])
                         mockStorage.write { db in
                             try SessionThread(
                                 id: OpenGroup.idFor(roomToken: "testRoom", server: "http://116.203.70.33"),
@@ -651,7 +643,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 context("when given the default server and there is a cached poller for the legacy DNS host") {
                     // MARK: ------ returns true
                     it("returns true") {
-                        mockOGMCache.when { $0.pollers }.thenReturn(["http://open.getsession.org": OpenGroupAPI.Poller(for: "http://open.getsession.org")])
+                        mockOGMCache.when { $0.serversBeingPolled }.thenReturn(["http://open.getsession.org"])
                         mockStorage.write { db in
                             try SessionThread(
                                 id: OpenGroup.idFor(roomToken: "testRoom", server: "http://open.getsession.org"),
@@ -683,8 +675,6 @@ class OpenGroupManagerSpec: QuickSpec {
                 
                 // MARK: ---- returns false when given an invalid server
                 it("returns false when given an invalid server") {
-                    mockOGMCache.when { $0.pollers }.thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
-                    
                     expect(
                         mockStorage.read { db -> Bool in
                             openGroupManager
@@ -701,7 +691,7 @@ class OpenGroupManagerSpec: QuickSpec {
                 
                 // MARK: ---- returns false if there is not a poller for the server in the cache
                 it("returns false if there is not a poller for the server in the cache") {
-                    mockOGMCache.when { $0.pollers }.thenReturn([:])
+                    mockOGMCache.when { $0.serversBeingPolled }.thenReturn([])
                     
                     expect(
                         mockStorage.read { db -> Bool in
@@ -719,7 +709,6 @@ class OpenGroupManagerSpec: QuickSpec {
                 
                 // MARK: ---- returns false if there is a poller for the server in the cache but no thread for the room
                 it("returns false if there is a poller for the server in the cache but no thread for the room") {
-                    mockOGMCache.when { $0.pollers }.thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
                     mockStorage.write { db in
                         try SessionThread.deleteAll(db)
                     }
@@ -749,7 +738,6 @@ class OpenGroupManagerSpec: QuickSpec {
                     mockNetwork
                         .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
                         .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomResponse)
-                    mockOGMCache.when { $0.pollers }.thenReturn([:])
                     
                     mockUserDefaults
                         .when { (defaults: inout any UserDefaultsType) -> Any? in
@@ -824,15 +812,18 @@ class OpenGroupManagerSpec: QuickSpec {
                     
                     expect(mockOGMCache)
                         .to(call(matchingParameters: true) {
-                            $0.pollers = ["testserver": OpenGroupAPI.Poller(for: "testserver")]
+                            $0.getOrCreatePoller(for: "testserver")
+                        })
+                    expect(mockPoller)
+                        .to(call(matchingParameters: true) { [dependencies = dependencies!] in
+                            $0.startIfNeeded(using: dependencies)
                         })
                 }
                 
                 // MARK: ---- an existing room
                 context("an existing room") {
                     beforeEach {
-                        mockOGMCache.when { $0.pollers }
-                            .thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
+                        mockOGMCache.when { $0.serversBeingPolled }.thenReturn(["testserver"])
                         mockStorage.write { db in
                             try testOpenGroup.insert(db)
                         }
@@ -954,8 +945,6 @@ class OpenGroupManagerSpec: QuickSpec {
                                     .set(to: OpenGroup.idFor(roomToken: "testRoom", server: "testServer"))
                             )
                     }
-                    
-                    mockOGMCache.when { $0.pollers }.thenReturn([:])
                 }
                 
                 // MARK: ---- removes all interactions for the thread
@@ -994,8 +983,6 @@ class OpenGroupManagerSpec: QuickSpec {
                 context("and there is only one open group for this server") {
                     // MARK: ------ stops the poller
                     it("stops the poller") {
-                        mockOGMCache.when { $0.pollers }.thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
-                        
                         mockStorage.write { db in
                             openGroupManager
                                 .delete(
@@ -1006,7 +993,7 @@ class OpenGroupManagerSpec: QuickSpec {
                                 )
                         }
                         
-                        expect(mockOGMCache).to(call(matchingParameters: true) { $0.pollers = [:] })
+                        expect(mockOGMCache).to(call(matchingParameters: true) { $0.stopAndRemovePoller(for: "testserver") })
                     }
                     
                     // MARK: ------ removes the open group
@@ -1175,7 +1162,6 @@ class OpenGroupManagerSpec: QuickSpec {
                         try testOpenGroup.insert(db)
                     }
                     
-                    mockOGMCache.when { $0.pollers }.thenReturn([:])
                     mockOGMCache.when { $0.hasPerformedInitialPoll }.thenReturn([:])
                     mockOGMCache.when { $0.timeSinceLastPoll }.thenReturn([:])
                     mockOGMCache
@@ -1572,54 +1558,6 @@ class OpenGroupManagerSpec: QuickSpec {
                                     .fetchOne(db)
                             }
                         ).to(equal(TestConstants.publicKey))
-                    }
-                }
-                
-                // MARK: ---- when checking to start polling
-                context("when checking to start polling") {
-                    // MARK: ------ starts a new poller when not already polling
-                    it("starts a new poller when not already polling") {
-                        mockOGMCache.when { $0.pollers }.thenReturn([:])
-                        
-                        mockStorage.write { db in
-                            try OpenGroupManager.handlePollInfo(
-                                db,
-                                pollInfo: testPollInfo,
-                                publicKey: TestConstants.publicKey,
-                                for: "testRoom",
-                                on: "testServer",
-                                using: dependencies
-                            )
-                        }
-                        
-                        expect(mockOGMCache)
-                            .to(call(matchingParameters: true) {
-                                $0.pollers = ["testserver": OpenGroupAPI.Poller(for: "testserver")]
-                            })
-                    }
-                    
-                    // MARK: ------ restarts the poller if there already is one
-                    it("restarts the poller if there already is one") {
-                        mockOGMCache.when { $0.pollers }.thenReturn(["testserver": OpenGroupAPI.Poller(for: "testserver")])
-                        mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
-                            .thenReturn(Network.BatchResponse.mockBlindedPollResponse)
-                        
-                        mockStorage.write { db in
-                            try OpenGroupManager.handlePollInfo(
-                                db,
-                                pollInfo: testPollInfo,
-                                publicKey: TestConstants.publicKey,
-                                for: "testRoom",
-                                on: "testServer",
-                                using: dependencies
-                            )
-                        }
-                        
-                        expect(mockOGMCache)
-                            .to(call(matchingParameters: true) {
-                                $0.pollers = ["testserver": OpenGroupAPI.Poller(for: "testserver")]
-                            })
                     }
                 }
                 
@@ -3210,16 +3148,22 @@ class OpenGroupManagerSpec: QuickSpec {
                     mockNetwork
                         .when {
                             $0.send(
-                                .onionRequest(
-                                    URLRequest(url: URL(string: "https://open.getsession.org/room/test2/file/12")!),
-                                    to: OpenGroupAPI.defaultServer,
-                                    with: OpenGroupAPI.defaultServerPublicKey,
-                                    timeout: FileServerAPI.fileDownloadTimeout
+                                .downloadFile(
+                                    from: .server(
+                                        url: URL(string: "https://open.getsession.org/room/test2/file/12")!,
+                                        method: .get,
+                                        headers: nil,
+                                        x25519PublicKey: TestConstants.publicKey
+                                    )
                                 ),
                                 using: dependencies
                             )
                         }
-                        .thenReturn(MockNetwork.response(data: Data([1, 2, 3])))
+                        .thenReturn(
+                            Just((MockResponseInfo.mockValue, Data([1, 2, 3])))
+                                .setFailureType(to: Error.self)
+                                .eraseToAnyPublisher()
+                        )
 
                     let testDate: Date = Date(timeIntervalSince1970: 1234567890)
                     dependencies.dateNow = testDate
@@ -3251,8 +3195,12 @@ class OpenGroupManagerSpec: QuickSpec {
             context("when getting a room image") {
                 beforeEach {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
-                        .thenReturn(MockNetwork.response(data: Data([1, 2, 3])))
+                        .when { $0.send(.downloadFile(from: any()), using: dependencies) }
+                        .thenReturn(
+                            Just((MockResponseInfo.mockValue, Data([1, 2, 3])))
+                                .setFailureType(to: Error.self)
+                                .eraseToAnyPublisher()
+                        )
                     
                     mockUserDefaults
                         .when { (defaults: inout any UserDefaultsType) -> Any? in defaults.object(forKey: any()) }

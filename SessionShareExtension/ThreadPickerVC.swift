@@ -97,6 +97,12 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         super.viewWillDisappear(animated)
         
         stopObservingChanges()
+        
+        // When the thread picker disappears it means the user has left the screen (this will be called
+        // whether the user has sent the message or cancelled sending)
+        LibSession.suspendNetworkAccess()
+        Storage.suspendDatabaseAccess()
+        Log.flush()
     }
     
     @objc func applicationDidBecomeActive(_ notification: Notification) {
@@ -223,6 +229,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         
         ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "vc_share_sending_message".localized()) { activityIndicator in
             Storage.resumeDatabaseAccess()
+            LibSession.resumeNetworkAccess()
             
             let swarmPublicKey: String = {
                 switch threadVariant {
@@ -253,6 +260,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
                         // Create the interaction
                         let interaction: Interaction = try Interaction(
                             threadId: threadId,
+                            threadVariant: threadVariant,
                             authorId: getUserHexEncodedPublicKey(db),
                             variant: .standardOutgoing,
                             body: body,
@@ -308,9 +316,9 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
                 .receive(on: DispatchQueue.main)
                 .sinkUntilComplete(
                     receiveCompletion: { [weak self] result in
-                        DDLog.flushLog()
+                        LibSession.suspendNetworkAccess()
                         Storage.suspendDatabaseAccess()
-                        LibSession.closeNetworkConnections()
+                        Log.flush()
                         activityIndicator.dismiss { }
                         
                         switch result {

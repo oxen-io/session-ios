@@ -21,7 +21,7 @@ public extension Network.RequestType {
             args: [payload, snode, swarmPublicKey, timeout]
         ) { dependencies in
             LibSession.sendOnionRequest(
-                to: OnionRequestAPIDestination.snode(snode),
+                to: Network.Destination.snode(snode),
                 body: payload,
                 swarmPublicKey: swarmPublicKey,
                 timeout: timeout,
@@ -49,12 +49,9 @@ public extension Network.RequestType {
             }
             
             return LibSession.sendOnionRequest(
-                to: OnionRequestAPIDestination.server(
-                    method: request.httpMethod,
-                    scheme: url.scheme,
-                    host: host,
-                    endpoint: url.path,
-                    port: url.port.map { UInt16($0) },
+                to: Network.Destination.server(
+                    url: url,
+                    method: (request.httpMethod.map { HTTPMethod(rawValue: $0) } ?? .get),
                     headers: request.allHTTPHeaderFields,
                     x25519PublicKey: x25519PublicKey
                 ),

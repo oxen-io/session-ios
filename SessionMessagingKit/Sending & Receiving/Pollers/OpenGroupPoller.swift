@@ -7,11 +7,16 @@ import SessionSnodeKit
 import SessionUtilitiesKit
 
 extension OpenGroupAPI {
-    public final class Poller {
+    public protocol PollerType {
+        func startIfNeeded(using dependencies: Dependencies)
+        func stop()
+    }
+    
+    public final class Poller: PollerType {
         typealias PollResponse = (info: ResponseInfoType, data: [OpenGroupAPI.Endpoint: Decodable])
         
         private let server: String
-        private var timer: Timer? = nil
+        private var recursiveLoopId: UUID = UUID()
         private var hasStarted: Bool = false
         private var isPolling: Bool = false
 
@@ -39,12 +44,13 @@ extension OpenGroupAPI {
             guard !hasStarted else { return }
             
             hasStarted = true
+            recursiveLoopId = UUID()
             pollRecursively(using: dependencies)
         }
 
         @objc public func stop() {
-            timer?.invalidate()
             hasStarted = false
+            recursiveLoopId = UUID()
         }
 
         // MARK: - Polling
@@ -53,6 +59,7 @@ extension OpenGroupAPI {
             guard hasStarted else { return }
             
             let server: String = self.server
+            let originalRecursiveLoopId: UUID = self.recursiveLoopId
             let lastPollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
             
             poll(using: dependencies)
@@ -82,34 +89,32 @@ extension OpenGroupAPI {
                         // Schedule the next poll
                         guard remainingInterval > 0 else {
                             return Threading.communityPollerQueue.async(using: dependencies) {
+                                // If we started a new recursive loop then we don't want to double up so just let this
+                                // one stop looping
+                                guard originalRecursiveLoopId == self?.recursiveLoopId else { return }
+                                
                                 self?.pollRecursively(using: dependencies)
                             }
                         }
                         
                         Threading.communityPollerQueue.asyncAfter(deadline: .now() + .milliseconds(Int(remainingInterval * 1000)), qos: .default, using: dependencies) {
+                            // If we started a new recursive loop then we don't want to double up so just let this
+                            // one stop looping
+                            guard originalRecursiveLoopId == self?.recursiveLoopId else { return }
+                            
                             self?.pollRecursively(using: dependencies)
                         }
                     }
                 )
         }
-        
-        public func poll(
-            using dependencies: Dependencies = Dependencies()
-        ) -> AnyPublisher<Void, Error> {
-            return poll(
-                calledFromBackgroundPoller: false,
-                isPostCapabilitiesRetry: false,
-                using: dependencies
-            )
-        }
 
         public func poll(
-            calledFromBackgroundPoller: Bool,
+            calledFromBackgroundPoller: Bool = false,
             isBackgroundPollerValid: @escaping (() -> Bool) = { true },
-            isPostCapabilitiesRetry: Bool,
+            isPostCapabilitiesRetry: Bool = false,
             using dependencies: Dependencies = Dependencies()
         ) -> AnyPublisher<Void, Error> {
-            guard !self.isPolling else {
+            guard !self.isPolling && self.hasStarted else {
                 return Just(())
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
@@ -117,6 +122,7 @@ extension OpenGroupAPI {
             
             self.isPolling = true
             let server: String = self.server
+            let pollStartTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
             let hasPerformedInitialPoll: Bool = (dependencies.caches[.openGroupManager].hasPerformedInitialPoll[server] == true)
             let timeSinceLastPoll: TimeInterval = (
                 dependencies.caches[.openGroupManager].timeSinceLastPoll[server] ??
@@ -156,6 +162,7 @@ extension OpenGroupAPI {
                             // If this was a background poll and the background poll is no longer valid
                             // then just stop
                             self?.isPolling = false
+                            self?.hasStarted = false
                             return
                         }
 
@@ -167,25 +174,27 @@ extension OpenGroupAPI {
                             using: dependencies
                         )
 
-            
                         dependencies.caches.mutate(cache: .openGroupManager) { cache in
                             cache.hasPerformedInitialPoll[server] = true
                             cache.timeSinceLastPoll[server] = dependencies.dateNow.timeIntervalSince1970
                             dependencies.standardUserDefaults[.lastOpen] = dependencies.dateNow
                         }
-
-                        SNLog("Open group polling finished for \(server).")
+                        
+                        let pollEndTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
+                        SNLog("Open group polling finished for \(server) in \(.seconds(pollEndTime - pollStartTime), unit: .s).")
                     }
                 )
                 .map { _ in () }
                 .catch { [weak self] error -> AnyPublisher<Void, Error> in
                     guard
                         let strongSelf = self,
+                        strongSelf.hasStarted,
                         (!calledFromBackgroundPoller || isBackgroundPollerValid())
                     else {
                         // If this was a background poll and the background poll is no longer valid
                         // then just stop
                         self?.isPolling = false
+                        self?.hasStarted = false
 
                         return Just(())
                             .setFailureType(to: Error.self)
@@ -275,7 +284,8 @@ extension OpenGroupAPI {
                                         }
                                     }
                                     
-                                    SNLog("Open group polling to \(server) failed due to error: \(error). Setting failure count to \(pollFailureCount).")
+                                    let pollEndTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
+                                    SNLog("Open group polling to \(server) failed in \(.seconds(pollEndTime - pollStartTime), unit: .s) due to error: \(error). Setting failure count to \(pollFailureCount + 1).")
                                     
                                     // Add a note to the logs that this happened
                                     if !prunedIds.isEmpty {
@@ -301,7 +311,7 @@ extension OpenGroupAPI {
             isBackgroundPollerValid: @escaping (() -> Bool) = { true },
             isPostCapabilitiesRetry: Bool,
             error: Error,
-            using dependencies: Dependencies = Dependencies()
+            using dependencies: Dependencies
         ) -> AnyPublisher<Bool, Error> {
             /// We want to custom handle a '400' error code due to not having blinded auth as it likely means that we join the
             /// OpenGroup before blinding was enabled and need to update it's capabilities
@@ -330,7 +340,7 @@ extension OpenGroupAPI {
                 }
                 .flatMap { $0.send(using: dependencies) }
                 .flatMap { [weak self] _, responseBody -> AnyPublisher<Void, Error> in
-                    guard let strongSelf = self, isBackgroundPollerValid() else {
+                    guard let strongSelf = self, strongSelf.hasStarted, isBackgroundPollerValid() else {
                         return Just(())
                             .setFailureType(to: Error.self)
                             .eraseToAnyPublisher()
@@ -360,7 +370,7 @@ extension OpenGroupAPI {
                 }
                 .map { _ in true }
                 .catch { error -> AnyPublisher<Bool, Error> in
-                    SNLog("Open group updating capabilities failed due to error: \(error).")
+                    SNLog("Open group updating capabilities for \(server) failed due to error: \(error).")
                     return Just(true)
                         .setFailureType(to: Error.self)
                         .eraseToAnyPublisher()

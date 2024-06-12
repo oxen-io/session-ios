@@ -71,7 +71,7 @@ public final class CurrentUserPoller: Poller {
             let drainBehaviour: Atomic<SwarmDrainBehaviour> = drainBehaviour.wrappedValue[publicKey],
             case .limitedReuse(_, .some(let targetSnode), _, _, _) = drainBehaviour.wrappedValue
         {
-            SNLog("Main Poller polling \(targetSnode) failed with error: \(error); switching to next snode.")
+            SNLog("Main Poller polling \(targetSnode) failed with error: \(period: "\(error)"); switching to next snode.")
             drainBehaviour.mutate { $0 = $0.clearTargetSnode() }
         }
         else {

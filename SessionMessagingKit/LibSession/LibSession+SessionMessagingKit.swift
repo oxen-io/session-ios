@@ -82,9 +82,6 @@ public extension LibSession {
     
     static var libSessionVersion: String { String(cString: LIBSESSION_UTIL_VERSION_STR) }
     
-    internal static func lastError(_ conf: UnsafeMutablePointer<config_object>?) -> String {
-        return (conf?.pointee.last_error.map { String(cString: $0) } ?? "Unknown")  // stringlint:disable
-    }
     
     // MARK: - Loading
     
@@ -209,9 +206,10 @@ public extension LibSession {
         
         var dumpResult: UnsafeMutablePointer<UInt8>? = nil
         var dumpResultLen: Int = 0
-        try CExceptionHelper.performSafely {
-            config_dump(conf, &dumpResult, &dumpResultLen)
-        }
+        config_dump(conf, &dumpResult, &dumpResultLen)
+        
+        // If we got an error then throw it
+        try LibSessionError.throwIfNeeded(conf)
         
         guard let dumpResult: UnsafeMutablePointer<UInt8> = dumpResult else { return nil }
         
@@ -247,14 +245,17 @@ public extension LibSession {
             ConfigDump.Variant.userVariants.forEach { existingDumpVariants.insert($0) }
         }
         
-        // Ensure we always check the required user config types for changes even if there is no dump
-        // data yet (to deal with first launch cases)
+        /// Ensure we always check the required user config types for changes even if there is no dump data yet (to deal with first launch cases)
+        ///
+        /// **Note:** We `mutate` when retrieving the pending changes here because we want to ensure no other threads can modify the
+        /// config while we are reading (which could result in crashes)
         return try existingDumpVariants
             .reduce(into: PendingChanges()) { result, variant in
                 try LibSession
                     .config(for: variant, publicKey: publicKey)
-                    .wrappedValue
-                    .map { conf in
+                    .mutate { conf in
+                        guard conf != nil else { return }
+                        
                         // Check if the config needs to be pushed
                         guard config_needs_push(conf) else {
                             // If not then try retrieve any obsolete hashes to be removed
@@ -275,31 +276,22 @@ public extension LibSession {
                             return
                         }
                         
-                        var cPushData: UnsafeMutablePointer<config_push_data>!
-                        let configCountInfo: String = {
-                            var result: String = "Invalid"  // stringlint:disable
-                            
-                            try? CExceptionHelper.performSafely {
+                        guard let cPushData: UnsafeMutablePointer<config_push_data> = config_push(conf) else {
+                            let configCountInfo: String = {
                                 switch variant {
-                                    case .userProfile: result = "1 profile"
-                                    case .contacts: result = "\(contacts_size(conf)) contacts"
-                                    case .userGroups: result = "\(user_groups_size(conf)) group conversations"
-                                    case .convoInfoVolatile: result = "\(convo_info_volatile_size(conf)) volatile conversations"
-                                    case .invalid: break
+                                    case .userProfile: return "1 profile"  // stringlint:disable
+                                    case .contacts: return "\(contacts_size(conf)) contacts"  // stringlint:disable
+                                    case .userGroups: return "\(user_groups_size(conf)) group conversations"  // stringlint:disable
+                                    case .convoInfoVolatile: return "\(convo_info_volatile_size(conf)) volatile conversations"  // stringlint:disable
+                                    case .invalid: return "Invalid"  // stringlint:disable
                                 }
-                            }
+                            }()
                             
-                            return result
-                        }()
-                        
-                        do {
-                            try CExceptionHelper.performSafely {
-                                cPushData = config_push(conf)
-                            }
-                        }
-                        catch {
-                            SNLog("[LibSession] Failed to generate push data for \(variant) config data, size: \(configCountInfo), error: \(error)")
-                            throw error
+                            throw LibSessionError(
+                                conf,
+                                fallbackError: .unableToGeneratePushData,
+                                logMessage: "[LibSession] Failed to generate push data for \(variant) config data, size: \(configCountInfo), error"
+                            )
                         }
                     
                         let pushData: Data = Data(
@@ -336,10 +328,12 @@ public extension LibSession {
         return LibSession
             .config(for: variant, publicKey: publicKey)
             .mutate { conf in
-                guard conf != nil else { return nil }
+                guard
+                    conf != nil,
+                    var cHash: [CChar] = serverHash.cString(using: .utf8)
+                else { return nil }
                 
                 // Mark the config as pushed
-                var cHash: [CChar] = serverHash.cArray.nullTerminated()
                 config_confirm_pushed(conf, seqNo, &cHash)
                 
                 // Update the result to indicate whether the config needs to be dumped
@@ -407,25 +401,38 @@ public extension LibSession {
                     .config(for: key, publicKey: publicKey)
                     .mutate { conf in
                         // Merge the messages
-                        var mergeHashes: [UnsafePointer<CChar>?] = value
-                            .map { message in message.serverHash.cArray.nullTerminated() }
-                            .unsafeCopy()
-                        var mergeData: [UnsafePointer<UInt8>?] = value
-                            .map { message -> [UInt8] in message.data.bytes }
-                            .unsafeCopy()
-                        var mergeSize: [Int] = value.map { $0.data.count }
-                        var mergedHashesPtr: UnsafeMutablePointer<config_string_list>?
-                        try CExceptionHelper.performSafely {
-                            mergedHashesPtr = config_merge(
-                                conf,
-                                &mergeHashes,
-                                &mergeData,
-                                &mergeSize,
-                                value.count
-                            )
+                        var mergeHashes: [UnsafePointer<CChar>?] = (try? (value
+                            .compactMap { message in message.serverHash.cString(using: .utf8) }
+                            .unsafeCopyCStringArray()))
+                            .defaulting(to: [])
+                        var mergeData: [UnsafePointer<UInt8>?] = (try? (value
+                            .map { message -> [UInt8] in Array(message.data) }
+                            .unsafeCopyUInt8Array()))
+                            .defaulting(to: [])
+                        defer {
+                            mergeHashes.forEach { $0?.deallocate() }
+                            mergeData.forEach { $0?.deallocate() }
                         }
-                        mergeHashes.forEach { $0?.deallocate() }
-                        mergeData.forEach { $0?.deallocate() }
+                        
+                        guard
+                            conf != nil,
+                            mergeHashes.count == value.count,
+                            mergeData.count == value.count,
+                            mergeHashes.allSatisfy({ $0 != nil }),
+                            mergeData.allSatisfy({ $0 != nil })
+                        else { return SNLog("[LibSession] Failed to correctly allocate merge data") }
+
+                        var mergeSize: [size_t] = value.map { size_t($0.data.count) }
+                        let mergedHashesPtr: UnsafeMutablePointer<config_string_list>? = config_merge(
+                            conf,
+                            &mergeHashes,
+                            &mergeData,
+                            &mergeSize,
+                            value.count
+                        )
+                        
+                        // If we got an error then throw it
+                        try LibSessionError.throwIfNeeded(conf)
                         
                         // Get the list of hashes from the config (to determine which were successful)
                         let mergedHashes: [String] = mergedHashesPtr
@@ -537,12 +544,12 @@ fileprivate extension LibSession {
 
 public extension LibSession {
     static func parseCommunity(url: String) -> (room: String, server: String, publicKey: String)? {
-        var cFullUrl: [CChar] = url.cArray.nullTerminated()
         var cBaseUrl: [CChar] = [CChar](repeating: 0, count: COMMUNITY_BASE_URL_MAX_LENGTH)
         var cRoom: [CChar] = [CChar](repeating: 0, count: COMMUNITY_ROOM_MAX_LENGTH)
         var cPubkey: [UInt8] = [UInt8](repeating: 0, count: OpenGroup.pubkeyByteLength)
         
         guard
+            var cFullUrl: [CChar] = url.cString(using: .utf8),
             community_parse_full_url(&cFullUrl, &cBaseUrl, &cRoom, &cPubkey) &&
             !String(cString: cRoom).isEmpty &&
             !String(cString: cBaseUrl).isEmpty &&
@@ -559,10 +566,14 @@ public extension LibSession {
         return (room, baseUrl, pubkeyHex)
     }
     
-    static func communityUrlFor(server: String, roomToken: String, publicKey: String) -> String {
-        var cBaseUrl: [CChar] = server.cArray.nullTerminated()
-        var cRoom: [CChar] = roomToken.cArray.nullTerminated()
-        var cPubkey: [UInt8] = Data(hex: publicKey).cArray
+    static func communityUrlFor(server: String?, roomToken: String?, publicKey: String?) -> String? {
+        guard
+            var cBaseUrl: [CChar] = server?.cString(using: .utf8),
+            var cRoom: [CChar] = roomToken?.cString(using: .utf8),
+            let publicKey: String = publicKey
+        else { return nil }
+        
+        var cPubkey: [UInt8] = Array(Data(hex: publicKey))
         var cFullUrl: [CChar] = [CChar](repeating: 0, count: COMMUNITY_FULL_URL_MAX_LENGTH)
         community_make_full_url(&cBaseUrl, &cRoom, &cPubkey, &cFullUrl)
         

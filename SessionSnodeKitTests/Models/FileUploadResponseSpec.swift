@@ -5,7 +5,7 @@ import Foundation
 import Quick
 import Nimble
 
-@testable import SessionMessagingKit
+@testable import SessionSnodeKit
 
 class FileUploadResponseSpec: QuickSpec {
     override class func spec() {

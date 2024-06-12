@@ -188,7 +188,7 @@ public enum PushRegistrationError: Error {
             .map { tokenData -> String in
                 if self.isSusceptibleToFailedPushRegistration {
                     // Sentinal in case this bug is fixed
-                    OWSLogger.debug("Device was unexpectedly able to complete push registration even though it was susceptible to failure.")
+                    Log.debug("Device was unexpectedly able to complete push registration even though it was susceptible to failure.")
                 }
                 
                 return tokenData.toHexString()
@@ -287,6 +287,7 @@ public enum PushRegistrationError: Error {
         }
         
         Storage.resumeDatabaseAccess()
+        LibSession.resumeNetworkAccess()
         
         let maybeCall: SessionCall? = Storage.shared.write { db in
             let messageInfo: CallMessage.MessageInfo = CallMessage.MessageInfo(
@@ -311,12 +312,13 @@ public enum PushRegistrationError: Error {
             let interaction: Interaction = try Interaction(
                 messageUuid: uuid,
                 threadId: thread.id,
+                threadVariant: thread.variant,
                 authorId: caller,
                 variant: .infoCall,
                 body: messageInfoString,
                 timestampMs: timestampMs
             )
-            .withDisappearingMessagesConfiguration(db)
+            .withDisappearingMessagesConfiguration(db, threadVariant: thread.variant)
             .inserted(db)
             
             call.callInteractionId = interaction.id

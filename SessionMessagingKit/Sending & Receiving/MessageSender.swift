@@ -671,25 +671,20 @@ public final class MessageSender {
                 let updatedMessage: Message = message
                 updatedMessage.serverHash = response.hash
 
-                let job: Job? = Job(
-                    variant: .notifyPushServer,
-                    behaviour: .runOnce,
-                    details: NotifyPushServerJob.Details(message: snodeMessage)
-                )
-                let shouldNotify: Bool = {
-                    switch (updatedMessage, data.destination) {
-                        case (is VisibleMessage, .syncMessage), (is UnsendRequest, .syncMessage): return false
-                        case (is VisibleMessage, _), (is UnsendRequest, _): return true
-                        case (let callMessage as CallMessage, _):
-                            // Note: Other 'CallMessage' types are too big to send as push notifications
-                            // so only send the 'preOffer' message as a notification
-                            switch callMessage.kind {
-                                case .preOffer: return true
-                                default: return false
-                            }
-
-                        default: return false
-                    }
+                // Only legacy groups need to manually trigger push notifications now so only create the job
+                // if the destination is a legacy group (ie. a group destination with a standard pubkey prefix)
+                let notifyPushServerJob: Job? = {
+                    guard
+                        case .closedGroup(let groupPublicKey) = data.destination,
+                        let groupId: SessionId = try? SessionId(from: groupPublicKey),
+                        groupId.prefix == .standard
+                    else { return nil }
+                                
+                    return Job(
+                        variant: .notifyPushServer,
+                        behaviour: .runOnce,
+                        details: NotifyPushServerJob.Details(message: snodeMessage)
+                    )
                 }()
 
                 return dependencies.storage
@@ -702,21 +697,16 @@ public final class MessageSender {
                             using: dependencies
                         )
 
-                        guard shouldNotify else { return () }
+                        guard notifyPushServerJob != nil else { return () }
 
-                        dependencies.jobRunner.add(db, job: job, canStartJob: true, using: dependencies)
+                        dependencies.jobRunner.add(db, job: notifyPushServerJob, canStartJob: true, using: dependencies)
                         return ()
                     }
                     .flatMap { _ -> AnyPublisher<Void, Error> in
                         let isMainAppActive: Bool = (UserDefaults.sharedLokiProject?[.isMainAppActive])
                             .defaulting(to: false)
                         
-                        guard shouldNotify && !isMainAppActive else {
-                            return Just(())
-                                .setFailureType(to: Error.self)
-                                .eraseToAnyPublisher()
-                        }
-                        guard let job: Job = job else {
+                        guard !isMainAppActive, let notifyPushServerJob: Job = notifyPushServerJob else {
                             return Just(())
                                 .setFailureType(to: Error.self)
                                 .eraseToAnyPublisher()
@@ -725,7 +715,7 @@ public final class MessageSender {
                         return Deferred {
                             Future<Void, Error> { resolver in
                                 NotifyPushServerJob.run(
-                                    job,
+                                    notifyPushServerJob,
                                     queue: .global(qos: .default),
                                     success: { _, _, _ in resolver(Result.success(())) },
                                     failure: { _, _, _, _ in

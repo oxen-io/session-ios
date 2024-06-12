@@ -12,7 +12,7 @@ public extension Network {
         public let code: Int
         public let headers: [String: String]
         
-        public init(code: Int, headers: [String: String]) {
+        public init(code: Int, headers: [String: String] = [:]) {
             self.code = code
             self.headers = headers
         }

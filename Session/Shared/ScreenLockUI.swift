@@ -29,7 +29,7 @@ class ScreenLockUI {
                 return
             }
 
-            Logger.info("unlockButtonWasTapped")
+            Log.info("unlockButtonWasTapped")
 
             self?.didLastUnlockAttemptFail = false
             self?.ensureUI()
@@ -88,17 +88,17 @@ class ScreenLockUI {
     private var desiredUIState: ScreenLockViewController.State {
         if isScreenLockLocked {
             if appIsInactiveOrBackground {
-                Logger.verbose("desiredUIState: screen protection 1.")
+                Log.trace("desiredUIState: screen protection 1.")
                 return .protection
             }
             
-            Logger.verbose("desiredUIState: screen lock 2.")
+            Log.trace("desiredUIState: screen lock 2.")
             return (isShowingScreenLockUI ? .protection : .lock)
         }
 
         if !self.appIsInactiveOrBackground {
             // App is inactive or background.
-            Logger.verbose("desiredUIState: none 3.");
+            Log.trace("desiredUIState: none 3.");
             return .none;
         }
         
@@ -106,7 +106,7 @@ class ScreenLockUI {
             return .none;
         }
         
-        Logger.verbose("desiredUIState: screen protection 4.")
+        Log.trace("desiredUIState: screen protection 4.")
         return .protection;
     }
     
@@ -181,17 +181,17 @@ class ScreenLockUI {
             //
             // We don't need to try to lock the screen lock;
             // It will be initialized by `setupWithRootWindow`.
-            Logger.verbose("tryToActivateScreenLockUponBecomingActive NO 0")
+            Log.trace("tryToActivateScreenLockUponBecomingActive NO 0")
             return
         }
         guard Storage.shared[.isScreenLockEnabled] else {
             // Screen lock is not enabled.
-            Logger.verbose("tryToActivateScreenLockUponBecomingActive NO 1")
+            Log.trace("tryToActivateScreenLockUponBecomingActive NO 1")
             return;
         }
         guard !isScreenLockLocked else {
             // Screen lock is already activated.
-            Logger.verbose("tryToActivateScreenLockUponBecomingActive NO 2")
+            Log.trace("tryToActivateScreenLockUponBecomingActive NO 2")
             return;
         }
         
@@ -211,7 +211,7 @@ class ScreenLockUI {
         }
         
         let desiredUIState: ScreenLockViewController.State = self.desiredUIState
-        Logger.verbose("ensureUI: \(desiredUIState)")
+        Log.trace("ensureUI: \(desiredUIState)")
         
         // Show the "iOS auth UI to unlock" if necessary.
         if desiredUIState == .lock && !didLastUnlockAttemptFail {
@@ -227,25 +227,25 @@ class ScreenLockUI {
         guard !isShowingScreenLockUI else { return }        // We're already showing the auth UI; abort
         guard !appIsInactiveOrBackground else { return }    // Never show the auth UI unless active
         
-        Logger.info("try to unlock screen lock")
+        Log.info("try to unlock screen lock")
         isShowingScreenLockUI = true
         
         ScreenLock.shared.tryToUnlockScreenLock(
             success: { [weak self] in
-                Logger.info("unlock screen lock succeeded.")
+                Log.info("unlock screen lock succeeded.")
                 self?.isShowingScreenLockUI = false
                 self?.isScreenLockLocked = false
                 self?.didUnlockJustSucceed = true
                 self?.ensureUI()
             },
             failure: { [weak self] error in
-                Logger.info("unlock screen lock failed.")
+                Log.info("unlock screen lock failed.")
                 self?.clearAuthUIWhenActive()
                 self?.didLastUnlockAttemptFail = true
                 self?.showScreenLockFailureAlert(message: error.localizedDescription)
             },
             unexpectedFailure: { [weak self] error in
-                Logger.info("unlock screen lock unexpectedly failed.")
+                Log.info("unlock screen lock unexpectedly failed.")
 
                 // Local Authentication isn't working properly.
                 // This isn't covered by the docs or the forums but in practice
@@ -255,7 +255,7 @@ class ScreenLockUI {
                 }
             },
             cancel: { [weak self] in
-                Logger.info("unlock screen lock cancelled.")
+                Log.info("unlock screen lock cancelled.")
 
                 self?.clearAuthUIWhenActive()
                 self?.didLastUnlockAttemptFail = true
@@ -300,7 +300,7 @@ class ScreenLockUI {
                 return
             }
 
-            Logger.info("unlockButtonWasTapped")
+            Log.info("unlockButtonWasTapped")
 
             self?.didLastUnlockAttemptFail = false
             self?.ensureUI()
@@ -360,7 +360,7 @@ class ScreenLockUI {
 
     /// Whenever the device date/time is edited by the user, trigger screen lock immediately if enabled.
     @objc private func clockDidChange() {
-        Logger.info("clock did change")
+        Log.info("clock did change")
 
         guard Singleton.appReadiness.isAppReady else {
             // It's not safe to access OWSScreenLock.isScreenLockEnabled
@@ -368,7 +368,7 @@ class ScreenLockUI {
             //
             // We don't need to try to lock the screen lock;
             // It will be initialized by `setupWithRootWindow`.
-            Logger.verbose("clockDidChange 0")
+            Log.trace("clockDidChange 0")
             return;
         }
         

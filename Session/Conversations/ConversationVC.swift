@@ -214,7 +214,9 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             messageLabelAccessibilityLabel: "Outdated client banner text",
             height: 40
         )
-        let result: InfoBanner = InfoBanner(info: info, dismiss: self.removeOutdatedClientBanner)
+        let result: InfoBanner = InfoBanner(info: info, dismiss: { [weak self] in
+            self?.removeOutdatedClientBanner()
+        })
         result.accessibilityLabel = "Outdated client banner"
         result.isAccessibilityElement = true
         
@@ -905,9 +907,11 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             
             // If we just sent a message then we want to jump to the bottom of the conversation instantly
             if didSendMessageBeforeUpdate {
-                // We need to dispatch to the next run loop because it seems trying to scroll immediately after
-                // triggering a 'reloadData' doesn't work
-                DispatchQueue.main.async { [weak self] in
+                // We need to dispatch to the next run loop after a slight delay because it seems trying to scroll
+                // immediately after triggering a 'reloadData' doesn't work and it's possible (eg. when uploading)
+                // for two updates to come through in rapid succession which will result in two updates, the second
+                // which stops the scroll from working
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
                     self?.tableView.layoutIfNeeded()
                     self?.scrollToBottom(isAnimated: false)
                     
@@ -1529,8 +1533,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                 cell.update(
                     with: cellViewModel,
                     mediaCache: mediaCache,
-                    playbackInfo: viewModel.playbackInfo(for: cellViewModel) { updatedInfo, error in
-                        DispatchQueue.main.async { [weak self] in
+                    playbackInfo: viewModel.playbackInfo(for: cellViewModel) { [weak self] updatedInfo, error in
+                        DispatchQueue.main.async {
                             guard error == nil else {
                                 let modal: ConfirmationModal = ConfirmationModal(
                                     targetView: self?.view,

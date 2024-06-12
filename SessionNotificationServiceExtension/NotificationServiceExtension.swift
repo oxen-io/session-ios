@@ -16,17 +16,18 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var request: UNNotificationRequest?
     private var openGroupPollCancellable: AnyCancellable?
-    private var fileLogger: DDFileLogger?
+    private var hasCompleted: Atomic<Bool> = Atomic(false)
 
-    public static let isFromRemoteKey = "remote"
-    public static let threadIdKey = "Signal.AppNotificationsUserInfoKey.threadId"
-    public static let threadVariantRaw = "Signal.AppNotificationsUserInfoKey.threadVariantRaw"
-    public static let threadNotificationCounter = "Session.AppNotificationsUserInfoKey.threadNotificationCounter"
+    public static let isFromRemoteKey = "remote"                                                                   // stringlint:disable
+    public static let threadIdKey = "Signal.AppNotificationsUserInfoKey.threadId"                                  // stringlint:disable
+    public static let threadVariantRaw = "Signal.AppNotificationsUserInfoKey.threadVariantRaw"                     // stringlint:disable
+    public static let threadNotificationCounter = "Session.AppNotificationsUserInfoKey.threadNotificationCounter"  // stringlint:disable
     private static let callPreOfferLargeNotificationSupressionDuration: TimeInterval = 30
 
     // MARK: Did receive a remote push notification request
     
     override public func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+        Log.info("didReceive called.")
         self.contentHandler = contentHandler
         self.request = request
         
@@ -46,10 +47,10 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         
         let isCallOngoing: Bool = (UserDefaults.sharedLokiProject?[.isCallOngoing])
             .defaulting(to: false)
-        let lastCallPreOffer: Date? = UserDefaults.sharedLokiProject?[.lastCallPreOffer]
 
         // Perform main setup
         Storage.resumeDatabaseAccess()
+        LibSession.resumeNetworkAccess()
         DispatchQueue.main.sync { self.setUpIfNecessary() { } }
 
         // Handle the push notification
@@ -83,7 +84,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                     // Just log if the notification was too long (a ~2k message should be able to fit so
                     // these will most commonly be call or config messages)
                     case .successTooLong:
-                        return SNLog("[NotificationServiceExtension] Received too long notification for namespace: \(metadata.namespace).", forceNSLog: true)
+                        return Log.info("Received too long notification for namespace: \(metadata.namespace).")
                         
                     case .legacyForceSilent, .failureNoContent: return
                 }
@@ -95,8 +96,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
             Storage.shared.write { db in
                 do {
                     guard let processedMessage: ProcessedMessage = try Message.processRawReceivedMessageAsNotification(db, data: data, metadata: metadata) else {
-                        self.handleFailure(for: notificationContent, error: .messageProcessing)
-                        return
+                        throw NotificationError.messageProcessing
                     }
                     
                     switch processedMessage {
@@ -128,6 +128,13 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                                 message: messageInfo.message,
                                 threadId: threadId,
                                 threadVariant: threadVariant
+                            )
+                            
+                            try MessageReceiver.handleCallMessage(
+                                db,
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                message: callMessage
                             )
                             
                             guard case .preOffer = callMessage.kind else {
@@ -179,6 +186,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                             try MessageReceiver.postHandleMessage(
                                 db,
                                 threadId: threadId,
+                                threadVariant: threadVariant,
                                 message: messageInfo.message
                             )
                             
@@ -194,12 +202,29 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                     }
                 }
                 catch {
-                    if let error = error as? MessageReceiverError, error.isRetryable {
+                    // If an error occurred we want to rollback the transaction (by throwing) and then handle
+                    // the error outside of the database
+                    let handleError = {
                         switch error {
-                            case .invalidGroupPublicKey, .noGroupKeyPair, .outdatedMessage: self.completeSilenty()
-                            default: self.handleFailure(for: notificationContent, error: .messageHandling(error))
+                            case MessageReceiverError.invalidGroupPublicKey, MessageReceiverError.noGroupKeyPair,
+                                MessageReceiverError.outdatedMessage:
+                                self.completeSilenty()
+                                
+                            case NotificationError.messageProcessing:
+                                self.handleFailure(for: notificationContent, error: .messageProcessing)
+                                
+                            case let msgError as MessageReceiverError:
+                                self.handleFailure(for: notificationContent, error: .messageHandling(msgError))
+                                
+                            default: self.handleFailure(for: notificationContent, error: .other(error))
                         }
                     }
+                    
+                    db.afterNextTransactionNested(
+                        onCommit: { _ in  handleError() },
+                        onRollback: { _ in handleError() }
+                    )
+                    throw error
                 }
             }
         }
@@ -215,7 +240,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         // to process new messages.
         guard !didPerformSetup else { return }
 
-        SNLog("[NotificationServiceExtension] Performing setup", forceNSLog: true)
+        Log.info("Performing setup.")
         didPerformSetup = true
 
         _ = AppVersion.sharedInstance()
@@ -224,26 +249,25 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
         AppSetup.setupEnvironment(
             retrySetupIfDatabaseInvalid: true,
-            appSpecificBlock: { [weak self] in
+            appSpecificBlock: {
+                Log.setup(with: Logger(
+                    primaryPrefix: "NotificationServiceExtension",                                               // stringlint:disable
+                    customDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/NotificationExtension", // stringlint:disable
+                    forceNSLog: true
+                ))
+                
                 SessionEnvironment.shared?.notificationsManager.mutate {
                     $0 = NSENotificationPresenter()
                 }
                 
-                // Add the file logger
-                let logFileManager: DDLogFileManagerDefault = DDLogFileManagerDefault(
-                    logsDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/NotificationExtension" // stringlint:disable
-                )
-                let fileLogger: DDFileLogger = DDFileLogger(logFileManager: logFileManager)
-                fileLogger.rollingFrequency = kDayInterval // Refresh everyday
-                fileLogger.logFileManager.maximumNumberOfLogFiles = 3 // Save 3 days' log files
-                DDLog.add(fileLogger)
-                self?.fileLogger = fileLogger
+                // Setup LibSession
+                LibSession.addLogger()
+                LibSession.createNetworkIfNeeded()
             },
             migrationsCompletion: { [weak self] result, needsConfigSync in
                 switch result {
-                    // Only 'NSLog' works in the extension - viewable via Console.app
                     case .failure(let error):
-                        SNLog("[NotificationServiceExtension] Failed to complete migrations: \(error)", forceNSLog: true)
+                        Log.error("Failed to complete migrations: \(error).")
                         self?.completeSilenty()
                         
                     case .success:
@@ -253,7 +277,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                         // so it is possible that could change in the future. If it does, do nothing
                         // and don't disturb the user. Messages will be processed when they open the app.
                         guard Storage.shared[.isReadyForAppExtensions] else {
-                            SNLog("[NotificationServiceExtension] Not ready for extensions", forceNSLog: true)
+                            Log.error("Not ready for extensions.")
                             self?.completeSilenty()
                             return
                         }
@@ -289,7 +313,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
         // App isn't ready until storage is ready AND all version migrations are complete.
         guard Storage.shared.isValid && migrationsCompleted else {
-            SNLog("[NotificationServiceExtension] Storage invalid", forceNSLog: true)
+            Log.error("Storage invalid.")
             self.completeSilenty()
             return
         }
@@ -305,21 +329,30 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     override public func serviceExtensionTimeWillExpire() {
         // Called just before the extension will be terminated by the system.
         // Use this as an opportunity to deliver your "best attempt" at modified content, otherwise the original push payload will be used.
-        SNLog("[NotificationServiceExtension] Execution time expired", forceNSLog: true)
+        Log.warn("Execution time expired.")
         openGroupPollCancellable?.cancel()
         completeSilenty()
     }
     
     private func completeSilenty() {
-        SNLog("[NotificationServiceExtension] Complete silently", forceNSLog: true)
-        DDLog.flushLog()
+        // Ensure we on'y run this once
+        guard
+            hasCompleted.mutate({ hasCompleted in
+                let wasCompleted: Bool = hasCompleted
+                hasCompleted = true
+                return wasCompleted
+            }) == false
+        else { return }
+        
         let silentContent: UNMutableNotificationContent = UNMutableNotificationContent()
         silentContent.badge = Storage.shared
             .read { db in try Interaction.fetchUnreadCount(db) }
             .map { NSNumber(value: $0) }
             .defaulting(to: NSNumber(value: 0))
+        Log.info("Complete silently.")
+        LibSession.suspendNetworkAccess()
         Storage.suspendDatabaseAccess()
-        LibSession.closeNetworkConnections()
+        Log.flush()
         
         self.contentHandler!(silentContent)
     }
@@ -329,18 +362,18 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
             guard let caller: String = callMessage.sender, let timestamp = callMessage.sentTimestamp else { return }
             
             let payload: JSON = [
-                "uuid": callMessage.uuid,
-                "caller": caller,
-                "timestamp": timestamp
+                "uuid": callMessage.uuid,   // stringlint:disable
+                "caller": caller,           // stringlint:disable
+                "timestamp": timestamp      // stringlint:disable
             ]
             
             CXProvider.reportNewIncomingVoIPPushPayload(payload) { error in
                 if let error = error {
                     self.handleFailureForVoIP(db, for: callMessage)
-                    SNLog("[NotificationServiceExtension] Failed to notify main app of call message: \(error)", forceNSLog: true)
+                    Log.error("Failed to notify main app of call message: \(error).")
                 }
                 else {
-                    SNLog("[NotificationServiceExtension] Successfully notified main app of call message.", forceNSLog: true)
+                    Log.info("Successfully notified main app of call message.")
                     UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
                     self.completeSilenty()
                 }
@@ -373,20 +406,20 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                SNLog("[NotificationServiceExtension] Failed to add notification request due to error: \(error)", forceNSLog: true)
+                Log.error("Failed to add notification request due to error: \(error).")
             }
             semaphore.signal()
         }
         semaphore.wait()
-        SNLog("[NotificationServiceExtension] Add remote notification request", forceNSLog: true)
-        DDLog.flushLog()
+        Log.info("Add remote notification request.")
+        Log.flush()
     }
 
     private func handleFailure(for content: UNMutableNotificationContent, error: NotificationError) {
-        SNLog("[NotificationServiceExtension] Show generic failure message due to error: \(error)", forceNSLog: true)
-        DDLog.flushLog()
+        Log.error("Show generic failure message due to error: \(error).")
+        LibSession.suspendNetworkAccess()
         Storage.suspendDatabaseAccess()
-        LibSession.closeNetworkConnections()
+        Log.flush()
         
         content.title = "Session"
         content.body = "APN_Message".localized()

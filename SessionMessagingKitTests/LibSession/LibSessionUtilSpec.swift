@@ -154,9 +154,10 @@ fileprivate extension LibSessionUtilSpec {
                     expect(config_needs_dump(conf)).to(beTrue())
                     
                     expect {
-                        try CExceptionHelper.performSafely { config_push(conf).deallocate() }
+                        config_push(conf)?.deallocate()
+                        try LibSessionError.throwIfNeeded(conf)
                     }
-                    .to(throwError(NSError(domain: "cpp_exception", code: -2, userInfo: ["NSLocalizedDescription": "Config data is too large"])))
+                    .to(throwError(LibSessionError.libSessionError("Config data is too large.")))
                 }
             }
             
@@ -196,7 +197,10 @@ fileprivate extension LibSessionUtilSpec {
                         )
                         contacts_set(conf, &contact)
                         
-                        do { try CExceptionHelper.performSafely { config_push(conf).deallocate() } }
+                        do {
+                            config_push(conf)?.deallocate()
+                            try LibSessionError.throwIfNeeded(conf)
+                        }
                         catch { break }
                         
                         // We successfully inserted a contact and didn't hit the limit so increment the counter
@@ -220,7 +224,10 @@ fileprivate extension LibSessionUtilSpec {
                         )
                         contacts_set(conf, &contact)
                         
-                        do { try CExceptionHelper.performSafely { config_push(conf).deallocate() } }
+                        do {
+                            config_push(conf)?.deallocate()
+                            try LibSessionError.throwIfNeeded(conf)
+                        }
                         catch { break }
                         
                         // We successfully inserted a contact and didn't hit the limit so increment the counter
@@ -244,7 +251,10 @@ fileprivate extension LibSessionUtilSpec {
                         )
                         contacts_set(conf, &contact)
                         
-                        do { try CExceptionHelper.performSafely { config_push(conf).deallocate() } }
+                        do {
+                            config_push(conf)?.deallocate()
+                            try LibSessionError.throwIfNeeded(conf)
+                        }
                         catch { break }
                         
                         // We successfully inserted a contact and didn't hit the limit so increment the counter
@@ -252,7 +262,7 @@ fileprivate extension LibSessionUtilSpec {
                     }
                     
                     // Check that the record count matches the maximum when we last checked
-                    expect(numRecords).to(equal(270))
+                    expect(numRecords).to(equal(274))
                 }
                 
                 // MARK: ---- has not changed the max filled records
@@ -268,7 +278,10 @@ fileprivate extension LibSessionUtilSpec {
                         )
                         contacts_set(conf, &contact)
                         
-                        do { try CExceptionHelper.performSafely { config_push(conf).deallocate() } }
+                        do {
+                            config_push(conf)?.deallocate()
+                            try LibSessionError.throwIfNeeded(conf)
+                        }
                         catch { break }
                         
                         // We successfully inserted a contact and didn't hit the limit so increment the counter
@@ -277,7 +290,7 @@ fileprivate extension LibSessionUtilSpec {
                     
                     // Check that the record count matches the maximum when we last checked (seems to swap between
                     // these two on different test runs for some reason)
-                    expect(numRecords).to(satisfyAnyOf(equal(219), equal(220)))
+                    expect(numRecords).to(satisfyAnyOf(equal(222), equal(223)))
                 }
             }
             
@@ -305,7 +318,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Empty contacts shouldn't have an existing contact
                 let definitelyRealId: String = "050000000000000000000000000000000000000000000000000000000000000000"
-                var cDefinitelyRealId: [CChar] = definitelyRealId.cArray.nullTerminated()
+                var cDefinitelyRealId: [CChar] = definitelyRealId.cString(using: .utf8)!
                 let contactPtr: UnsafeMutablePointer<contacts_contact>? = nil
                 expect(contacts_get(conf, contactPtr, &cDefinitelyRealId)).to(beFalse())
                 
@@ -374,7 +387,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Pretend we uploaded it
                 let fakeHash1: String = "fakehash1"
-                var cFakeHash1: [CChar] = fakeHash1.cArray.nullTerminated()
+                var cFakeHash1: [CChar] = fakeHash1.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData2.pointee.seqno, &cFakeHash1)
                 expect(config_needs_push(conf)).to(beFalse())
                 expect(config_needs_dump(conf)).to(beTrue())
@@ -415,7 +428,7 @@ fileprivate extension LibSessionUtilSpec {
                 expect(contact4.created).to(equal(createdTs))
                 
                 let anotherId: String = "051111111111111111111111111111111111111111111111111111111111111111"
-                var cAnotherId: [CChar] = anotherId.cArray.nullTerminated()
+                var cAnotherId: [CChar] = anotherId.cString(using: .utf8)!
                 var contact5: contacts_contact = contacts_contact()
                 expect(contacts_get_or_construct(conf2, &contact5, &cAnotherId)).to(beTrue())
                 expect(String(libSessionVal: contact5.name)).to(beEmpty())
@@ -435,8 +448,8 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Check the merging
                 let fakeHash2: String = "fakehash2"
-                var cFakeHash2: [CChar] = fakeHash2.cArray.nullTerminated()
-                var mergeHashes: [UnsafePointer<CChar>?] = [cFakeHash2].unsafeCopy()
+                var cFakeHash2: [CChar] = fakeHash2.cString(using: .utf8)!
+                var mergeHashes: [UnsafePointer<CChar>?] = ((try? [cFakeHash2].unsafeCopyCStringArray()) ?? [])
                 var mergeData: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData4.pointee.config)]
                 var mergeSize: [Int] = [pushData4.pointee.config_len]
                 let mergedHashes: UnsafeMutablePointer<config_string_list>? = config_merge(conf, &mergeHashes, &mergeData, &mergeSize, 1)
@@ -481,7 +494,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Client 2 adds a new friend:
                 let thirdId: String = "052222222222222222222222222222222222222222222222222222222222222222"
-                var cThirdId: [CChar] = thirdId.cArray.nullTerminated()
+                var cThirdId: [CChar] = thirdId.cString(using: .utf8)!
                 var contact7: contacts_contact = contacts_contact()
                 expect(contacts_get_or_construct(conf2, &contact7, &cThirdId)).to(beTrue())
                 contact7.nickname = "Nickname 3".toLibSession()
@@ -509,13 +522,13 @@ fileprivate extension LibSessionUtilSpec {
                     .to(equal([fakeHash2]))
                 
                 let fakeHash3a: String = "fakehash3a"
-                var cFakeHash3a: [CChar] = fakeHash3a.cArray.nullTerminated()
+                var cFakeHash3a: [CChar] = fakeHash3a.cString(using: .utf8)!
                 let fakeHash3b: String = "fakehash3b"
-                var cFakeHash3b: [CChar] = fakeHash3b.cArray.nullTerminated()
+                var cFakeHash3b: [CChar] = fakeHash3b.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData6.pointee.seqno, &cFakeHash3a)
                 config_confirm_pushed(conf2, pushData7.pointee.seqno, &cFakeHash3b)
                 
-                var mergeHashes2: [UnsafePointer<CChar>?] = [cFakeHash3b].unsafeCopy()
+                var mergeHashes2: [UnsafePointer<CChar>?] = ((try? [cFakeHash3b].unsafeCopyCStringArray()) ?? [])
                 var mergeData2: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData7.pointee.config)]
                 var mergeSize2: [Int] = [pushData7.pointee.config_len]
                 let mergedHashes2: UnsafeMutablePointer<config_string_list>? = config_merge(conf, &mergeHashes2, &mergeData2, &mergeSize2, 1)
@@ -526,7 +539,7 @@ fileprivate extension LibSessionUtilSpec {
                 mergedHashes2?.deallocate()
                 pushData7.deallocate()
                 
-                var mergeHashes3: [UnsafePointer<CChar>?] = [cFakeHash3a].unsafeCopy()
+                var mergeHashes3: [UnsafePointer<CChar>?] = ((try? [cFakeHash3a].unsafeCopyCStringArray()) ?? [])
                 var mergeData3: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData6.pointee.config)]
                 var mergeSize3: [Int] = [pushData6.pointee.config_len]
                 let mergedHashes3: UnsafeMutablePointer<config_string_list>? = config_merge(conf2, &mergeHashes3, &mergeData3, &mergeSize3, 1)
@@ -552,7 +565,7 @@ fileprivate extension LibSessionUtilSpec {
                     .to(equal([fakeHash3a, fakeHash3b]))
                 
                 let fakeHash4: String = "fakeHash4"
-                var cFakeHash4: [CChar] = fakeHash4.cArray.nullTerminated()
+                var cFakeHash4: [CChar] = fakeHash4.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData8.pointee.seqno, &cFakeHash4)
                 config_confirm_pushed(conf2, pushData9.pointee.seqno, &cFakeHash4)
                 pushData8.deallocate()
@@ -594,7 +607,7 @@ fileprivate extension LibSessionUtilSpec {
     ) throws -> contacts_contact {
         let postPrefixId: String = "05\(rand.nextBytes(count: 32).toHexString())"
         let sessionId: String = ("05\(index)a" + postPrefixId.suffix(postPrefixId.count - "05\(index)a".count))
-        var cSessionId: [CChar] = sessionId.cArray.nullTerminated()
+        var cSessionId: [CChar] = sessionId.cString(using: .utf8)!
         var contact: contacts_contact = contacts_contact()
         
         guard contacts_get_or_construct(conf, &contact, &cSessionId) else {
@@ -717,7 +730,7 @@ fileprivate extension LibSessionUtilSpec {
                 let pushData2: UnsafeMutablePointer<config_push_data> = config_push(conf)
                 expect(pushData2.pointee.seqno).to(equal(1))
                 
-                let expPush1Encrypted: [UInt8] = Data(hex: [
+                let expPush1Encrypted: [UInt8] = Array(Data(hex: [
                     "9693a69686da3055f1ecdfb239c3bf8e746951a36d888c2fb7c02e856a5c2091b24e39a7e1af828f",
                     "1fa09fe8bf7d274afde0a0847ba143c43ffb8722301b5ae32e2f078b9a5e19097403336e50b18c84",
                     "aade446cd2823b011f97d6ad2116a53feb814efecc086bc172d31f4214b4d7c630b63bbe575b0868",
@@ -725,7 +738,7 @@ fileprivate extension LibSessionUtilSpec {
                     "e7486ccde24416a7fd4a8ba5fa73899c65f4276dfaddd5b2100adcf0f793104fb235b31ce32ec656",
                     "056009a9ebf58d45d7d696b74e0c7ff0499c4d23204976f19561dc0dba6dc53a2497d28ce03498ea",
                     "49bf122762d7bc1d6d9c02f6d54f8384"
-                ].joined()).bytes
+                ].joined()))
                 
                 // We haven't dumped, so still need to dump:
                 expect(config_needs_dump(conf)).to(beTrue())
@@ -743,7 +756,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // So now imagine we got back confirmation from the swarm that the push has been stored:
                 let fakeHash1: String = "fakehash1"
-                var cFakeHash1: [CChar] = fakeHash1.cArray.nullTerminated()
+                var cFakeHash1: [CChar] = fakeHash1.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData2.pointee.seqno, &cFakeHash1)
                 pushData2.deallocate()
                 
@@ -768,8 +781,8 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Now imagine we just pulled down the `exp_push1` string from the swarm; we merge it into
                 // conf2:
-                var mergeHashes: [UnsafePointer<CChar>?] = [cFakeHash1].unsafeCopy()
-                var mergeData: [UnsafePointer<UInt8>?] = [expPush1Encrypted].unsafeCopy()
+                var mergeHashes: [UnsafePointer<CChar>?] = ((try? [cFakeHash1].unsafeCopyCStringArray()) ?? [])
+                var mergeData: [UnsafePointer<UInt8>?] = ((try? [expPush1Encrypted].unsafeCopyUInt8Array()) ?? [])
                 var mergeSize: [Int] = [expPush1Encrypted.count]
                 let mergedHashes: UnsafeMutablePointer<config_string_list>? = config_merge(conf2, &mergeHashes, &mergeData, &mergeSize, 1)
                 expect([String](pointer: mergedHashes?.pointee.value, count: mergedHashes?.pointee.len))
@@ -820,13 +833,13 @@ fileprivate extension LibSessionUtilSpec {
                 expect(config_needs_push(conf2)).to(beTrue())
                 
                 let fakeHash2: String = "fakehash2"
-                var cFakeHash2: [CChar] = fakeHash2.cArray.nullTerminated()
+                var cFakeHash2: [CChar] = fakeHash2.cString(using: .utf8)!
                 let pushData3: UnsafeMutablePointer<config_push_data> = config_push(conf)
                 expect(pushData3.pointee.seqno).to(equal(2)) // incremented, since we made a field change
                 config_confirm_pushed(conf, pushData3.pointee.seqno, &cFakeHash2)
                 
                 let fakeHash3: String = "fakehash3"
-                var cFakeHash3: [CChar] = fakeHash3.cArray.nullTerminated()
+                var cFakeHash3: [CChar] = fakeHash3.cString(using: .utf8)!
                 let pushData4: UnsafeMutablePointer<config_push_data> = config_push(conf2)
                 expect(pushData4.pointee.seqno).to(equal(2)) // incremented, since we made a field change
                 config_confirm_pushed(conf, pushData4.pointee.seqno, &cFakeHash3)
@@ -852,7 +865,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Feed the new config into each other.  (This array could hold multiple configs if we pulled
                 // down more than one).
-                var mergeHashes2: [UnsafePointer<CChar>?] = [cFakeHash2].unsafeCopy()
+                var mergeHashes2: [UnsafePointer<CChar>?] = ((try? [cFakeHash2].unsafeCopyCStringArray()) ?? [])
                 var mergeData2: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData3.pointee.config)]
                 var mergeSize2: [Int] = [pushData3.pointee.config_len]
                 let mergedHashes2: UnsafeMutablePointer<config_string_list>? = config_merge(conf2, &mergeHashes2, &mergeData2, &mergeSize2, 1)
@@ -862,7 +875,7 @@ fileprivate extension LibSessionUtilSpec {
                 mergedHashes2?.deallocate()
                 pushData3.deallocate()
                 
-                var mergeHashes3: [UnsafePointer<CChar>?] = [cFakeHash3].unsafeCopy()
+                var mergeHashes3: [UnsafePointer<CChar>?] = ((try? [cFakeHash3].unsafeCopyCStringArray()) ?? [])
                 var mergeData3: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData4.pointee.config)]
                 var mergeSize3: [Int] = [pushData4.pointee.config_len]
                 let mergedHashes3: UnsafeMutablePointer<config_string_list>? = config_merge(conf, &mergeHashes3, &mergeData3, &mergeSize3, 1)
@@ -909,9 +922,9 @@ fileprivate extension LibSessionUtilSpec {
                 expect(user_profile_get_blinded_msgreqs(conf2)).to(equal(1))
                 
                 let fakeHash4: String = "fakehash4"
-                var cFakeHash4: [CChar] = fakeHash4.cArray.nullTerminated()
+                var cFakeHash4: [CChar] = fakeHash4.cString(using: .utf8)!
                 let fakeHash5: String = "fakehash5"
-                var cFakeHash5: [CChar] = fakeHash5.cArray.nullTerminated()
+                var cFakeHash5: [CChar] = fakeHash5.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData5.pointee.seqno, &cFakeHash4)
                 config_confirm_pushed(conf2, pushData6.pointee.seqno, &cFakeHash5)
                 pushData5.deallocate()
@@ -967,7 +980,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Empty contacts shouldn't have an existing contact
                 let definitelyRealId: String = "055000000000000000000000000000000000000000000000000000000000000000"
-                var cDefinitelyRealId: [CChar] = definitelyRealId.cArray.nullTerminated()
+                var cDefinitelyRealId: [CChar] = definitelyRealId.cString(using: .utf8)!
                 var oneToOne1: convo_info_volatile_1to1 = convo_info_volatile_1to1()
                 expect(convo_info_volatile_get_1to1(conf, &oneToOne1, &cDefinitelyRealId)).to(beFalse())
                 expect(convo_info_volatile_size(conf)).to(equal(0))
@@ -1001,7 +1014,7 @@ fileprivate extension LibSessionUtilSpec {
                 expect(config_needs_dump(conf)).to(beTrue())
                 
                 let openGroupBaseUrl: String = "http://Example.ORG:5678"
-                var cOpenGroupBaseUrl: [CChar] = openGroupBaseUrl.cArray.nullTerminated()
+                var cOpenGroupBaseUrl: [CChar] = openGroupBaseUrl.cString(using: .utf8)!
                 let openGroupBaseUrlResult: String = openGroupBaseUrl.lowercased()
                 //            ("http://Example.ORG:5678"
                 //                .lowercased()
@@ -1009,7 +1022,7 @@ fileprivate extension LibSessionUtilSpec {
                 //                [CChar](repeating: 0, count: (268 - openGroupBaseUrl.count))
                 //            )
                 let openGroupRoom: String = "SudokuRoom"
-                var cOpenGroupRoom: [CChar] = openGroupRoom.cArray.nullTerminated()
+                var cOpenGroupRoom: [CChar] = openGroupRoom.cString(using: .utf8)!
                 let openGroupRoomResult: String = openGroupRoom.lowercased()
                 //            ("SudokuRoom"
                 //                .lowercased()
@@ -1036,7 +1049,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Pretend we uploaded it
                 let fakeHash1: String = "fakehash1"
-                var cFakeHash1: [CChar] = fakeHash1.cArray.nullTerminated()
+                var cFakeHash1: [CChar] = fakeHash1.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData1.pointee.seqno, &cFakeHash1)
                 expect(config_needs_dump(conf)).to(beTrue())
                 expect(config_needs_push(conf)).to(beFalse())
@@ -1070,14 +1083,14 @@ fileprivate extension LibSessionUtilSpec {
                 community2.unread = true
                 
                 let anotherId: String = "051111111111111111111111111111111111111111111111111111111111111111"
-                var cAnotherId: [CChar] = anotherId.cArray.nullTerminated()
+                var cAnotherId: [CChar] = anotherId.cString(using: .utf8)!
                 var oneToOne5: convo_info_volatile_1to1 = convo_info_volatile_1to1()
                 expect(convo_info_volatile_get_or_construct_1to1(conf2, &oneToOne5, &cAnotherId)).to(beTrue())
                 oneToOne5.unread = true
                 convo_info_volatile_set_1to1(conf2, &oneToOne5)
                 
                 let thirdId: String = "05cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                var cThirdId: [CChar] = thirdId.cArray.nullTerminated()
+                var cThirdId: [CChar] = thirdId.cString(using: .utf8)!
                 var legacyGroup2: convo_info_volatile_legacy_group = convo_info_volatile_legacy_group()
                 expect(convo_info_volatile_get_or_construct_legacy_group(conf2, &legacyGroup2, &cThirdId)).to(beTrue())
                 legacyGroup2.last_read = (nowTimestampMs - 50)
@@ -1089,8 +1102,8 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Check the merging
                 let fakeHash2: String = "fakehash2"
-                var cFakeHash2: [CChar] = fakeHash2.cArray.nullTerminated()
-                var mergeHashes: [UnsafePointer<CChar>?] = [cFakeHash2].unsafeCopy()
+                var cFakeHash2: [CChar] = fakeHash2.cString(using: .utf8)!
+                var mergeHashes: [UnsafePointer<CChar>?] = ((try? [cFakeHash2].unsafeCopyCStringArray()) ?? [])
                 var mergeData: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData2.pointee.config)]
                 var mergeSize: [Int] = [pushData2.pointee.config_len]
                 let mergedHashes: UnsafeMutablePointer<config_string_list>? = config_merge(conf, &mergeHashes, &mergeData, &mergeSize, 1)
@@ -1141,7 +1154,7 @@ fileprivate extension LibSessionUtilSpec {
                 }
                 
                 let fourthId: String = "052000000000000000000000000000000000000000000000000000000000000000"
-                var cFourthId: [CChar] = fourthId.cArray.nullTerminated()
+                var cFourthId: [CChar] = fourthId.cString(using: .utf8)!
                 expect(config_needs_push(conf)).to(beFalse())
                 convo_info_volatile_erase_1to1(conf, &cFourthId)
                 expect(config_needs_push(conf)).to(beFalse())
@@ -1231,7 +1244,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Empty contacts shouldn't have an existing contact
                 let definitelyRealId: String = "055000000000000000000000000000000000000000000000000000000000000000"
-                var cDefinitelyRealId: [CChar] = definitelyRealId.cArray.nullTerminated()
+                var cDefinitelyRealId: [CChar] = definitelyRealId.cString(using: .utf8)!
                 let legacyGroup1: UnsafeMutablePointer<ugroups_legacy_group_info>? = user_groups_get_legacy_group(conf, &cDefinitelyRealId)
                 expect(legacyGroup1?.pointee).to(beNil())
                 expect(user_groups_size(conf)).to(equal(0))
@@ -1285,7 +1298,7 @@ fileprivate extension LibSessionUtilSpec {
                     "055555555555555555555555555555555555555555555555555555555555555555",
                     "056666666666666666666666666666666666666666666666666666666666666666"
                 ]
-                var cUsers: [[CChar]] = users.map { $0.cArray.nullTerminated() }
+                var cUsers: [[CChar]] = users.map { $0.cString(using: .utf8)! }
                 legacyGroup2.pointee.name = "Englishmen".toLibSession()
                 legacyGroup2.pointee.disappearing_timer = 60
                 legacyGroup2.pointee.joined_at = createdTs
@@ -1348,9 +1361,9 @@ fileprivate extension LibSessionUtilSpec {
                 ugroups_legacy_group_free(legacyGroup3)
                 
                 let communityPubkey: String = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-                var cCommunityPubkey: [UInt8] = Data(hex: communityPubkey).cArray
-                var cCommunityBaseUrl: [CChar] = "http://Example.ORG:5678".cArray.nullTerminated()
-                var cCommunityRoom: [CChar] = "SudokuRoom".cArray.nullTerminated()
+                var cCommunityPubkey: [UInt8] = Array(Data(hex: communityPubkey))
+                var cCommunityBaseUrl: [CChar] = "http://Example.ORG:5678".cString(using: .utf8)!
+                var cCommunityRoom: [CChar] = "SudokuRoom".cString(using: .utf8)!
                 var community1: ugroups_community_info = ugroups_community_info()
                 expect(user_groups_get_or_construct_community(conf, &community1, &cCommunityBaseUrl, &cCommunityRoom, &cCommunityPubkey))
                     .to(beTrue())
@@ -1373,7 +1386,7 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Pretend we uploaded it
                 let fakeHash1: String = "fakehash1"
-                var cFakeHash1: [CChar] = fakeHash1.cArray.nullTerminated()
+                var cFakeHash1: [CChar] = fakeHash1.cString(using: .utf8)!
                 config_confirm_pushed(conf, pushData2.pointee.seqno, &cFakeHash1)
                 expect(config_needs_dump(conf)).to(beTrue())
                 expect(config_needs_push(conf)).to(beFalse())
@@ -1492,8 +1505,8 @@ fileprivate extension LibSessionUtilSpec {
                     ]))
                 }
                 
-                var cCommunity2BaseUrl: [CChar] = "http://example.org:5678".cArray.nullTerminated()
-                var cCommunity2Room: [CChar] = "sudokuRoom".cArray.nullTerminated()
+                var cCommunity2BaseUrl: [CChar] = "http://example.org:5678".cString(using: .utf8)!
+                var cCommunity2Room: [CChar] = "sudokuRoom".cString(using: .utf8)!
                 var community2: ugroups_community_info = ugroups_community_info()
                 expect(user_groups_get_community(conf2, &community2, &cCommunity2BaseUrl, &cCommunity2Room))
                     .to(beTrue())
@@ -1518,7 +1531,7 @@ fileprivate extension LibSessionUtilSpec {
                 expect(config_needs_dump(conf2)).to(beTrue())
                 
                 let fakeHash2: String = "fakehash2"
-                var cFakeHash2: [CChar] = fakeHash2.cArray.nullTerminated()
+                var cFakeHash2: [CChar] = fakeHash2.cString(using: .utf8)!
                 let pushData7: UnsafeMutablePointer<config_push_data> = config_push(conf2)
                 expect(pushData7.pointee.seqno).to(equal(2))
                 config_confirm_pushed(conf2, pushData7.pointee.seqno, &cFakeHash2)
@@ -1542,7 +1555,7 @@ fileprivate extension LibSessionUtilSpec {
                 config_confirm_pushed(conf2, pushData8.pointee.seqno, &cFakeHash2)
                 expect(config_needs_dump(conf2)).to(beFalse())
                 
-                var mergeHashes1: [UnsafePointer<CChar>?] = [cFakeHash2].unsafeCopy()
+                var mergeHashes1: [UnsafePointer<CChar>?] = ((try? [cFakeHash2].unsafeCopyCStringArray()) ?? [])
                 var mergeData1: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData8.pointee.config)]
                 var mergeSize1: [Int] = [pushData8.pointee.config_len]
                 let mergedHashes1: UnsafeMutablePointer<config_string_list>? = config_merge(conf, &mergeHashes1, &mergeData1, &mergeSize1, 1)
@@ -1552,8 +1565,8 @@ fileprivate extension LibSessionUtilSpec {
                 mergedHashes1?.deallocate()
                 pushData8.deallocate()
                 
-                var cCommunity3BaseUrl: [CChar] = "http://example.org:5678".cArray.nullTerminated()
-                var cCommunity3Room: [CChar] = "SudokuRoom".cArray.nullTerminated()
+                var cCommunity3BaseUrl: [CChar] = "http://example.org:5678".cString(using: .utf8)!
+                var cCommunity3Room: [CChar] = "SudokuRoom".cString(using: .utf8)!
                 var community3: ugroups_community_info = ugroups_community_info()
                 expect(user_groups_get_community(conf, &community3, &cCommunity3BaseUrl, &cCommunity3Room))
                     .to(beTrue())
@@ -1581,12 +1594,12 @@ fileprivate extension LibSessionUtilSpec {
                 expect(config_needs_push(conf2)).to(beTrue())
                 expect(config_needs_dump(conf2)).to(beTrue())
                 
-                var cCommunity4BaseUrl: [CChar] = "http://exAMple.ORG:5678".cArray.nullTerminated()
-                var cCommunity4Room: [CChar] = "sudokuROOM".cArray.nullTerminated()
+                var cCommunity4BaseUrl: [CChar] = "http://exAMple.ORG:5678".cString(using: .utf8)!
+                var cCommunity4Room: [CChar] = "sudokuROOM".cString(using: .utf8)!
                 user_groups_erase_community(conf2, &cCommunity4BaseUrl, &cCommunity4Room)
                 
                 let fakeHash3: String = "fakehash3"
-                var cFakeHash3: [CChar] = fakeHash3.cArray.nullTerminated()
+                var cFakeHash3: [CChar] = fakeHash3.cString(using: .utf8)!
                 let pushData10: UnsafeMutablePointer<config_push_data> = config_push(conf2)
                 config_confirm_pushed(conf2, pushData10.pointee.seqno, &cFakeHash3)
                 
@@ -1599,7 +1612,7 @@ fileprivate extension LibSessionUtilSpec {
                     .to(equal([fakeHash3]))
                 currentHashes4?.deallocate()
                 
-                var mergeHashes2: [UnsafePointer<CChar>?] = [cFakeHash3].unsafeCopy()
+                var mergeHashes2: [UnsafePointer<CChar>?] = ((try? [cFakeHash3].unsafeCopyCStringArray()) ?? [])
                 var mergeData2: [UnsafePointer<UInt8>?] = [UnsafePointer(pushData10.pointee.config)]
                 var mergeSize2: [Int] = [pushData10.pointee.config_len]
                 let mergedHashes2: UnsafeMutablePointer<config_string_list>? = config_merge(conf, &mergeHashes2, &mergeData2, &mergeSize2, 1)
@@ -1613,13 +1626,13 @@ fileprivate extension LibSessionUtilSpec {
                 expect(user_groups_size_legacy_groups(conf)).to(equal(1))
                 
                 var prio: Int32 = 0
-                var cBeanstalkBaseUrl: [CChar] = "http://jacksbeanstalk.org".cArray.nullTerminated()
-                var cBeanstalkPubkey: [UInt8] = Data(
+                var cBeanstalkBaseUrl: [CChar] = "http://jacksbeanstalk.org".cString(using: .utf8)!
+                var cBeanstalkPubkey: [UInt8] = Array(Data(
                     hex: "0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff"
-                ).cArray
+                ))
                 
                 ["fee", "fi", "fo", "fum"].forEach { room in
-                    var cRoom: [CChar] = room.cArray.nullTerminated()
+                    var cRoom: [CChar] = room.cString(using: .utf8)!
                     prio += 1
                     
                     var community4: ugroups_community_info = ugroups_community_info()
@@ -1634,7 +1647,7 @@ fileprivate extension LibSessionUtilSpec {
                 expect(user_groups_size_legacy_groups(conf)).to(equal(1))
                 
                 let fakeHash4: String = "fakehash4"
-                var cFakeHash4: [CChar] = fakeHash4.cArray.nullTerminated()
+                var cFakeHash4: [CChar] = fakeHash4.cString(using: .utf8)!
                 let pushData11: UnsafeMutablePointer<config_push_data> = config_push(conf)
                 config_confirm_pushed(conf, pushData11.pointee.seqno, &cFakeHash4)
                 expect(pushData11.pointee.seqno).to(equal(4))
@@ -1643,12 +1656,12 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // Load some obsolete ones in just to check that they get immediately obsoleted
                 let fakeHash10: String = "fakehash10"
-                let cFakeHash10: [CChar] = fakeHash10.cArray.nullTerminated()
+                let cFakeHash10: [CChar] = fakeHash10.cString(using: .utf8)!
                 let fakeHash11: String = "fakehash11"
-                let cFakeHash11: [CChar] = fakeHash11.cArray.nullTerminated()
+                let cFakeHash11: [CChar] = fakeHash11.cString(using: .utf8)!
                 let fakeHash12: String = "fakehash12"
-                let cFakeHash12: [CChar] = fakeHash12.cArray.nullTerminated()
-                var mergeHashes3: [UnsafePointer<CChar>?] = [cFakeHash10, cFakeHash11, cFakeHash12, cFakeHash4].unsafeCopy()
+                let cFakeHash12: [CChar] = fakeHash12.cString(using: .utf8)!
+                var mergeHashes3: [UnsafePointer<CChar>?] = ((try? [cFakeHash10, cFakeHash11, cFakeHash12, cFakeHash4].unsafeCopyCStringArray()) ?? [])
                 var mergeData3: [UnsafePointer<UInt8>?] = [
                     UnsafePointer(pushData10.pointee.config),
                     UnsafePointer(pushData2.pointee.config),

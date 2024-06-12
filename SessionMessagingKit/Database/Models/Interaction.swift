@@ -316,6 +316,7 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         serverHash: String? = nil,
         messageUuid: String? = nil,
         threadId: String,
+        threadVariant: SessionThread.Variant,
         authorId: String,
         variant: Variant,
         body: String? = nil,
@@ -346,8 +347,8 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         }()
         self.wasRead = (wasRead || !variant.canBeUnread)
         self.hasMention = hasMention
-        self.expiresInSeconds = expiresInSeconds
-        self.expiresStartedAtMs = expiresStartedAtMs
+        self.expiresInSeconds = (threadVariant != .community ? expiresInSeconds : nil)
+        self.expiresStartedAtMs = (threadVariant != .community ? expiresStartedAtMs : nil)
         self.linkPreviewUrl = linkPreviewUrl
         self.openGroupServerMessageId = openGroupServerMessageId
         self.openGroupWhisperMods = openGroupWhisperMods
@@ -477,29 +478,17 @@ public extension Interaction {
         )
     }
     
-    func withDisappearAfterReadIfNeeded(_ db: Database) -> Interaction {
+    func withDisappearingMessagesConfiguration(_ db: Database, threadVariant: SessionThread.Variant) -> Interaction {
+        guard threadVariant != .community else { return self }
+        
         if let config = try? DisappearingMessagesConfiguration.fetchOne(db, id: self.threadId) {
-            return self.withDisappearingMessagesConfiguration(
-                config: config.with(type: .disappearAfterRead)
+            return self.with(
+                expiresInSeconds: config.durationSeconds,
+                expiresStartedAtMs: (config.type == .disappearAfterSend ? Double(self.timestampMs) : nil)
             )
         }
         
         return self
-    }
-    
-    func withDisappearingMessagesConfiguration(_ db: Database) -> Interaction {
-        if let config = try? DisappearingMessagesConfiguration.fetchOne(db, id: self.threadId) {
-            return self.withDisappearingMessagesConfiguration(config: config)
-        }
-        
-        return self
-    }
-    
-    func withDisappearingMessagesConfiguration(config: DisappearingMessagesConfiguration?) -> Interaction {
-        return self.with(
-            expiresInSeconds: config?.durationSeconds,
-            expiresStartedAtMs: (config?.type == .disappearAfterSend ? Double(self.timestampMs) : nil)
-        )
     }
 }
 

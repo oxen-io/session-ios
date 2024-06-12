@@ -408,6 +408,7 @@ open class Storage {
     /// with extensions - this may be possible but will require significant refactoring and a potentially painful migration to move the
     /// database and other files into the App folder
     public static func suspendDatabaseAccess(using dependencies: Dependencies = Dependencies()) {
+        Log.info("[Storage] suspendDatabaseAccess called.")
         NotificationCenter.default.post(name: Database.suspendNotification, object: self)
         if Storage.hasCreatedValidInstance { dependencies.storage.isSuspendedUnsafe = true }
     }
@@ -417,6 +418,7 @@ open class Storage {
     public static func resumeDatabaseAccess(using dependencies: Dependencies = Dependencies()) {
         NotificationCenter.default.post(name: Database.resumeNotification, object: self)
         if Storage.hasCreatedValidInstance { dependencies.storage.isSuspendedUnsafe = false }
+        Log.info("[Storage] resumeDatabaseAccess called.")
     }
     
     public static func resetAllStorage() {

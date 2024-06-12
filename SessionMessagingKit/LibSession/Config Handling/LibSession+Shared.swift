@@ -384,6 +384,15 @@ public extension LibSession {
         threadVariant: SessionThread.Variant,
         visibleOnly: Bool
     ) -> Bool {
+        // Currently blinded conversations cannot be contained in the config, so there is no point checking (it'll always be
+        // false)
+        guard
+            threadVariant == .community || (
+                SessionId(from: threadId)?.prefix != .blinded15 &&
+                SessionId(from: threadId)?.prefix != .blinded25
+            )
+        else { return false }
+        
         let userPublicKey: String = getUserHexEncodedPublicKey(db)
         let configVariant: ConfigDump.Variant = {
             switch threadVariant {
@@ -396,7 +405,7 @@ public extension LibSession {
             .config(for: configVariant, publicKey: userPublicKey)
             .wrappedValue
             .map { conf in
-                var cThreadId: [CChar] = threadId.cArray.nullTerminated()
+                guard var cThreadId: [CChar] = threadId.cString(using: .utf8) else { return false }
                 
                 switch threadVariant {
                     case .contact:
@@ -410,7 +419,10 @@ public extension LibSession {
                         
                         var contact: contacts_contact = contacts_contact()
                         
-                        guard contacts_get(conf, &contact, &cThreadId) else { return false }
+                        guard contacts_get(conf, &contact, &cThreadId) else {
+                            LibSessionError.clear(conf)
+                            return false
+                        }
                         
                         /// If the user opens a conversation with an existing contact but doesn't send them a message
                         /// then the one-to-one conversation should remain hidden so we want to delete the `SessionThread`
@@ -422,17 +434,23 @@ public extension LibSession {
                             .read { db in try OpenGroupUrlInfo.fetchAll(db, ids: [threadId]) }?
                             .first
                         
-                        guard let urlInfo: OpenGroupUrlInfo = maybeUrlInfo else { return false }
+                        guard
+                            let urlInfo: OpenGroupUrlInfo = maybeUrlInfo,
+                            var cBaseUrl: [CChar] = urlInfo.server.cString(using: .utf8),
+                            var cRoom: [CChar] = urlInfo.roomToken.cString(using: .utf8)
+                        else { return false }
                         
-                        var cBaseUrl: [CChar] = urlInfo.server.cArray.nullTerminated()
-                        var cRoom: [CChar] = urlInfo.roomToken.cArray.nullTerminated()
                         var community: ugroups_community_info = ugroups_community_info()
                         
                         /// Not handling the `hidden` behaviour for communities so just indicate the existence
-                        return user_groups_get_community(conf, &community, &cBaseUrl, &cRoom)
+                        let result: Bool = user_groups_get_community(conf, &community, &cBaseUrl, &cRoom)
+                        LibSessionError.clear(conf)
+                        
+                        return result
                         
                     case .legacyGroup:
                         let groupInfo: UnsafeMutablePointer<ugroups_legacy_group_info>? = user_groups_get_legacy_group(conf, &cThreadId)
+                        LibSessionError.clear(conf)
                         
                         /// Not handling the `hidden` behaviour for legacy groups so just indicate the existence
                         if groupInfo != nil {

@@ -846,65 +846,71 @@ public enum OpenGroupAPI {
     
     // MARK: - Files
     
-    /// Uploads a file to a room.
-    ///
-    /// Takes the request as binary in the body and takes other properties (specifically the suggested filename) via submitted headers.
-    ///
-    /// The user must have upload and posting permissions for the room. The file will have a default lifetime of 1 hour, which is extended
-    /// to 15 days (by default) when a post referencing the uploaded file is posted or edited.
-    public static func preparedUploadFile(
+    public static func uploadDestination(
         _ db: Database,
-        bytes: [UInt8],
-        fileName: String? = nil,
-        to roomToken: String,
-        on server: String,
+        data: Data,
+        openGroup: OpenGroup,
         using dependencies: Dependencies
-    ) throws -> Network.PreparedRequest<FileUploadResponse> {
-        return try OpenGroupAPI
-            .prepareRequest(
-                request: Request(
-                    db,
-                    method: .post,
-                    server: server,
-                    endpoint: Endpoint.roomFile(roomToken),
-                    headers: [
-                        .contentDisposition: [ "attachment", fileName.map { "filename=\"\($0)\"" } ]
-                            .compactMap{ $0 }
-                            .joined(separator: "; "),
-                        .contentType: "application/octet-stream"
-                    ],
-                    body: bytes
-                ),
-                responseType: FileUploadResponse.self,
-                timeout: FileServerAPI.fileUploadTimeout,
-                using: dependencies
-            )
-            .signed(db, with: OpenGroupAPI.signRequest, using: dependencies)
+    ) throws -> Network.Destination {
+        guard let url: URL = URL(string: "\(openGroup.server)/\(Endpoint.roomFile(openGroup.roomToken).path)") else {
+            throw NetworkError.invalidURL
+        }
+        
+        return try .server(
+            url: url,
+            method: .post,
+            headers: nil,
+            x25519PublicKey: openGroup.publicKey
+        )
+        .signed(db, server: openGroup.server, data: data, using: dependencies)
     }
     
-    /// Retrieves a file uploaded to the room.
-    ///
-    /// Retrieves a file via its numeric id from the room, returning the file content directly as the binary response body. The file's suggested
-    /// filename (as provided by the uploader) is provided in the Content-Disposition header, if available.
-    public static func preparedDownloadFile(
+    public static func downloadUrlFor(
+        fileId: String,
+        server: String,
+        roomToken: String
+    ) throws -> URL {
+        return (
+            try URL(string: "\(server)/\(Endpoint.roomFileIndividual(roomToken, fileId).path)") ??
+            { throw NetworkError.invalidURL }()
+        )
+    }
+    
+    public static func downloadDestination(
         _ db: Database,
         fileId: String,
-        from roomToken: String,
-        on server: String,
+        openGroup: OpenGroup,
         using dependencies: Dependencies
-    ) throws -> Network.PreparedRequest<Data> {
-        return try OpenGroupAPI
-            .prepareRequest(
-                request: Request<NoBody, Endpoint>(
-                    db,
-                    server: server,
-                    endpoint: .roomFileIndividual(roomToken, fileId)
-                ),
-                responseType: Data.self,
-                timeout: FileServerAPI.fileDownloadTimeout,
-                using: dependencies
-            )
-            .signed(db, with: OpenGroupAPI.signRequest, using: dependencies)
+    ) throws -> Network.Destination {
+        return try downloadDestination(
+            db,
+            url: try downloadUrlFor(fileId: fileId, server: openGroup.server, roomToken: openGroup.roomToken),
+            openGroup: openGroup,
+            using: dependencies
+        )
+    }
+    
+    public static func downloadDestination(
+        _ db: Database,
+        url: URL,
+        openGroup: OpenGroup,
+        using dependencies: Dependencies
+    ) throws -> Network.Destination {
+        return try .server(
+            url: try {
+                // FIXME: Remove this logic once the 'downloadUrl' for SOGS is being set correctly
+                guard
+                    Network.isFileServerUrl(url: url),
+                    let fileId: String = Attachment.fileId(for: url.absoluteString)
+                else { return url }
+                
+                return try downloadUrlFor(fileId: fileId, server: openGroup.server, roomToken: openGroup.roomToken)
+            }(),
+            method: .get,
+            headers: nil,
+            x25519PublicKey: openGroup.publicKey
+        )
+        .signed(db, server: openGroup.server, data: nil, using: dependencies)
     }
     
     // MARK: - Inbox/Outbox (Message Requests)
@@ -1273,6 +1279,68 @@ public enum OpenGroupAPI {
     
     // MARK: - Authentication
     
+    fileprivate static func signatureHeaders(
+        _ db: Database,
+        url: URL,
+        method: HTTPMethod,
+        server: String,
+        serverPublicKey: String,
+        body: Data?,
+        forceBlinded: Bool,
+        using dependencies: Dependencies
+    ) throws -> [HTTPHeader: String] {
+        let path: String = url.path
+            .appending(url.query.map { value in "?\(value)" })
+        let method: String = method.rawValue
+        let timestamp: Int = Int(floor(dependencies.dateNow.timeIntervalSince1970))
+        let serverPublicKeyData: Data = Data(hex: serverPublicKey)
+        
+        guard
+            !serverPublicKeyData.isEmpty,
+            let nonce: [UInt8] = (try? dependencies.crypto.perform(.generateNonce16())),
+            let timestampBytes: [UInt8] = "\(timestamp)".data(using: .ascii).map({ Array($0) })
+        else { throw OpenGroupAPIError.signingFailed }
+        
+        /// Get a hash of any body content
+        let bodyHash: [UInt8]? = {
+            guard let body: Data = body else { return nil }
+            
+            return try? dependencies.crypto.perform(.hash(message: body.bytes, outputLength: 64))
+        }()
+        
+        /// Generate the signature message
+        /// "ServerPubkey || Nonce || Timestamp || Method || Path || Blake2b Hash(Body)
+        ///     `ServerPubkey`
+        ///     `Nonce`
+        ///     `Timestamp` is the bytes of an ascii decimal string
+        ///     `Method`
+        ///     `Path`
+        ///     `Body` is a Blake2b hash of the data (if there is a body)
+        let messageBytes: [UInt8] = serverPublicKeyData.bytes
+            .appending(contentsOf: nonce)
+            .appending(contentsOf: timestampBytes)
+            .appending(contentsOf: method.bytes)
+            .appending(contentsOf: path.bytes)
+            .appending(contentsOf: bodyHash ?? [])
+        
+        /// Sign the above message
+        let signResult: (publicKey: String, signature: [UInt8]) = try sign(
+            db,
+            messageBytes: messageBytes,
+            for: server,
+            fallbackSigningType: .unblinded,
+            forceBlinded: forceBlinded,
+            using: dependencies
+        )
+        
+        return [
+            HTTPHeader.sogsPubKey: signResult.publicKey,
+            HTTPHeader.sogsTimestamp: "\(timestamp)",
+            HTTPHeader.sogsNonce: Data(nonce).base64EncodedString(),
+            HTTPHeader.sogsSignature: signResult.signature.toBase64()
+        ]
+    }
+    
     /// Sign a message to be sent to SOGS (handles both un-blinded and blinded signing based on the server capabilities)
     private static func sign(
         _ db: Database,
@@ -1357,57 +1425,19 @@ public enum OpenGroupAPI {
         else { throw OpenGroupAPIError.signingFailed }
         
         var updatedRequest: URLRequest = preparedRequest.request
-        let path: String = url.path
-            .appending(url.query.map { value in "?\(value)" })
-        let method: String = preparedRequest.method.rawValue
-        let timestamp: Int = Int(floor(dependencies.dateNow.timeIntervalSince1970))
-        let serverPublicKeyData: Data = Data(hex: target.serverPublicKey)
-        
-        guard
-            !serverPublicKeyData.isEmpty,
-            let nonce: [UInt8] = (try? dependencies.crypto.perform(.generateNonce16())),
-            let timestampBytes: [UInt8] = "\(timestamp)".data(using: .ascii).map({ Array($0) })
-        else { throw OpenGroupAPIError.signingFailed }
-        
-        /// Get a hash of any body content
-        let bodyHash: [UInt8]? = {
-            guard let body: Data = preparedRequest.request.httpBody else { return nil }
-            
-            return try? dependencies.crypto.perform(.hash(message: body.bytes, outputLength: 64))
-        }()
-        
-        /// Generate the signature message
-        /// "ServerPubkey || Nonce || Timestamp || Method || Path || Blake2b Hash(Body)
-        ///     `ServerPubkey`
-        ///     `Nonce`
-        ///     `Timestamp` is the bytes of an ascii decimal string
-        ///     `Method`
-        ///     `Path`
-        ///     `Body` is a Blake2b hash of the data (if there is a body)
-        let messageBytes: [UInt8] = serverPublicKeyData.bytes
-            .appending(contentsOf: nonce)
-            .appending(contentsOf: timestampBytes)
-            .appending(contentsOf: method.bytes)
-            .appending(contentsOf: path.bytes)
-            .appending(contentsOf: bodyHash ?? [])
-        
-        /// Sign the above message
-        let signResult: (publicKey: String, signature: [UInt8]) = try sign(
-            db,
-            messageBytes: messageBytes,
-            for: target.server,
-            fallbackSigningType: .unblinded,
-            forceBlinded: target.forceBlinded,
-            using: dependencies
-        )
-        
         updatedRequest.allHTTPHeaderFields = (preparedRequest.request.allHTTPHeaderFields ?? [:])
-            .updated(with: [
-                HTTPHeader.sogsPubKey: signResult.publicKey,
-                HTTPHeader.sogsTimestamp: "\(timestamp)",
-                HTTPHeader.sogsNonce: Data(nonce).base64EncodedString(),
-                HTTPHeader.sogsSignature: signResult.signature.toBase64()
-            ])
+            .updated(
+                with: try signatureHeaders(
+                    db,
+                    url: url,
+                    method: preparedRequest.method,
+                    server: target.server,
+                    serverPublicKey: target.serverPublicKey,
+                    body: preparedRequest.request.httpBody,
+                    forceBlinded: target.forceBlinded,
+                    using: dependencies
+                )
+            )
         
         return updatedRequest
     }
@@ -1431,3 +1461,29 @@ public enum OpenGroupAPI {
         )
     }
 }
+
+private extension Network.Destination {
+    func signed(_ db: Database, server: String, data: Data?, using dependencies: Dependencies) throws -> Network.Destination {
+        switch self {
+            case .snode: throw NetworkError.invalidURL
+            case .server(let url, let method, let headers, let x25519PublicKey):
+                return .server(
+                    url: url,
+                    method: method,
+                    headers: (headers ?? [:])
+                        .updated(with: try OpenGroupAPI.signatureHeaders(
+                            db,
+                            url: url,
+                            method: method,
+                            server: server,
+                            serverPublicKey: x25519PublicKey,
+                            body: data,
+                            forceBlinded: false,
+                            using: dependencies
+                        )),
+                    x25519PublicKey: x25519PublicKey
+                )
+        }
+    }
+}
+

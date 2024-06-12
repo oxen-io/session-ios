@@ -4,7 +4,7 @@
 
 import Foundation
 
-public enum NetworkError: LocalizedError, Equatable {
+public enum NetworkError: Error, Equatable, CustomStringConvertible {
     case invalidURL
     case invalidPreparedRequest
     case notFound
@@ -12,22 +12,31 @@ public enum NetworkError: LocalizedError, Equatable {
     case invalidResponse
     case maxFileSizeExceeded
     case unauthorised
+    case internalServerError
+    case badGateway
+    case serviceUnavailable
     case badRequest(error: String, rawData: Data?)
     case requestFailed(error: String, rawData: Data?)
     case timeout
+    case suspended
     case unknown
     
-    public var errorDescription: String? {
+    public var description: String {
         switch self {
-            case .invalidURL: return "Invalid URL."
-            case .invalidPreparedRequest: return "Invalid PreparedRequest provided."
-            case .notFound: return "Not Found."
-            case .parsingFailed, .invalidResponse: return "Invalid response."
-            case .maxFileSizeExceeded: return "Maximum file size exceeded."
-            case .unauthorised: return "Unauthorised (Failed to verify the signature)."
+            case .invalidURL: return "Invalid URL (NetworkError.invalidURL)."
+            case .invalidPreparedRequest: return "Invalid PreparedRequest provided (NetworkError.invalidPreparedRequest)."
+            case .notFound: return "Not Found (NetworkError.notFound)."
+            case .parsingFailed: return "Invalid response (NetworkError.parsingFailed)."
+            case .invalidResponse: return "Invalid response (NetworkError.invalidResponse)."
+            case .maxFileSizeExceeded: return "Maximum file size exceeded (NetworkError.maxFileSizeExceeded)."
+            case .unauthorised: return "Unauthorised (Failed to verify the signature - NetworkError.unauthorised)."
+            case .internalServerError: return "Internal server error (NetworkError.internalServerError)."
+            case .badGateway: return "Bad gateway (NetworkError.badGateway)."
+            case .serviceUnavailable: return "Service unavailable (NetworkError.serviceUnavailable)."
             case .badRequest(let error, _), .requestFailed(let error, _): return error
-            case .timeout: return "The request timed out."
-            case .unknown: return "An unknown error occurred."
+            case .timeout: return "The request timed out (NetworkError.timeout)."
+            case .suspended: return "Network requests are suspended (NetworkError.suspended)."
+            case .unknown: return "An unknown error occurred (NetworkError.unknown)."
         }
     }
 }

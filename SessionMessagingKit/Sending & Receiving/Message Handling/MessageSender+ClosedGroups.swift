@@ -289,6 +289,7 @@ extension MessageSender {
                     // Notify the user
                     let interaction: Interaction = try Interaction(
                         threadId: groupPublicKey,
+                        threadVariant: .legacyGroup,
                         authorId: userPublicKey,
                         variant: .infoClosedGroupUpdated,
                         body: ClosedGroupControlMessage.Kind
@@ -403,6 +404,7 @@ extension MessageSender {
         // Notify the user
         let interaction: Interaction = try Interaction(
             threadId: closedGroup.threadId,
+            threadVariant: .legacyGroup,
             authorId: userPublicKey,
             variant: .infoClosedGroupUpdated,
             body: ClosedGroupControlMessage.Kind
@@ -525,6 +527,7 @@ extension MessageSender {
                 if !removedMembers.subtracting(groupZombieIds).isEmpty {
                     let interaction: Interaction = try Interaction(
                         threadId: closedGroup.threadId,
+                        threadVariant: .legacyGroup,
                         authorId: userPublicKey,
                         variant: .infoClosedGroupUpdated,
                         body: ClosedGroupControlMessage.Kind
@@ -591,6 +594,7 @@ extension MessageSender {
         // Notify the user
         let interaction: Interaction = try Interaction(
             threadId: groupPublicKey,
+            threadVariant: .legacyGroup,
             authorId: userPublicKey,
             variant: .infoClosedGroupCurrentUserLeaving,
             body: "group_you_leaving".localized(),

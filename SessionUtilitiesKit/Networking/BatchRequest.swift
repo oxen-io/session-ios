@@ -25,7 +25,7 @@ public extension Network {
             self.requests = requests.map { Child(request: $0) }
             
             if requests.count > BatchRequest.childRequestLimit {
-                SNLog("[BatchRequest] Constructed request with \(requests.count) subrequests when the limit is \(BatchRequest.childRequestLimit)")
+                Log.warn("[BatchRequest] Constructed request with \(requests.count) subrequests when the limit is \(BatchRequest.childRequestLimit)")
             }
         }
         

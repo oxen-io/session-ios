@@ -24,7 +24,7 @@ public enum MessageSendJob: JobExecutor {
             let detailsData: Data = job.details,
             let details: Details = try? JSONDecoder().decode(Details.self, from: detailsData)
         else {
-            SNLog("[MessageSendJob] Failing due to missing details")
+            Log.error("[MessageSendJob] Failing due to missing details")
             return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
         }
         
@@ -45,7 +45,7 @@ public enum MessageSendJob: JobExecutor {
                 let jobId: Int64 = job.id,
                 let interactionId: Int64 = job.interactionId
             else {
-                SNLog("[MessageSendJob] Failing due to missing details")
+                Log.error("[MessageSendJob] Failing due to missing details")
                 return failure(job, JobRunnerError.missingRequiredDetails, true, dependencies)
             }
             
@@ -57,7 +57,7 @@ public enum MessageSendJob: JobExecutor {
                     // If the original interaction no longer exists then don't bother sending the message (ie. the
                     // message was deleted before it even got sent)
                     guard try Interaction.exists(db, id: interactionId) else {
-                        SNLog("[MessageSendJob] Failing due to missing interaction")
+                        Log.warn("[MessageSendJob] Failing due to missing interaction")
                         return (StorageError.objectNotFound, [], [])
                     }
 
@@ -73,7 +73,7 @@ public enum MessageSendJob: JobExecutor {
                     // If there were failed attachments then this job should fail (can't send a
                     // message which has associated attachments if the attachments fail to upload)
                     guard !allAttachmentStateInfo.contains(where: { $0.state == .failedDownload }) else {
-                        SNLog("[MessageSendJob] Failing due to failed attachment upload")
+                        Log.info("[MessageSendJob] Failing due to failed attachment upload")
                         return (AttachmentError.notUploaded, [], fileIds)
                     }
 
@@ -152,7 +152,7 @@ public enum MessageSendJob: JobExecutor {
                         }
                 }
 
-                SNLog("[MessageSendJob] Deferring due to pending attachment uploads")
+                Log.info("[MessageSendJob] Deferring due to pending attachment uploads")
                 return deferred(job, dependencies)
             }
 
@@ -162,6 +162,7 @@ public enum MessageSendJob: JobExecutor {
         
         // Store the sentTimestamp from the message in case it fails due to a clockOutOfSync error
         let originalSentTimestamp: UInt64? = details.message.sentTimestamp
+        let startTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
         
         /// Perform the actual message sending - this will timeout if the entire process takes longer than `HTTP.defaultTimeout * 2`
         /// which can occur if it needs to build a new onion path (which doesn't actually have any limits so can take forever in rare cases)
@@ -183,34 +184,15 @@ public enum MessageSendJob: JobExecutor {
             .flatMap { MessageSender.sendImmediate(data: $0, using: dependencies) }
             .subscribe(on: queue, using: dependencies)
             .receive(on: queue, using: dependencies)
-            .timeout(.milliseconds(Int(Network.defaultTimeout * 2 * 1000)), scheduler: queue, customError: {
-                MessageSenderError.sendJobTimeout
-            })
             .sinkUntilComplete(
                 receiveCompletion: { result in
                     switch result {
-                        case .finished: success(job, false, dependencies)
+                        case .finished:
+                            Log.info("[MessageSendJob] Completed sending \(type(of: details.message)) after \(.seconds(dependencies.dateNow.timeIntervalSince1970 - startTime), unit: .s).")
+                            success(job, false, dependencies)
+                            
                         case .failure(let error):
-                            switch error {
-                                case MessageSenderError.sendJobTimeout:
-                                    SNLog("[MessageSendJob] Couldn't send message due to error: \(error) (paths: \(LibSession.pathsDescription)).")
-                                    
-                                    // In this case the `MessageSender` process gets cancelled so we need to
-                                    // call `handleFailedMessageSend` to update the statuses correctly
-                                    dependencies.storage.write(using: dependencies) { db in
-                                        MessageSender.handleFailedMessageSend(
-                                            db,
-                                            message: details.message,
-                                            destination: details.destination,
-                                            with: .other(error),
-                                            interactionId: job.interactionId,
-                                            using: dependencies
-                                        )
-                                    }
-                                    
-                                default:
-                                    SNLog("[MessageSendJob] Couldn't send message due to error: \(error)")
-                            }
+                            Log.info("[MessageSendJob] Failed to send \(type(of: details.message)) after \(.seconds(dependencies.dateNow.timeIntervalSince1970 - startTime), unit: .s) due to error: \(error).")
                             
                             // Actual error handling
                             switch (error, details.message) {
@@ -221,18 +203,15 @@ public enum MessageSendJob: JobExecutor {
                                     failure(job, error, true, dependencies)
                                     
                                 case (SnodeAPIError.clockOutOfSync, _):
-                                    SNLog("[MessageSendJob] \(originalSentTimestamp != nil ? "Permanently Failing" : "Failing") to send \(type(of: details.message)) due to clock out of sync issue.")
+                                    Log.error("[MessageSendJob] \(originalSentTimestamp != nil ? "Permanently Failing" : "Failing") to send \(type(of: details.message)) due to clock out of sync issue.")
                                     failure(job, error, (originalSentTimestamp != nil), dependencies)
                                     
                                 // Don't bother retrying (it can just send a new one later but allowing retries
                                 // can result in a large number of `MessageSendJobs` backing up)
                                 case (_, is TypingIndicator):
-                                    SNLog("[MessageSendJob] Failed to send \(type(of: details.message)).")
                                     failure(job, error, true, dependencies)
                                     
                                 default:
-                                    SNLog("[MessageSendJob] Failed to send \(type(of: details.message)).")
-                                    
                                     if details.message is VisibleMessage {
                                         guard
                                             let interactionId: Int64 = job.interactionId,

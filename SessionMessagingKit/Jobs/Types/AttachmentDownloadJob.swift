@@ -89,40 +89,28 @@ public enum AttachmentDownloadJob: JobExecutor {
         Just(attachment.downloadUrl)
             .setFailureType(to: Error.self)
             .tryFlatMap { maybeDownloadUrl -> AnyPublisher<Data, Error> in
-                guard
-                    let downloadUrl: String = maybeDownloadUrl,
-                    let fileId: String = Attachment.fileId(for: downloadUrl)
-                else { throw AttachmentDownloadError.invalidUrl }
+                guard let downloadUrl: URL = maybeDownloadUrl.map({ URL(string: $0) }) else {
+                    throw AttachmentDownloadError.invalidUrl
+                }                
                 
                 return Storage.shared
-                    .readPublisher { db -> Network.PreparedRequest<Data>? in
-                        try OpenGroup.fetchOne(db, id: threadId)
-                            .map { openGroup in
-                                try OpenGroupAPI
-                                    .preparedDownloadFile(
-                                        db,
-                                        fileId: fileId,
-                                        from: openGroup.roomToken,
-                                        on: openGroup.server,
-                                        using: dependencies
-                                    )
-                            }
-                    }
-                    .flatMap { maybePreparedRequest -> AnyPublisher<Data, Error> in
-                        guard let preparedRequest: Network.PreparedRequest<Data> = maybePreparedRequest else {
-                            return FileServerAPI
-                                .download(
-                                    fileId: fileId,
-                                    useOldServer: downloadUrl.contains(FileServerAPI.oldServer)
+                    .readPublisher { db -> Network.Destination in
+                        switch try? OpenGroup.fetchOne(db, id: threadId) {
+                            case .some(let openGroup):
+                                return try OpenGroupAPI.downloadDestination(
+                                    db,
+                                    url: downloadUrl,
+                                    openGroup: openGroup,
+                                    using: dependencies
                                 )
-                                .eraseToAnyPublisher()
+                            
+                            case .none: return .fileServer(downloadUrl: downloadUrl)
                         }
-                        
-                        return preparedRequest
-                            .send(using: dependencies)
-                            .map { _, data in data }
-                            .eraseToAnyPublisher()
                     }
+                    .flatMap { downloadDestination -> AnyPublisher<(ResponseInfoType, Data), Error> in
+                        LibSession.downloadFile(from: downloadDestination)
+                    }
+                    .map { _, data in data }
                     .eraseToAnyPublisher()
             }
             .subscribe(on: queue)

@@ -103,7 +103,7 @@ public class MediaGalleryViewModel {
                 PagedData.processAndTriggerUpdates(
                     updatedData: self?.process(data: updatedData, for: updatedPageInfo),
                     currentDataRetriever: { self?.galleryData },
-                    onDataChange: self?.onGalleryChange,
+                    onDataChangeRetriever: { self?.onGalleryChange },
                     onUnobservedDataChange: { updatedData, changeset in
                         self?.unobservedGalleryDataChanges = (changeset.isEmpty ?
                             nil :

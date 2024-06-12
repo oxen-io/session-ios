@@ -14,7 +14,7 @@ final class PathVC: BaseVC {
     
     private var pathUpdateId: UUID?
     private var cacheUpdateId: UUID?
-    private var lastPath: Set<LibSession.Snode> = []
+    private var lastPath: [LibSession.Snode] = []
 
     // MARK: - Components
     
@@ -136,8 +136,8 @@ final class PathVC: BaseVC {
 
     // MARK: - Updating
     
-    private func update(paths: [Set<LibSession.Snode>], force: Bool) {
-        guard let pathToDisplay: Set<LibSession.Snode> = paths.first else {
+    private func update(paths: [[LibSession.Snode]], force: Bool) {
+        guard let pathToDisplay: [LibSession.Snode] = paths.first else {
             pathStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
             spinner.startAnimating()
             

@@ -33,7 +33,7 @@ public enum ConfigurationSyncJob: JobExecutor {
                 .jobInfoFor(state: .running, variant: .configurationSync)
                 .filter({ key, info in
                     key != job.id &&                // Exclude this job
-                    info.threadId == job.threadId   // Exclude jobs for different ids
+                    info.threadId == job.threadId   // Exclude jobs for different config stores
                 })
                 .isEmpty
         else {

@@ -112,15 +112,14 @@ public struct SessionApp {
     // MARK: - Functions
     
     public static func resetAppData(onReset: (() -> ())? = nil) {
-        // This _should_ be wiped out below.
-        Logger.error("")
-        DDLog.flushLog()
-        
         LibSession.clearMemoryState()
+        LibSession.clearSnodeCache()
+        LibSession.suspendNetworkAccess()
         Storage.resetAllStorage()
         ProfileManager.resetProfileStorage()
         Attachment.resetAttachmentStorage()
         AppEnvironment.shared.notificationPresenter.clearAllNotifications()
+        Log.flush()
 
         onReset?()
         exit(0)

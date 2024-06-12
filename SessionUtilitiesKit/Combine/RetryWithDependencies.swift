@@ -15,8 +15,13 @@ extension Publishers {
         func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
             upstream
                 .catch { [upstream, retries, dependencies] error -> AnyPublisher<Output, Failure> in
-                    guard retries > 0 else {
-                        return Fail(error: error).eraseToAnyPublisher()
+                    guard retries > 0 else { return Fail(error: error).eraseToAnyPublisher() }
+                    
+                    // If we got any of the following errors then we shouldn't bother retrying (the request
+                    // isn't going to work)
+                    switch error as Error {
+                        case NetworkError.suspended: return Fail(error: error).eraseToAnyPublisher()
+                        default: break
                     }
                     
                     return RetryWithDependencies(upstream: upstream, retries: retries - 1, dependencies: dependencies)

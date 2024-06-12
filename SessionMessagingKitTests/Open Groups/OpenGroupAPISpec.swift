@@ -1306,76 +1306,133 @@ class OpenGroupAPISpec: QuickSpec {
                 }
             }
             
-            // MARK: -- when preparing an upload file request
-            context("when preparing an upload file request") {
-                // MARK: ---- generates the request correctly
-                it("generates the request correctly") {
-                    let preparedRequest: Network.PreparedRequest<FileUploadResponse>? = mockStorage.read { db in
-                        try OpenGroupAPI.preparedUploadFile(
-                            db,
-                            bytes: [],
-                            to: "testRoom",
-                            on: "testserver",
-                            using: dependencies
-                        )
+            // MARK: -- when generaing upload and download details
+            context("when generaing upload and download details") {
+                beforeEach {
+                    mockStorage.write { db in
+                        try OpenGroup(
+                            server: "http://oxen.io",
+                            roomToken: "testRoom",
+                            publicKey: TestConstants.publicKey,
+                            isActive: true,
+                            name: "Test",
+                            roomDescription: nil,
+                            imageId: nil,
+                            userCount: 0,
+                            infoUpdates: 0,
+                            sequenceNumber: 0,
+                            inboxLatestMessageId: 0,
+                            outboxLatestMessageId: 0
+                        ).insert(db)
                     }
-                    
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/file"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
                 }
                 
-                // MARK: ---- doesn't add a fileName to the content-disposition header when not provided
-                it("doesn't add a fileName to the content-disposition header when not provided") {
-                    let preparedRequest: Network.PreparedRequest<FileUploadResponse>? = mockStorage.read { db in
-                        try OpenGroupAPI.preparedUploadFile(
+                // MARK: ---- generates the upload destination correctly
+                it("generates the upload destination correctly") {
+                    let destination: Network.Destination? = mockStorage.read { db in
+                        try OpenGroupAPI.uploadDestination(
                             db,
-                            bytes: [],
-                            to: "testRoom",
-                            on: "testserver",
+                            data: Data(),
+                            openGroup: OpenGroup(
+                                server: "http://oxen.io",
+                                roomToken: "testRoom",
+                                publicKey: TestConstants.publicKey,
+                                isActive: false,
+                                name: "",
+                                userCount: 0,
+                                infoUpdates: 0
+                            ),
                             using: dependencies
                         )
                     }
-                    
-                    expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.contentDisposition])
-                        .toNot(contain("filename"))
+
+                    expect(destination).to(equal(
+                        Network.Destination.server(
+                            url: URL(string: "http://oxen.io/room/testRoom/file")!,
+                            method: .post,
+                            headers: [
+                                HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
+                                HTTPHeader.sogsTimestamp: "1234567890",
+                                HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
+                                HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
+                            ],
+                            x25519PublicKey: TestConstants.publicKey
+                        )
+                    ))
                 }
                 
-                // MARK: ---- adds the fileName to the content-disposition header when provided
-                it("adds the fileName to the content-disposition header when provided") {
-                    let preparedRequest: Network.PreparedRequest<FileUploadResponse>? = mockStorage.read { db in
-                        try OpenGroupAPI.preparedUploadFile(
-                            db,
-                            bytes: [],
-                            fileName: "TestFileName",
-                            to: "testRoom",
-                            on: "testserver",
-                            using: dependencies
-                        )
-                    }
-                    
-                    expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.contentDisposition])
-                        .to(contain("TestFileName"))
+                // MARK: ---- generates the download url correctly
+                it("generates the download url correctly") {
+                    expect(try? OpenGroupAPI.downloadUrlFor(fileId: "1", server: "testserver", roomToken: "roomToken"))
+                        .to(equal(URL(string: "testserver/room/roomToken/file/1")))
                 }
-            }
-        }
-        
-        describe("an OpenGroupAPI") {
-            // MARK: -- when preparing a download file request
-            context("when preparing a download file request") {
-                // MARK: ---- generates the request correctly
-                it("generates the request correctly") {
-                    let preparedRequest: Network.PreparedRequest<Data>? = mockStorage.read { db in
-                        try OpenGroupAPI.preparedDownloadFile(
+                
+                // MARK: ---- generates the download destination correctly when given an id
+                it("generates the download destination correctly when given an id") {
+                    let destination: Network.Destination? = mockStorage.read { db in
+                        try OpenGroupAPI.downloadDestination(
                             db,
                             fileId: "1",
-                            from: "testRoom",
-                            on: "testserver",
+                            openGroup: OpenGroup(
+                                server: "http://oxen.io",
+                                roomToken: "testRoom",
+                                publicKey: TestConstants.publicKey,
+                                isActive: false,
+                                name: "",
+                                userCount: 0,
+                                infoUpdates: 0
+                            ),
                             using: dependencies
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/file/1"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("GET"))
+                    expect(destination).to(equal(
+                        Network.Destination.server(
+                            url: URL(string: "http://oxen.io/room/testRoom/file/1")!,
+                            method: .get,
+                            headers: [
+                                HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
+                                HTTPHeader.sogsTimestamp: "1234567890",
+                                HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
+                                HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
+                            ],
+                            x25519PublicKey: TestConstants.publicKey
+                        )
+                    ))
+                }
+                
+                // MARK: ---- generates the download destination correctly when given a url
+                it("generates the download destination correctly when given a url") {
+                    let destination: Network.Destination? = mockStorage.read { db in
+                        try OpenGroupAPI.downloadDestination(
+                            db,
+                            url: URL(string: "http://oxen.io/room/testRoom/file/1")!,
+                            openGroup: OpenGroup(
+                                server: "http://oxen.io",
+                                roomToken: "testRoom",
+                                publicKey: TestConstants.publicKey,
+                                isActive: false,
+                                name: "",
+                                userCount: 0,
+                                infoUpdates: 0
+                            ),
+                            using: dependencies
+                        )
+                    }
+                    
+                    expect(destination).to(equal(
+                        Network.Destination.server(
+                            url: URL(string: "http://oxen.io/room/testRoom/file/1")!,
+                            method: .get,
+                            headers: [
+                                HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
+                                HTTPHeader.sogsTimestamp: "1234567890",
+                                HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
+                                HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
+                            ],
+                            x25519PublicKey: TestConstants.publicKey
+                        )
+                    ))
                 }
             }
             
@@ -1397,7 +1454,9 @@ class OpenGroupAPISpec: QuickSpec {
                     expect(preparedRequest?.request.httpMethod).to(equal("POST"))
                 }
             }
-            
+        }
+        
+        describe("an OpenGroupAPI") {
             // MARK: -- when preparing a ban user request
             context("when preparing a ban user request") {
                 // MARK: ---- generates the request correctly

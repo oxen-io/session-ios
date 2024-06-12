@@ -14,6 +14,7 @@ extension Message {
     }
     
     public static func getMessageExpirationInfo(
+        threadVariant: SessionThread.Variant,
         wasRead: Bool,
         serverExpirationTimestamp: TimeInterval?,
         expiresInSeconds: TimeInterval?,
@@ -21,6 +22,8 @@ extension Message {
     ) -> MessageExpirationInfo {
         var shouldUpdateExpiry: Bool = false
         let expiresStartedAtMs: Double? = {
+            guard threadVariant != .community else { return nil }
+            
             // Disappear after sent
             guard expiresStartedAtMs == nil else {
                 return expiresStartedAtMs
@@ -60,18 +63,18 @@ extension Message {
     public static func getExpirationForOutgoingDisappearingMessages(
         _ db: Database,
         threadId: String,
+        threadVariant: SessionThread.Variant,
         variant: Interaction.Variant,
         serverHash: String?,
         expireInSeconds: TimeInterval?
     ) {
         guard
+            threadVariant != .community,
             variant == .standardOutgoing,
             let serverHash: String = serverHash,
             let expireInSeconds: TimeInterval = expireInSeconds,
             expireInSeconds > 0
-        else {
-            return
-        }
+        else { return }
         
         let startedAtTimestampMs: Double = Double(SnodeAPI.currentOffsetTimestampMs())
         
@@ -92,17 +95,17 @@ extension Message {
     public static func updateExpiryForDisappearAfterReadMessages(
         _ db: Database,
         threadId: String,
+        threadVariant: SessionThread.Variant,
         serverHash: String?,
         expiresInSeconds: TimeInterval?,
         expiresStartedAtMs: Double?
     ) {
         guard
+            threadVariant != .community,
             let serverHash: String = serverHash,
             let expiresInSeconds: TimeInterval = expiresInSeconds,
             let expiresStartedAtMs: Double = expiresStartedAtMs
-        else {
-            return
-        }
+        else { return }
         
         let expirationTimestampMs: Int64 = Int64(expiresStartedAtMs + expiresInSeconds * 1000)
         JobRunner.add(

@@ -115,6 +115,7 @@ enum MockDataGenerator {
                     
                     _ = try! Interaction(
                         threadId: thread.id,
+                        threadVariant: thread.variant,
                         authorId: (isIncoming ? randomSessionId : userSessionId),
                         variant: (isIncoming ? .standardIncoming : .standardOutgoing),
                         body: (0..<messageWords)
@@ -238,6 +239,7 @@ enum MockDataGenerator {
                     
                     _ = try! Interaction(
                         threadId: thread.id,
+                        threadVariant: thread.variant,
                         authorId: senderId,
                         variant: (senderId != userSessionId ? .standardIncoming : .standardOutgoing),
                         body: (0..<messageWords)
@@ -363,6 +365,7 @@ enum MockDataGenerator {
                     
                     _ = try! Interaction(
                         threadId: thread.id,
+                        threadVariant: thread.variant,
                         authorId: senderId,
                         variant: (senderId != userSessionId ? .standardIncoming : .standardOutgoing),
                         body: (0..<messageWords)

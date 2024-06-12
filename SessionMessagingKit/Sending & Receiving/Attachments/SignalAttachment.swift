@@ -1133,14 +1133,21 @@ public class SignalAttachment: Equatable, Hashable {
     // MARK: - Hashable
     
     public func hash(into hasher: inout Hasher) {
-        dataSource.hash(into: &hasher)
         dataUTI.hash(into: &hasher)
         captionText.hash(into: &hasher)
         linkPreviewDraft.hash(into: &hasher)
         isConvertibleToTextMessage.hash(into: &hasher)
         isConvertibleToContactShare.hash(into: &hasher)
-        cachedImage.hash(into: &hasher)
-        cachedVideoPreview.hash(into: &hasher)
         isVoiceMessage.hash(into: &hasher)
+        
+        /// There was a crash in `AttachmentApprovalViewController when trying to generate the hash
+        /// value to store in a dictionary, I'm guessing it's due to either `dataSource`, `cachedImage` or `cachedVideoPreview`
+        /// so, instead of trying to hash them directly which involves unknown behaviours due to `NSObject` & `UIImage` types, this
+        /// has been reworked to use primitives
+        dataSource.sourceFilename.hash(into: &hasher)
+        cachedImage?.size.width.hash(into: &hasher)
+        cachedImage?.size.height.hash(into: &hasher)
+        cachedVideoPreview?.size.width.hash(into: &hasher)
+        cachedVideoPreview?.size.height.hash(into: &hasher)
     }
 }

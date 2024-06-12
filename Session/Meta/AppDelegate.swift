@@ -29,6 +29,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // MARK: - Lifecycle
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        Log.info("[AppDelegate] didFinishLaunchingWithOptions called.")
         startTime = CACurrentMediaTime()
         
         // These should be the first things we do (the startup process can fail without them)
@@ -50,10 +51,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         AppSetup.setupEnvironment(
             appSpecificBlock: {
-                // Create AppEnvironment
-                AppEnvironment.shared.setup()
+                Log.setup(with: Logger(primaryPrefix: "Session"))
+                Log.info("[AppDelegate] Setting up environment.")
+                
+                // Setup LibSession
                 LibSession.addLogger()
                 LibSession.createNetworkIfNeeded()
+                
+                // Create AppEnvironment
+                AppEnvironment.shared.setup()
                 
                 // Note: Intentionally dispatching sync as we want to wait for these to complete before
                 // continuing
@@ -124,12 +130,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             object: nil
         )
         
-        Logger.info("application: didFinishLaunchingWithOptions completed.")
-
+        Log.info("[AppDelegate] didFinishLaunchingWithOptions completed.")
         return true
     }
     
     func applicationWillEnterForeground(_ application: UIApplication) {
+        Log.appResumedExecution()
+        Log.info("[AppDelegate] applicationWillEnterForeground.")
+        
         /// **Note:** We _shouldn't_ need to call this here but for some reason the OS doesn't seems to
         /// be calling the `userNotificationCenter(_:,didReceive:withCompletionHandler:)`
         /// method when the device is locked while the app is in the foreground (or if the user returns to the
@@ -139,6 +147,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         UNUserNotificationCenter.current().delegate = self
         
         Storage.resumeDatabaseAccess()
+        LibSession.resumeNetworkAccess()
         
         // Reset the 'startTime' (since it would be invalid from the last launch)
         startTime = CACurrentMediaTime()
@@ -146,7 +155,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // If we've already completed migrations at least once this launch then check
         // to see if any "delayed" migrations now need to run
         if Storage.shared.hasCompletedMigrations {
-            SNLog("Checking for pending migrations")
+            Log.info("Checking for pending migrations")
             let initialLaunchFailed: Bool = self.initialLaunchFailed
             
             Singleton.appReadiness.invalidate()
@@ -189,9 +198,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     }
     
     func applicationDidEnterBackground(_ application: UIApplication) {
-        if !hasInitialRootViewController { SNLog("Entered background before startup was completed") }
-        
-        DDLog.flushLog()
+        if !hasInitialRootViewController { Log.info("Entered background before startup was completed") }
+        Log.info("[AppDelegate] applicationDidEnterBackground.")
+        Log.flush()
         
         // NOTE: Fix an edge case where user taps on the callkit notification
         // but answers the call on another device
@@ -203,23 +212,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Stop all jobs except for message sending and when completed suspend the database
         JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) {
             if !self.hasCallOngoing() {
+                LibSession.suspendNetworkAccess()
                 Storage.suspendDatabaseAccess()
-                LibSession.closeNetworkConnections()
+                Log.info("[AppDelegate] completed network and database shutdowns.")
+                Log.flush()
             }
         }
     }
     
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
-        Logger.info("applicationDidReceiveMemoryWarning")
+        Log.warn("applicationDidReceiveMemoryWarning")
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
-        DDLog.flushLog()
+        Log.info("[AppDelegate] applicationWillTerminate.")
+        Log.flush()
 
         stopPollers()
     }
     
     func applicationDidBecomeActive(_ application: UIApplication) {
+        Log.info("[AppDelegate] applicationDidBecomeActive.")
         guard !SNUtilitiesKit.isRunningTests else { return }
         
         UserDefaults.sharedLokiProject?[.isMainAppActive] = true
@@ -247,11 +260,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     }
     
     func applicationWillResignActive(_ application: UIApplication) {
+        Log.info("[AppDelegate] applicationWillResignActive.")
         clearAllNotificationsAndRestoreBadgeCount()
         
         UserDefaults.sharedLokiProject?[.isMainAppActive] = false
 
-        DDLog.flushLog()
+        Log.flush()
     }
     
     // MARK: - Orientation
@@ -267,7 +281,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // MARK: - Background Fetching
     
     func application(_ application: UIApplication, performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        Log.appResumedExecution()
+        Log.info("Starting background fetch.")
         Storage.resumeDatabaseAccess()
+        LibSession.resumeNetworkAccess()
         
         // Background tasks only last for a certain amount of time (which can result in a crash and a
         // prompt appearing for the user), we want to avoid this and need to make sure to suspend the
@@ -281,14 +298,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             
             guard BackgroundPoller.isValid else { return }
             
+            Log.info("Background poll failed due to manual timeout")
             BackgroundPoller.isValid = false
             
             if Singleton.hasAppContext && Singleton.appContext.isInBackground {
+                LibSession.suspendNetworkAccess()
                 Storage.suspendDatabaseAccess()
-                LibSession.closeNetworkConnections()
+                Log.flush()
             }
             
-            SNLog("Background poll failed due to manual timeout")
             completionHandler(.failed)
         }
         
@@ -311,8 +329,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 BackgroundPoller.isValid = false
                 
                 if Singleton.hasAppContext && Singleton.appContext.isInBackground {
+                    LibSession.suspendNetworkAccess()
                     Storage.suspendDatabaseAccess()
-                    LibSession.closeNetworkConnections()
+                    Log.flush()
                 }
                 
                 cancelTimer.invalidate()
@@ -324,7 +343,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // MARK: - App Readiness
     
     private func completePostMigrationSetup(calledFrom lifecycleMethod: LifecycleMethod, needsConfigSync: Bool) {
-        SNLog("Migrations completed, performing setup and ensuring rootViewController")
+        Log.info("Migrations completed, performing setup and ensuring rootViewController")
         Configuration.performMainSetup()
         JobRunner.setExecutor(SyncPushTokensJob.self, for: .syncPushTokens)
         
@@ -339,7 +358,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             // the user is in an invalid state (and should have already been shown a modal)
             guard success else { return }
             
-            SNLog("RootViewController ready for state: \(Onboarding.State.current), readying remaining processes")
+            Log.info("RootViewController ready for state: \(Onboarding.State.current), readying remaining processes")
             self?.initialLaunchFailed = false
             
             /// Trigger any launch-specific jobs and start the JobRunner with `JobRunner.appDidFinishLaunching()` some
@@ -394,8 +413,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             
             // Add a log to track the proper startup time of the app so we know whether we need to
             // improve it in the future from user logs
-            let endTime: CFTimeInterval = CACurrentMediaTime()
-            SNLog("\(lifecycleMethod.timingName) completed in \((self?.startTime).map { ceil((endTime - $0) * 1000) } ?? -1)ms")
+            let startupDuration: CFTimeInterval = ((self?.startTime).map { CACurrentMediaTime() - $0 } ?? -1)
+            Log.info("\(lifecycleMethod.timingName) completed in \(.seconds(startupDuration), unit: .ms).")
         }
         
         // May as well run these on the background thread
@@ -468,11 +487,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
         
         alert.addAction(UIAlertAction(title: "APP_STARTUP_EXIT".localized(), style: .default) { _ in
-            DDLog.flushLog()
+            Log.flush()
             exit(0)
         })
         
-        SNLog("Showing startup alert due to error: \(error.name)")
+        Log.info("Showing startup alert due to error: \(error.name)")
         self.window?.rootViewController?.present(alert, animated: animated, completion: presentationCompletion)
     }
     
@@ -482,7 +501,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         
         guard !Storage.isDatabasePasswordAccessible else { return }    // All good
         
-        Logger.info("Exiting because we are in the background and the database password is not accessible.")
+        Log.info("Exiting because we are in the background and the database password is not accessible.")
         
         let notificationContent: UNMutableNotificationContent = UNMutableNotificationContent()
         notificationContent.body = String(
@@ -503,7 +522,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         UNUserNotificationCenter.current().add(notificationRequest, withCompletionHandler: nil)
         UIApplication.shared.applicationIconBadgeNumber = 1
         
-        DDLog.flushLog()
+        Log.flush()
         exit(0)
     }
     
@@ -649,14 +668,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         PushRegistrationManager.shared.didReceiveVanillaPushToken(deviceToken)
-        Logger.info("Registering for push notifications with token: \(deviceToken).")
+        Log.info("Registering for push notifications.")
     }
     
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        Logger.error("Failed to register push token with error: \(error).")
+        Log.error("Failed to register push token with error: \(error).")
         
         #if DEBUG
-        Logger.warn("We're in debug mode. Faking success for remote registration with a fake push identifier.")
+        Log.warn("We're in debug mode. Faking success for remote registration with a fake push identifier.")
         PushRegistrationManager.shared.didReceiveVanillaPushToken(Data(count: 32))
         #else
         PushRegistrationManager.shared.didFailToReceiveVanillaPushToken(error: error)
@@ -700,7 +719,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     /// This decision should be based on whether the information in the notification is otherwise visible to the user.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         if notification.request.content.userInfo["remote"] != nil {
-            Logger.info("[Loki] Ignoring remote notifications while the app is in the foreground.")
+            Log.info("Ignoring remote notifications while the app is in the foreground.")
             return
         }
         

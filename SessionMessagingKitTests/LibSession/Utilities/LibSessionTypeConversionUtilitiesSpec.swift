@@ -12,11 +12,6 @@ class LibSessionTypeConversionUtilitiesSpec: QuickSpec {
     override class func spec() {
         // MARK: - a String
         describe("a String") {
-            // MARK: -- can convert to a cArray
-            it("can convert to a cArray") {
-                expect("Test123".cArray).to(equal([84, 101, 115, 116, 49, 50, 51]))
-            }
-            
             // MARK: -- can contain emoji
             it("can contain emoji") {
                 let original: String = "Hi 👋"
@@ -148,12 +143,13 @@ class LibSessionTypeConversionUtilitiesSpec: QuickSpec {
                 
                 // MARK: ---- truncates when too long
                 it("truncates when too long") {
-                    let result: (CChar, CChar, CChar, CChar, CChar) = "TestTest".toLibSession()
+                    let result: (CChar, CChar, CChar, CChar, CChar, CChar) = "TestTest".toLibSession()
                     expect(result.0).to(equal(84))
                     expect(result.1).to(equal(101))
                     expect(result.2).to(equal(115))
                     expect(result.3).to(equal(116))
                     expect(result.4).to(equal(84))
+                    expect(result.5).to(equal(0)) // Last character will always be a null termination
                 }
                 
                 // MARK: ---- when optional
@@ -187,11 +183,6 @@ class LibSessionTypeConversionUtilitiesSpec: QuickSpec {
         
         // MARK: - Data
         describe("Data") {
-            // MARK: -- can convert to a cArray
-            it("can convert to a cArray") {
-                expect(Data([1, 2, 3]).cArray).to(equal([1, 2, 3]))
-            }
-            
             // MARK: -- when initialised with a libSession value
             context("when initialised with a libSession value") {
                 // MARK: ---- returns truncated data when given the wrong length
@@ -297,9 +288,9 @@ class LibSessionTypeConversionUtilitiesSpec: QuickSpec {
                 // MARK: ---- returns the correct array
                 it("returns the correct array") {
                     var test: [CChar] = (
-                        "Test1".cArray.nullTerminated() +
-                        "Test2".cArray.nullTerminated() +
-                        "Test3AndExtra".cArray.nullTerminated()
+                        "Test1".cString(using: .utf8)! +
+                        "Test2".cString(using: .utf8)! +
+                        "Test3AndExtra".cString(using: .utf8)!
                     )
                     let result = test.withUnsafeMutableBufferPointer { ptr in
                         var mutablePtr = UnsafeMutablePointer(ptr.baseAddress)
@@ -325,9 +316,9 @@ class LibSessionTypeConversionUtilitiesSpec: QuickSpec {
                 // MARK: ---- handles empty strings without issues
                 it("handles empty strings without issues") {
                     var test: [CChar] = (
-                        "Test1".cArray.nullTerminated() +
-                        "".cArray.nullTerminated() +
-                        "Test2".cArray.nullTerminated()
+                        "Test1".cString(using: .utf8)! +
+                        "".cString(using: .utf8)! +
+                        "Test2".cString(using: .utf8)!
                     )
                     let result = test.withUnsafeMutableBufferPointer { ptr in
                         var mutablePtr = UnsafeMutablePointer(ptr.baseAddress)
@@ -345,7 +336,7 @@ class LibSessionTypeConversionUtilitiesSpec: QuickSpec {
                 
                 // MARK: ---- returns null when given a null count
                 it("returns null when given a null count") {
-                    var test: [CChar] = "Test1".cArray.nullTerminated()
+                    var test: [CChar] = "Test1".cString(using: .utf8)!
                     let result = test.withUnsafeMutableBufferPointer { ptr in
                         var mutablePtr = UnsafeMutablePointer(ptr.baseAddress)
                         

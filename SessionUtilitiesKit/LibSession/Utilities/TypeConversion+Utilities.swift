@@ -5,9 +5,7 @@ import SessionUtil
 
 // MARK: - String
 
-public extension String {
-    var cArray: [CChar] { [UInt8](self.utf8).map { CChar(bitPattern: $0) } }
-    
+public extension String {    
     /// Initialize with an optional pointer and a specific length
     init?(pointer: UnsafeRawPointer?, length: Int, encoding: String.Encoding = .utf8) {
         guard
@@ -61,10 +59,14 @@ public extension String {
     
     func toLibSession<T>() -> T {
         let targetSize: Int = MemoryLayout<T>.stride
+        
+        // Limit the string to be the destination size - 1 (for the null terminated character), this will
+        // mean instead of crashing by trying to set a value that is too large, we truncate the value)
+        let sizeLimitedString: String = String(self.substring(to: min(count, targetSize - 1)))
         var dataMatchingDestinationSize: [CChar] = [CChar](repeating: 0, count: targetSize)
         dataMatchingDestinationSize.replaceSubrange(
-            0..<Swift.min(targetSize, self.utf8CString.count),
-            with: self.utf8CString
+            0..<Swift.min(targetSize, sizeLimitedString.utf8CString.count),
+            with: sizeLimitedString.utf8CString
         )
         
         return dataMatchingDestinationSize.withUnsafeBytes { ptr in
@@ -89,8 +91,6 @@ public extension Optional<String> {
 // MARK: - Data
 
 public extension Data {
-    var cArray: [UInt8] { [UInt8](self) }
-    
     init<T>(libSessionVal: T, count: Int) {
         let result: Data = Swift.withUnsafePointer(to: libSessionVal) {
             Data(bytes: $0, count: count)

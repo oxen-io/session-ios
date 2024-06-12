@@ -56,7 +56,7 @@ public enum IP2Country {
         }
     }
 
-    private static func populateCacheIfNeeded(paths: [Set<LibSession.Snode>]) {
+    private static func populateCacheIfNeeded(paths: [[LibSession.Snode]]) {
         guard !paths.isEmpty else { return }
         
         countryNamesCache.mutate { cache in

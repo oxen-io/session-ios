@@ -36,8 +36,6 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         if !Singleton.hasAppContext {
             Singleton.setup(appContext: ShareAppExtensionContext(rootViewController: self))
         }
-        
-        Logger.info("")
 
         _ = AppVersion.sharedInstance()
 
@@ -53,24 +51,23 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         }
 
         AppSetup.setupEnvironment(
-            appSpecificBlock: { [weak self] in
+            appSpecificBlock: {
+                Log.setup(with: Logger(
+                    primaryPrefix: "SessionShareExtension",                                              // stringlint:disable
+                    customDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/ShareExtension" // stringlint:disable
+                ))
+                
                 SessionEnvironment.shared?.notificationsManager.mutate {
                     $0 = NoopNotificationsManager()
                 }
                 
-                // Add the file logger
-                let logFileManager: DDLogFileManagerDefault = DDLogFileManagerDefault(
-                    logsDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/ShareExtension"  // stringlint:disable
-                )
-                let fileLogger: DDFileLogger = DDFileLogger(logFileManager: logFileManager)
-                fileLogger.rollingFrequency = kDayInterval // Refresh everyday
-                fileLogger.logFileManager.maximumNumberOfLogFiles = 3 // Save 3 days' log files
-                DDLog.add(fileLogger)
-                self?.fileLogger = fileLogger
+                // Setup LibSession
+                LibSession.addLogger()
+                LibSession.createNetworkIfNeeded()
             },
             migrationsCompletion: { [weak self] result, needsConfigSync in
                 switch result {
-                    case .failure: SNLog("[SessionShareExtension] Failed to complete migrations")
+                    case .failure: Log.error("Failed to complete migrations")
                     case .success:
                         DispatchQueue.main.async {
                             // Need to manually trigger these since we don't have a "mainWindow" here
@@ -112,8 +109,6 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     func versionMigrationsDidComplete(needsConfigSync: Bool) {
         AssertIsOnMainThread()
 
-        Logger.debug("")
-
         // If we need a config sync then trigger it now
         if needsConfigSync {
             Storage.shared.write { db in
@@ -143,8 +138,6 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         SignalUtilitiesKit.Configuration.performMainSetup()
 
-        Logger.debug("")
-
         // Note that this does much more than set a flag;
         // it will also run all deferred blocks.
         Singleton.appReadiness.setAppReady()
@@ -165,6 +158,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        Log.appResumedExecution()
         Singleton.appReadiness.runNowOrWhenAppDidBecomeReady { [weak self] in
             AssertIsOnMainThread()
             self?.showLockScreenOrMainContent()
@@ -174,9 +168,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     @objc
     public func applicationDidEnterBackground() {
         AssertIsOnMainThread()
-        DDLog.flushLog()
-
-        Logger.info("")
+        Log.flush()
 
         if Storage.shared[.isScreenLockEnabled] {
             self.dismiss(animated: false) { [weak self] in
@@ -188,7 +180,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        DDLog.flushLog()
+        Log.flush()
 
         // Share extensions reside in a process that may be reused between usages.
         // That isn't safe; the codebase is full of statics (e.g. singletons) which

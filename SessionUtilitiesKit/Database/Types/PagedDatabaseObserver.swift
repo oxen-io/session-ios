@@ -45,6 +45,9 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
     
     // MARK: - Initialization
     
+    /// Create a `PagedDatabaseObserver` which triggers the callback whenever changes occur
+    ///
+    /// **Note:** The `onChangeUnsorted` could be run on any logic may need to be shifted to the UI thread
     public init(
         pagedTable: ObservedTable.Type,
         pageSize: Int,
@@ -766,18 +769,10 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         self.dataCache.mutate { $0 = $0.upserting(items: associatedLoadedData.values) }
         self.pageInfo.mutate { $0 = updatedPageInfo }
         
-        let triggerUpdates: () -> () = { [weak self, dataCache = self.dataCache.wrappedValue] in
-            self?.onChangeUnsorted(dataCache.values, updatedPageInfo)
-            self?.isLoadingMoreData.mutate { $0 = false }
-        }
-        
-        // Make sure the updates run on the main thread
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { triggerUpdates() }
-            return
-        }
-        
-        triggerUpdates()
+        // Trigger the unsorted change callback (the actual UI update triggering should eventually be run on
+        // the main thread via the `PagedData.processAndTriggerUpdates` function)
+        self.onChangeUnsorted(self.dataCache.wrappedValue.values, updatedPageInfo)
+        self.isLoadingMoreData.mutate { $0 = false }
     }
     
     public func reload() {
@@ -1022,7 +1017,7 @@ public enum PagedData {
     public static func processAndTriggerUpdates<SectionModel: DifferentiableSection>(
         updatedData: [SectionModel]?,
         currentDataRetriever: @escaping (() -> [SectionModel]?),
-        onDataChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ())?,
+        onDataChangeRetriever: @escaping (() -> (([SectionModel], StagedChangeset<[SectionModel]>) -> ())?),
         onUnobservedDataChange: @escaping (([SectionModel], StagedChangeset<[SectionModel]>) -> Void)
     ) {
         guard let updatedData: [SectionModel] = updatedData else { return }
@@ -1045,7 +1040,7 @@ public enum PagedData {
             ///
             /// **Note:** We do this even if the 'changeset' is empty because if this change reverts a previous change we
             /// need to ensure the `onUnobservedDataChange` gets cleared so it doesn't end up in an invalid state
-            guard let onDataChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ()) = onDataChange else {
+            guard let onDataChange: (([SectionModel], StagedChangeset<[SectionModel]>) -> ()) = onDataChangeRetriever() else {
                 onUnobservedDataChange(updatedData, changeset)
                 return
             }
@@ -1056,7 +1051,7 @@ public enum PagedData {
             onDataChange(updatedData, changeset)
         }
         
-        // No need to dispatch to the next run loop if we are alread on the main thread
+        // No need to dispatch to the next run loop if we are already on the main thread
         guard !Thread.isMainThread else {
             performUpdates()
             return
@@ -1096,7 +1091,7 @@ public enum PagedData {
             valueSubject?.send((updatedData, StagedChangeset()))
         }
         
-        // No need to dispatch to the next run loop if we are alread on the main thread
+        // No need to dispatch to the next run loop if we are already on the main thread
         guard !Thread.isMainThread else {
             performUpdates()
             return

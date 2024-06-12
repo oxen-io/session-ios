@@ -1300,7 +1300,7 @@ public final class JobQueue: Hashable {
         
         // Run the first job in the pendingJobsQueue
         if !wasAlreadyRunning {
-            SNLogNotTests("[JobRunner] Starting \(queueContext) with (\(jobCount) job\(jobCount != 1 ? "s" : ""))")
+            Log.info("[JobRunner] Starting \(queueContext) with (\(jobCount) job\(jobCount != 1 ? "s" : ""))", silenceForTests: true)
         }
         runNextJob(using: dependencies)
     }
@@ -1492,14 +1492,13 @@ public final class JobQueue: Hashable {
         
         // If the next job isn't scheduled in the future then just restart the JobRunner immediately
         let secondsUntilNextJob: TimeInterval = (nextJobTimestamp - dependencies.dateNow.timeIntervalSince1970)
-        let ceilSecondsUntilNextJob: Int = Int(ceil(Swift.abs(secondsUntilNextJob)))
         
         guard secondsUntilNextJob > 0 else {
             // Only log that the queue is getting restarted if this queue had actually been about to stop
             if executionType != .concurrent || currentlyRunningJobIds.wrappedValue.isEmpty {
                 let timingString: String = (nextJobTimestamp == 0 ?
                     "that should be in the queue" :
-                    "scheduled \(ceilSecondsUntilNextJob) second\(ceilSecondsUntilNextJob == 1 ? "" : "s") ago"
+                    "scheduled \(.seconds(secondsUntilNextJob), unit: .s) ago"
                 )
                 SNLog("[JobRunner] Restarting \(queueContext) immediately for job \(timingString)")
             }
@@ -1517,7 +1516,7 @@ public final class JobQueue: Hashable {
         guard executionType == .concurrent || currentlyRunningJobIds.wrappedValue.isEmpty else { return }
         
         // Setup a trigger
-        SNLog("[JobRunner] Stopping \(queueContext) until next job in \(ceilSecondsUntilNextJob) second\(ceilSecondsUntilNextJob == 1 ? "" : "s")")
+        SNLog("[JobRunner] Stopping \(queueContext) until next job in \(.seconds(secondsUntilNextJob), unit: .s)")
         nextTrigger.mutate { trigger in
             trigger?.invalidate()   // Need to invalidate the old trigger to prevent a memory leak
             trigger = Trigger.create(queue: self, timestamp: nextJobTimestamp, using: dependencies)

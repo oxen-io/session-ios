@@ -510,6 +510,7 @@ class NotificationActionHandler {
             .writePublisher { db in
                 let interaction: Interaction = try Interaction(
                     threadId: threadId,
+                    threadVariant: thread.variant,
                     authorId: getUserHexEncodedPublicKey(db),
                     variant: .standardOutgoing,
                     body: replyText,

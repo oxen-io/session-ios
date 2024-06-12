@@ -32,13 +32,13 @@ public extension Migration {
         targetIdentifier: TargetMigrations.Identifier
     ) -> ((_ db: Database) throws -> ()) {
         return { (db: Database) in
-            SNLogNotTests("[Migration Info] Starting \(targetIdentifier.key(with: self))")
+            Log.info("[Migration Info] Starting \(targetIdentifier.key(with: self))", silenceForTests: true)
             storage?.willStartMigration(db, self)
             storage?.internalCurrentlyRunningMigration.mutate { $0 = (targetIdentifier, self) }
             defer { storage?.internalCurrentlyRunningMigration.mutate { $0 = nil } }
             
             try migrate(db)
-            SNLogNotTests("[Migration Info] Completed \(targetIdentifier.key(with: self))")
+            Log.info("[Migration Info] Completed \(targetIdentifier.key(with: self))", silenceForTests: true)
         }
     }
 }

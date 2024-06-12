@@ -6,6 +6,7 @@ import GRDB
 import Sodium
 import Curve25519Kit
 import SessionUtilitiesKit
+import SessionSnodeKit
 
 extension KeyPair: Mocked {
     static var mockValue: KeyPair = KeyPair(
@@ -45,6 +46,15 @@ extension Network.RequestType: MockedGeneric {
     static func mockValue(type: T.Type) -> Network.RequestType<T> {
         return Network.RequestType(id: "mock") { _ in Fail(error: MockError.mockedData).eraseToAnyPublisher() }
     }
+}
+
+extension Network.Destination: Mocked {
+    static var mockValue: Network.Destination = Network.Destination.server(
+        url: URL(string: "https://oxen.io")!,
+        method: .get,
+        headers: nil,
+        x25519PublicKey: ""
+    )
 }
 
 extension AnyPublisher: MockedGeneric where Failure == Error {

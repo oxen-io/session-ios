@@ -219,17 +219,4 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         let contact: Contact
         let profile: Profile?
     }
-
-    struct GroupInfo: FetchableRecord, Decodable, ColumnExpressible {
-        typealias Columns = CodingKeys
-        enum CodingKeys: String, CodingKey, ColumnExpression, CaseIterable {
-            case closedGroup
-            case disappearingMessagesConfiguration
-            case groupMembers
-        }
-        
-        let closedGroup: ClosedGroup
-        let disappearingMessagesConfiguration: DisappearingMessagesConfiguration?
-        let groupMembers: [GroupMember]
-    }
 }

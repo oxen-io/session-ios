@@ -64,7 +64,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
             onChangeUnsorted: { [weak self] updatedData, updatedPageInfo in
                 PagedData.processAndTriggerUpdates(
                     updatedData: self?.process(data: updatedData, for: updatedPageInfo)
-                        .mapToSessionTableViewData(for: self),
+                        .mapToSessionTableViewData(for: self),  // Update the cell positions for background rounding
                     currentDataRetriever: { self?.tableData },
                     valueSubject: self?.pendingTableDataSubject
                 )

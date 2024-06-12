@@ -142,7 +142,7 @@ extension MessageSender {
         return dependencies.storage
             .readPublisher { db -> (attachments: [Attachment], openGroup: OpenGroup?) in
                 let attachmentStateInfo: [Attachment.StateInfo] = (try? Attachment
-                    .stateInfo(interactionId: interactionId, state: .uploading)
+                    .stateInfo(interactionId: interactionId)
                     .fetchAll(db))
                     .defaulting(to: [])
                 
@@ -185,7 +185,7 @@ extension MessageSender {
             .map { results -> PreparedSendData in
                 // Once the attachments are processed then update the PreparedSendData with
                 // the fileIds associated to the message
-                let fileIds: [String] = results.compactMap { result -> String? in result }
+                let fileIds: [String] = results.compactMap { result -> String? in Attachment.fileId(for: result) }
                 
                 return preparedSendData.with(fileIds: fileIds)
             }

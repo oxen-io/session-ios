@@ -150,7 +150,7 @@ public struct ProfileManager {
     
     public static let sharedDataProfileAvatarsDirPath: String = {
         let path: String = URL(fileURLWithPath: OWSFileSystem.appSharedDataDirectoryPath())
-            .appendingPathComponent("ProfileAvatars")
+            .appendingPathComponent("ProfileAvatars")   // stringlint:disable
             .path
         OWSFileSystem.ensureDirectoryExists(path)
         
@@ -197,29 +197,24 @@ public struct ProfileManager {
             // Download already in flight; ignore
             return
         }
-        guard let profileUrlStringAtStart: String = profile.profilePictureUrl else {
-            SNLog("Skipping downloading avatar for \(profile.id) because url is not set")
-            return
-        }
         guard
-            let fileId: String = Attachment.fileId(for: profileUrlStringAtStart),
+            let profileUrlStringAtStart: String = profile.profilePictureUrl,
+            let profileUrl: URL = URL(string: profileUrlStringAtStart)
+        else { return SNLog("Skipping downloading avatar for \(profile.id) because url is not set") }
+        guard
             let profileKeyAtStart: Data = profile.profileEncryptionKey,
             profileKeyAtStart.count > 0
-        else {
-            return
-        }
+        else { return }
         
-        let fileName: String = UUID().uuidString.appendingFileExtension("jpg")
+        let fileName: String = UUID().uuidString.appendingFileExtension("jpg")  // stringlint:disable
         let filePath: String = ProfileManager.profileAvatarFilepath(filename: fileName)
         var backgroundTask: OWSBackgroundTask? = OWSBackgroundTask(label: funcName)
         
-        OWSLogger.verbose("downloading profile avatar: \(profile.id)")
+        Log.trace("downloading profile avatar: \(profile.id)")
         currentAvatarDownloads.mutate { $0.insert(profile.id) }
         
-        let useOldServer: Bool = (profileUrlStringAtStart.contains(FileServerAPI.oldServer))
-        
-        FileServerAPI
-            .download(fileId: fileId, useOldServer: useOldServer)
+        LibSession
+            .downloadFile(from: .fileServer(downloadUrl: profileUrl))
             .subscribe(on: DispatchQueue.global(qos: .background))
             .receive(on: DispatchQueue.global(qos: .background))
             .sinkUntilComplete(
@@ -230,7 +225,7 @@ public struct ProfileManager {
                     // isn't used
                     if backgroundTask != nil { backgroundTask = nil }
                 },
-                receiveValue: { data in
+                receiveValue: { _, data in
                     guard let latestProfile: Profile = Storage.shared.read({ db in try Profile.fetchOne(db, id: profile.id) }) else {
                         return
                     }
@@ -240,12 +235,12 @@ public struct ProfileManager {
                         !latestProfileKey.isEmpty,
                         latestProfileKey == profileKeyAtStart
                     else {
-                        OWSLogger.warn("Ignoring avatar download for obsolete user profile.")
+                        Log.warn("Ignoring avatar download for obsolete user profile.")
                         return
                     }
                     
                     guard profileUrlStringAtStart == latestProfile.profilePictureUrl else {
-                        OWSLogger.warn("Avatar url has changed during download.")
+                        Log.warn("Avatar url has changed during download.")
                         
                         if latestProfile.profilePictureUrl?.isEmpty == false {
                             self.downloadAvatar(for: latestProfile)
@@ -254,14 +249,14 @@ public struct ProfileManager {
                     }
                     
                     guard let decryptedData: Data = decryptData(data: data, key: profileKeyAtStart) else {
-                        OWSLogger.warn("Avatar data for \(profile.id) could not be decrypted.")
+                        Log.warn("Avatar data for \(profile.id) could not be decrypted.")
                         return
                     }
                     
                     try? decryptedData.write(to: URL(fileURLWithPath: filePath), options: [.atomic])
                     
                     guard UIImage(contentsOfFile: filePath) != nil else {
-                        OWSLogger.warn("Avatar image for \(profile.id) could not be loaded.")
+                        Log.warn("Avatar image for \(profile.id) could not be loaded.")
                         return
                     }
                     
@@ -317,9 +312,9 @@ public struct ProfileManager {
                             profileAvatarCache.mutate { $0[fileName] = nil }
                         }
                         
-                        OWSLogger.verbose(existingProfileUrl != nil ?
-                            "Updating local profile on service with cleared avatar." :
-                            "Updating local profile on service with no avatar."
+                        Log.debug(existingProfileUrl != nil ?
+                            "Updating local profile on service with cleared avatar." :  // stringlint:disable
+                            "Updating local profile on service with no avatar."         // stringlint:disable
                         )
                     }
                     
@@ -441,7 +436,7 @@ public struct ProfileManager {
             // * Encrypt it
             // * Upload it to asset service
             // * Send asset service info to Signal Service
-            OWSLogger.verbose("Updating local profile on service with new avatar.")
+            Log.debug("Updating local profile on service with new avatar.")
             
             let fileName: String = UUID().uuidString.appendingFileExtension(fileExtension)
             let filePath: String = ProfileManager.profileAvatarFilepath(filename: fileName)
@@ -462,8 +457,9 @@ public struct ProfileManager {
             }
             
             // Upload the avatar to the FileServer
-            FileServerAPI
-                .upload(encryptedAvatarData)
+            LibSession
+                .uploadToServer(encryptedAvatarData, to: .fileServer, fileName: nil)
+                .tryMap { _, fileUploadResponse in try Network.fileServerDownloadUrlFor(fileId: fileUploadResponse.id) }
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .receive(on: queue)
                 .sinkUntilComplete(
@@ -480,15 +476,13 @@ public struct ProfileManager {
                                 )
                         }
                     },
-                    receiveValue: { fileUploadResponse in
-                        let downloadUrl: String = "\(FileServerAPI.server)/file/\(fileUploadResponse.id)"
-                        
+                    receiveValue: { downloadUrl in
                         // Update the cached avatar image value
                         profileAvatarCache.mutate { $0[fileName] = avatarImageData }
                         UserDefaults.standard[.lastProfilePictureUpload] = Date()
                         
                         SNLog("Successfully uploaded avatar image.")
-                        success((downloadUrl, fileName, newProfileKey))
+                        success((downloadUrl.absoluteString, fileName, newProfileKey))
                     }
                 )
         }
@@ -586,7 +580,7 @@ public struct ProfileManager {
         // Download the profile picture if needed
         guard avatarNeedsDownload else { return }
         
-        let dedupeIdentifier: String = "AvatarDownload-\(publicKey)-\(targetAvatarUrl ?? "remove")"
+        let dedupeIdentifier: String = "AvatarDownload-\(publicKey)-\(targetAvatarUrl ?? "remove")" // stringlint:disable
         
         db.afterNextTransactionNestedOnce(dedupeId: dedupeIdentifier) { db in
             // Need to refetch to ensure the db changes have occurred
