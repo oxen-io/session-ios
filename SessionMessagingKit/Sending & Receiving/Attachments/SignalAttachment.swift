@@ -41,23 +41,23 @@ extension SignalAttachmentError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .missingData:
-            return NSLocalizedString("ATTACHMENT_ERROR_MISSING_DATA", comment: "Attachment error message for attachments without any data")
+            return "ATTACHMENT_ERROR_MISSING_DATA".localized()
         case .fileSizeTooLarge:
-            return NSLocalizedString("ATTACHMENT_ERROR_FILE_SIZE_TOO_LARGE", comment: "Attachment error message for attachments whose data exceed file size limits")
+            return "attachmentsErrorSize".localized()
         case .invalidData:
-            return NSLocalizedString("ATTACHMENT_ERROR_INVALID_DATA", comment: "Attachment error message for attachments with invalid data")
+            return "attachmentsErrorNotSupported".localized()
         case .couldNotParseImage:
-            return NSLocalizedString("ATTACHMENT_ERROR_COULD_NOT_PARSE_IMAGE", comment: "Attachment error message for image attachments which cannot be parsed")
+            return "ATTACHMENT_ERROR_COULD_NOT_PARSE_IMAGE".localized()
         case .couldNotConvertToJpeg:
-            return NSLocalizedString("ATTACHMENT_ERROR_COULD_NOT_CONVERT_TO_JPEG", comment: "Attachment error message for image attachments which could not be converted to JPEG")
+            return "attachmentsErrorOpen".localized()
         case .invalidFileFormat:
-            return NSLocalizedString("ATTACHMENT_ERROR_INVALID_FILE_FORMAT", comment: "Attachment error message for attachments with an invalid file format")
+            return "attachmentsErrorNotSupported".localized()
         case .couldNotConvertToMpeg4:
-            return NSLocalizedString("ATTACHMENT_ERROR_COULD_NOT_CONVERT_TO_MP4", comment: "Attachment error message for video attachments which could not be converted to MP4")
+            return "ATTACHMENT_ERROR_COULD_NOT_CONVERT_TO_MP4".localized()
         case .couldNotRemoveMetadata:
-            return NSLocalizedString("ATTACHMENT_ERROR_COULD_NOT_REMOVE_METADATA", comment: "Attachment error message for image attachments in which metadata could not be removed")
+            return "attachmentsImageErrorMetadata".localized()
         case .couldNotResizeImage:
-            return NSLocalizedString("ATTACHMENT_ERROR_COULD_NOT_RESIZE_IMAGE", comment: "Attachment error message for image attachments which could not be resized")
+            return "ATTACHMENT_ERROR_COULD_NOT_RESIZE_IMAGE".localized()
         }
     }
 }
@@ -286,16 +286,6 @@ public class SignalAttachment: Equatable, Hashable {
     // Returns the MIME type for this attachment or nil if no MIME type
     // can be identified.
     public var mimeType: String {
-        if isVoiceMessage {
-            // Legacy iOS clients don't handle "audio/mp4" files correctly;
-            // they are written to disk as .mp4 instead of .m4a which breaks
-            // playback.  So we send voice messages as "audio/aac" to work
-            // around this.
-            //
-            // TODO: Remove this Nov. 2016 or after.
-            return "audio/aac"
-        }
-
         if let filename = sourceFilename {
             let fileExtension = (filename as NSString).pathExtension
             if fileExtension.count > 0 {
@@ -348,7 +338,7 @@ public class SignalAttachment: Equatable, Hashable {
             }
         }
         if dataUTI == kUnknownTestAttachmentUTI {
-            return "unknown"
+            return "unknown".localized()
         }
         guard let fileExtension = MIMETypeUtil.fileExtension(forUTIType: dataUTI) else {
             return nil
@@ -688,8 +678,8 @@ public class SignalAttachment: Equatable, Hashable {
                 dstImage = resizedImage
             }
             guard let jpgImageData = dstImage.jpegData(compressionQuality: jpegCompressionQuality(imageUploadQuality: imageUploadQuality)) else {
-                                                                attachment.error = .couldNotConvertToJpeg
-                                                                return attachment
+                attachment.error = .couldNotConvertToJpeg
+                return attachment
             }
 
             guard let dataSource = DataSourceValue.dataSource(with: jpgImageData, fileExtension: "jpg") else {

@@ -39,11 +39,7 @@ public struct LinkPreviewView_SwiftUI: View {
             alignment: .leading
         ) {
             if state is LinkPreview.SentState {
-                if #available(iOS 14.0, *) {
-                    ThemeManager.currentTheme.colorSwiftUI(for: .messageBubble_overlay).ignoresSafeArea()
-                } else {
-                    ThemeManager.currentTheme.colorSwiftUI(for: .messageBubble_overlay)
-                }
+                ThemeManager.currentTheme.colorSwiftUI(for: .messageBubble_overlay).ignoresSafeArea()
             }
             
             HStack(
@@ -80,7 +76,7 @@ public struct LinkPreviewView_SwiftUI: View {
                             width: imageSize,
                             height: imageSize
                         )
-                        .background(themeColor: .messageBubble_overlay)
+                        .backgroundColor(themeColor: .messageBubble_overlay)
                         .cornerRadius(state is LinkPreview.SentState ? 0 : 8)
                 } else {
                     ActivityIndicator(themeColor: .borderSeparator, width: 2)

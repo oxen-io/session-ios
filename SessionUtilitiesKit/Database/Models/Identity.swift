@@ -135,6 +135,34 @@ public extension Identity {
         
         return data.toHexString()
     }
+    
+    static func mnemonic() throws -> String {
+        let dbIsValid: Bool = Storage.shared.isValid
+        let dbIsSuspendedUnsafe: Bool = Storage.shared.isSuspendedUnsafe
+        
+        if let hexEncodedSeed: String = Identity.fetchHexEncodedSeed() {
+            return Mnemonic.encode(hexEncodedString: hexEncodedSeed)
+        }
+        
+        guard let legacyPrivateKey: String = Identity.fetchUserPrivateKey()?.toHexString() else {
+            let hasStoredPublicKey: Bool = (Identity.fetchUserPublicKey() != nil)
+            let hasStoredEdKeyPair: Bool = (Identity.fetchUserEd25519KeyPair() != nil)
+            let dbStates: [String] = [
+                "dbIsValid: \(dbIsValid)",
+                "dbIsSuspendedUnsafe: \(dbIsSuspendedUnsafe)",
+                "storedSeed: false",
+                "userPublicKey: \(hasStoredPublicKey)",
+                "userPrivateKey: false",
+                "userEdKeyPair: \(hasStoredEdKeyPair)"
+            ]
+            
+            SNLog("Failed to retrieve keys for mnemonic generation (\(dbStates.joined(separator: ", ")))")
+            throw StorageError.objectNotFound
+        }
+                
+        // Legacy account
+        return Mnemonic.encode(hexEncodedString: legacyPrivateKey)
+    }
 }
 
 // MARK: - Convenience

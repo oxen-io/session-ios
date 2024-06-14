@@ -525,7 +525,7 @@ public extension SessionThread {
             case .legacyGroup, .group: return (closedGroupName ?? "Unknown Group")
             case .community: return (openGroupName ?? "Unknown Community")
             case .contact:
-                guard !isNoteToSelf else { return "NOTE_TO_SELF".localized() }
+                guard !isNoteToSelf else { return "noteToSelf".localized() }
                 guard let profile: Profile = profile else {
                     return Profile.truncated(id: threadId, truncating: .middle)
                 }

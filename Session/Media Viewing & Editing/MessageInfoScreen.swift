@@ -97,6 +97,7 @@ struct MessageInfoScreen: View {
                                 MediaView_SwiftUI(
                                     attachment: attachments[0],
                                     isOutgoing: (messageViewModel.variant == .standardOutgoing),
+                                    shouldSupressControls: true, 
                                     cornerRadius: 0
                                 )
                                 .frame(
@@ -134,7 +135,7 @@ struct MessageInfoScreen: View {
                                 alignment: .leading,
                                 spacing: Values.mediumSpacing
                             ) {
-                                InfoBlock(title: "ATTACHMENT_INFO_FILE_ID".localized() + ":") {
+                                InfoBlock(title: "attachmentsFileId".localized()) {
                                     Text(attachment.serverId ?? "")
                                         .font(.system(size: Values.mediumFontSize))
                                         .foregroundColor(themeColor: .textPrimary)
@@ -143,7 +144,7 @@ struct MessageInfoScreen: View {
                                 HStack(
                                     alignment: .center
                                 ) {
-                                    InfoBlock(title: "ATTACHMENT_INFO_FILE_TYPE".localized() + ":") {
+                                    InfoBlock(title: "attachmentsFileType".localized()) {
                                         Text(attachment.contentType)
                                             .font(.system(size: Values.mediumFontSize))
                                             .foregroundColor(themeColor: .textPrimary)
@@ -151,7 +152,7 @@ struct MessageInfoScreen: View {
                                     
                                     Spacer()
                                     
-                                    InfoBlock(title: "ATTACHMENT_INFO_FILE_SIZE".localized() + ":") {
+                                    InfoBlock(title: "attachmentsFileSize".localized()) {
                                         Text(Format.fileSize(attachment.byteCount))
                                             .font(.system(size: Values.mediumFontSize))
                                             .foregroundColor(themeColor: .textPrimary)
@@ -163,10 +164,10 @@ struct MessageInfoScreen: View {
                                     alignment: .center
                                 ) {
                                     let resolution: String = {
-                                        guard let width = attachment.width, let height = attachment.height else { return "N/A" }
+                                        guard let width = attachment.width, let height = attachment.height else { return "attachmentsNa".localized() }
                                         return "\(width)×\(height)"
                                     }()
-                                    InfoBlock(title: "ATTACHMENT_INFO_RESOLUTION".localized() + ":") {
+                                    InfoBlock(title: "attachmentsResolution".localized()) {
                                         Text(resolution)
                                             .font(.system(size: Values.mediumFontSize))
                                             .foregroundColor(themeColor: .textPrimary)
@@ -175,10 +176,10 @@ struct MessageInfoScreen: View {
                                     Spacer()
                                     
                                     let duration: String = {
-                                        guard let duration = attachment.duration else { return "N/A" }
+                                        guard let duration = attachment.duration else { return "attachmentsNa".localized() }
                                         return floor(duration).formatted(format: .videoDuration)
                                     }()
-                                    InfoBlock(title: "ATTACHMENT_INFO_DURATION".localized() + ":") {
+                                    InfoBlock(title: "attachmentsDuration".localized()) {
                                         Text(duration)
                                             .font(.system(size: Values.mediumFontSize))
                                             .foregroundColor(themeColor: .textPrimary)
@@ -195,7 +196,7 @@ struct MessageInfoScreen: View {
                             .padding(.all, Values.largeSpacing)
                         }
                         .frame(maxHeight: .infinity)
-                        .background(themeColor: .backgroundSecondary)
+                        .backgroundColor(themeColor: .backgroundSecondary)
                         .cornerRadius(Self.cornerRadius)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, Values.verySmallSpacing)
@@ -208,28 +209,28 @@ struct MessageInfoScreen: View {
                             alignment: .leading,
                             spacing: Values.mediumSpacing
                         ) {
-                            InfoBlock(title: "MESSAGE_INFO_SENT".localized() + ":") {
+                            InfoBlock(title: "sent".localized()) {
                                 Text(messageViewModel.dateForUI.fromattedForMessageInfo)
                                     .font(.system(size: Values.mediumFontSize))
                                     .foregroundColor(themeColor: .textPrimary)
                             }
                             
-                            InfoBlock(title: "MESSAGE_INFO_RECEIVED".localized() + ":") {
+                            InfoBlock(title: "received".localized()) {
                                 Text(messageViewModel.receivedDateForUI.fromattedForMessageInfo)
                                     .font(.system(size: Values.mediumFontSize))
                                     .foregroundColor(themeColor: .textPrimary)
                             }
                             
                             if isMessageFailed {
-                                let failureText: String = messageViewModel.mostRecentFailureText ?? "SEND_FAILED_NOTIFICATION_BODY".localized()
-                                InfoBlock(title: "ALERT_ERROR_TITLE".localized() + ":") {
+                                let failureText: String = messageViewModel.mostRecentFailureText ?? "messageStatusFailedToSend".localized()
+                                InfoBlock(title: "theError".localized() + ":") {
                                     Text(failureText)
                                         .font(.system(size: Values.mediumFontSize))
                                         .foregroundColor(themeColor: .danger)
                                 }
                             }
                             
-                            InfoBlock(title: "MESSAGE_INFO_FROM".localized() + ":") {
+                            InfoBlock(title: "from".localized()) {
                                 HStack(
                                     spacing: 10
                                 ) {
@@ -282,7 +283,7 @@ struct MessageInfoScreen: View {
                         .padding(.all, Values.largeSpacing)
                     }
                     .frame(maxHeight: .infinity)
-                    .background(themeColor: .backgroundSecondary)
+                    .backgroundColor(themeColor: .backgroundSecondary)
                     .cornerRadius(Self.cornerRadius)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, Values.verySmallSpacing)
@@ -336,7 +337,7 @@ struct MessageInfoScreen: View {
                             .padding(.horizontal, Values.largeSpacing)
                         }
                         .frame(maxHeight: .infinity)
-                        .background(themeColor: .backgroundSecondary)
+                        .backgroundColor(themeColor: .backgroundSecondary)
                         .cornerRadius(Self.cornerRadius)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, Values.verySmallSpacing)
@@ -345,7 +346,7 @@ struct MessageInfoScreen: View {
                 }
             }
         }
-        .background(themeColor: .backgroundPrimary)
+        .backgroundColor(themeColor: .backgroundPrimary)
     }
     
     private func showMediaFullScreen(attachment: Attachment) {
@@ -548,7 +549,7 @@ final class MessageInfoViewController: SessionHostingViewController<MessageInfoS
         super.viewDidLoad()
         
         let customTitleFontSize = Values.largeFontSize
-        setNavBarTitle("message_info_title".localized(), customFontSize: customTitleFontSize)
+        setNavBarTitle("messageInfo".localized(), customFontSize: customTitleFontSize)
     }
 }
 

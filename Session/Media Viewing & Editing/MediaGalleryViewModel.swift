@@ -176,7 +176,7 @@ public class MediaGalleryViewModel {
             let galleryDate: Date = (self.date ?? Date())
             
             switch (isSameMonth, isCurrentYear) {
-                case (true, true): return "MEDIA_GALLERY_THIS_MONTH_HEADER".localized()
+                case (true, true): return "attachmentsThisMonth".localized()
                 case (false, true): return GalleryDate.thisYearFormatter.string(from: galleryDate)
                 default: return GalleryDate.olderFormatter.string(from: galleryDate)
             }

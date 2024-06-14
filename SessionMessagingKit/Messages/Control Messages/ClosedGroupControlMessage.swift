@@ -50,13 +50,13 @@ public final class ClosedGroupControlMessage: ControlMessage {
 
         public var description: String {
             switch self {
-                case .new: return "new"
-                case .encryptionKeyPair: return "encryptionKeyPair"
-                case .nameChange: return "nameChange"
-                case .membersAdded: return "membersAdded"
-                case .membersRemoved: return "membersRemoved"
-                case .memberLeft: return "memberLeft"
-                case .encryptionKeyPairRequest: return "encryptionKeyPairRequest"
+                case .new: return "new" // stringlint:disable
+                case .encryptionKeyPair: return "encryptionKeyPair" // stringlint:disable
+                case .nameChange: return "nameChange" // stringlint:disable
+                case .membersAdded: return "membersAdded" // stringlint:disable
+                case .membersRemoved: return "membersRemoved" // stringlint:disable
+                case .memberLeft: return "memberLeft" // stringlint:disable
+                case .encryptionKeyPairRequest: return "encryptionKeyPairRequest" // stringlint:disable
             }
         }
         
@@ -364,7 +364,9 @@ public extension ClosedGroupControlMessage.Kind {
     func infoMessage(_ db: Database, sender: String) throws -> String? {
         switch self {
             case .nameChange(let name):
-                return String(format: "GROUP_TITLE_CHANGED".localized(), name)
+                return "groupNameNew"
+                .put(key: "group_name", value: name)
+                .localized()
                 
             case .membersAdded(let membersAsData):
                 let memberIds: [String] = membersAsData.map { $0.toHexString() }
@@ -377,10 +379,9 @@ public extension ClosedGroupControlMessage.Kind {
                         Profile.truncated(id: $0, threadVariant: .legacyGroup)
                     }
                 
-                return String(
-                    format: "GROUP_MEMBER_JOINED".localized(),
-                    addedMemberNames.joined(separator: ", ")
-                )
+            return "groupMemberNew"
+                .put(key: "name", value: addedMemberNames.joined(separator: ", "))
+                .localized()
                 
             case .membersRemoved(let membersAsData):
                 let userPublicKey: String = getUserHexEncodedPublicKey(db)
@@ -399,18 +400,21 @@ public extension ClosedGroupControlMessage.Kind {
                             knownMemberNameMap[$0] ??
                             Profile.truncated(id: $0, threadVariant: .legacyGroup)
                         }
-                    let format: String = (removedMemberNames.count > 1 ?
-                        "GROUP_MEMBERS_REMOVED".localized() :
-                        "GROUP_MEMBER_REMOVED".localized()
-                    )
-
+                    // TODO: Need logic change
                     infoMessage = infoMessage.appending(
-                        String(format: format, removedMemberNames.joined(separator: ", "))
+                        "groupRemoved"
+                            .put(key: "name", value: removedMemberNames.joined(separator: ", "))
+                            .localized()
                     )
                 }
-                
+                // TODO: Need logic change
                 if memberIds.contains(userPublicKey) {
-                    infoMessage = infoMessage.appending("YOU_WERE_REMOVED".localized())
+                    infoMessage = infoMessage
+                        .appending(
+                            "groupRemovedYou"
+                                .put(key: "group_name", value: "")
+                                .localized()
+                        )
                 }
                 
                 return infoMessage
@@ -418,13 +422,15 @@ public extension ClosedGroupControlMessage.Kind {
             case .memberLeft:
                 let userPublicKey: String = getUserHexEncodedPublicKey(db)
                 
-                guard sender != userPublicKey else { return "GROUP_YOU_LEFT".localized() }
+                guard sender != userPublicKey else { return "groupMemberYouLeft".localized() }
                 
                 if let displayName: String = Profile.displayNameNoFallback(db, id: sender) {
-                    return String(format: "GROUP_MEMBER_LEFT".localized(), displayName)
+                    return "groupMemberLeft"
+                        .put(key: "name", value: displayName)
+                        .localized()
                 }
                 
-                return "GROUP_UPDATED".localized()
+                return "groupUpdated".localized()
                 
             default: return nil
         }

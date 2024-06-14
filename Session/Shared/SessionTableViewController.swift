@@ -46,11 +46,8 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
         result.registerHeaderFooterView(view: SessionFooterView.self)
         result.dataSource = self
         result.delegate = self
-        
-        if #available(iOS 15.0, *) {
-            result.sectionHeaderTopPadding = 0
-        }
-        
+        result.sectionHeaderTopPadding = 0
+
         return result
     }()
     
@@ -214,7 +211,7 @@ class SessionTableViewController<ViewModel>: BaseVC, UITableViewDataSource, UITa
                 receiveCompletion: { [weak self] result in
                     switch result {
                         case .failure(let error):
-                            let title: String = (self?.viewModel.title ?? "unknown")
+                        let title: String = (self?.viewModel.title ?? "unknown".localized())
                             
                             // If we got an error then try to restart the stream once, otherwise log the error
                             guard self?.dataStreamJustFailed == false else {

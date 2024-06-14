@@ -76,7 +76,7 @@ class NotificationSoundViewModel: SessionTableViewModel, NavigationItemSource, N
     
     // MARK: - Content
     
-    let title: String = "NOTIFICATIONS_STYLE_SOUND_TITLE".localized()
+    let title: String = "notificationsSound".localized()
     
     lazy var observation: TargetObservation = ObservationBuilder
         .databaseObservation(self) { [threadId] db -> Preferences.Sound in

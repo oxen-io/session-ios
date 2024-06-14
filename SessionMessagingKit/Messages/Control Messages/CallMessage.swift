@@ -45,12 +45,12 @@ public final class CallMessage: ControlMessage {
         
         public var description: String {
             switch self {
-                case .preOffer: return "preOffer"
-                case .offer: return "offer"
-                case .answer: return "answer"
-                case .provisionalAnswer: return "provisionalAnswer"
-                case .iceCandidates(_, _): return "iceCandidates"
-                case .endCall: return "endCall"
+                case .preOffer: return "preOffer" // stringlint:disable
+                case .offer: return "offer" // stringlint:disable
+                case .answer: return "answer" // stringlint:disable
+                case .provisionalAnswer: return "provisionalAnswer" // stringlint:disable
+                case .iceCandidates(_, _): return "iceCandidates" // stringlint:disable
+                case .endCall: return "endCall" // stringlint:disable
             }
         }
         
@@ -242,22 +242,19 @@ public extension CallMessage {
         func previewText(threadContactDisplayName: String) -> String {
             switch state {
                 case .incoming:
-                    return String(
-                        format: "call_incoming".localized(),
-                        threadContactDisplayName
-                    )
-                    
+                    return "callsCalledYou"
+                        .put(key: "name", value: threadContactDisplayName)
+                        .localized()
+
                 case .outgoing:
-                    return String(
-                        format: "call_outgoing".localized(),
-                        threadContactDisplayName
-                    )
+                    return "callsYouCalled"
+                        .put(key: "name", value: threadContactDisplayName)
+                        .localized()
                     
                 case .missed, .permissionDenied:
-                    return String(
-                        format: "call_missed".localized(),
-                        threadContactDisplayName
-                    )
+                    return "callsMissedCallFrom"
+                        .put(key: "name", value: threadContactDisplayName)
+                        .localized()
                 
                 // TODO: We should do better here
                 case .unknown: return ""

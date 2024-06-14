@@ -133,7 +133,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         
         ViewControllerUtilities.setUpDefaultSessionStyle(
             for: self,
-            title: MediaStrings.allMedia,
+            title: "conversationsSettingsAllMedia".localized(),
             hasCustomBackButton: false
         )
 
@@ -427,9 +427,9 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
                 sectionHeader.configure(
                     title: {
                         switch section.model {
-                            case .emptyGallery: return "GALLERY_TILES_EMPTY_GALLERY".localized()
-                            case .loadOlder: return "GALLERY_TILES_LOADING_OLDER_LABEL".localized()
-                            case .loadNewer: return "GALLERY_TILES_LOADING_MORE_RECENT_LABEL".localized()
+                            case .emptyGallery: return "attachmentsMediaEmpty".localized()
+                            case .loadOlder: return "attachmentsLoadingOlder".localized()
+                            case .loadNewer: return "attachmentsLoadingNewer".localized()
                             case .galleryMonth: return ""   // Impossible case
                         }
                     }()
@@ -681,11 +681,11 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         }
         let confirmationTitle: String = {
             if indexPaths.count == 1 {
-                return "MEDIA_GALLERY_DELETE_SINGLE_MESSAGE".localized()
+                return "deleteMessage".localized()
             }
             
             return String(
-                format: "MEDIA_GALLERY_DELETE_MULTIPLE_MESSAGES_FORMAT".localized(),
+                format: "deleteMessages".localized(),
                 indexPaths.count
             )
         }()
@@ -724,7 +724,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
 
         let actionSheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         actionSheet.addAction(deleteAction)
-        actionSheet.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel))
+        actionSheet.addAction(UIAlertAction(title: "cancel".localized(), style: .cancel))
 
         Modal.setupForIPadIfNeeded(actionSheet, targetView: self.view)
         self.present(actionSheet, animated: true)
@@ -759,7 +759,7 @@ private class MediaTileViewLayout: UICollectionViewFlowLayout {
 
 private class MediaGallerySectionHeader: UICollectionReusableView {
 
-    static let reuseIdentifier = "MediaGallerySectionHeader"
+    static let reuseIdentifier = "MediaGallerySectionHeader" // stringlint:disable
 
     // HACK: scrollbar incorrectly appears *behind* section headers
     // in collection view on iOS11 =(
@@ -817,7 +817,7 @@ private class MediaGallerySectionHeader: UICollectionReusableView {
 
 private class MediaGalleryStaticHeader: UICollectionViewCell {
 
-    static let reuseIdentifier = "MediaGalleryStaticHeader"
+    static let reuseIdentifier = "MediaGalleryStaticHeader" // stringlint:disable
 
     let label = UILabel()
 

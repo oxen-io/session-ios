@@ -94,9 +94,9 @@ extension ConversationVC:
         guard Storage.shared[.areCallsEnabled] else {
             let confirmationModal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
-                    title: "modal_call_permission_request_title".localized(),
-                    body: .text("modal_call_permission_request_explanation".localized()),
-                    confirmTitle: "vc_settings_title".localized(),
+                    title: "callsPermissionsRequired".localized(),
+                    body: .text("callsPermissionsRequiredDescription".localized()),
+                    confirmTitle: "sessionSettings".localized(),
                     confirmAccessibility: Accessibility(identifier: "Settings"),
                     dismissOnConfirm: false // Custom dismissal logic
                 ) { [weak self] _ in
@@ -149,24 +149,18 @@ extension ConversationVC:
             self.viewModel.threadData.threadIsBlocked == true
         else { return false }
         
-        let message = String(
-            format: "modal_blocked_explanation".localized(),
-            self.viewModel.threadData.displayName
-        )
         let confirmationModal: ConfirmationModal = ConfirmationModal(
             info: ConfirmationModal.Info(
                 title: String(
-                    format: "modal_blocked_title".localized(),
+                    format: "blockUnblock".localized(),
                     self.viewModel.threadData.displayName
                 ),
                 body: .attributedText(
-                    NSAttributedString(string: message)
-                        .adding(
-                            attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
-                            range: (message as NSString).range(of: self.viewModel.threadData.displayName)
-                        )
+                    "blockUnblockDescription"
+                        .put(key: "name", value: self.viewModel.threadData.displayName)
+                        .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
                 ),
-                confirmTitle: "modal_blocked_button_title".localized(),
+                confirmTitle: "blockUnblock".localized(),
                 confirmAccessibility: Accessibility(identifier: "Confirm block"),
                 cancelAccessibility: Accessibility(identifier: "Cancel block"),
                 dismissOnConfirm: false // Custom dismissal logic
@@ -258,9 +252,13 @@ extension ConversationVC:
         guard Storage.shared[.isGiphyEnabled] else {
             let modal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
-                    title: "GIPHY_PERMISSION_TITLE".localized(),
-                    body: .text("GIPHY_PERMISSION_MESSAGE".localized()),
-                    confirmTitle: "continue_2".localized()
+                    title: "giphyWarning".localized(),
+                    body: .text(
+                        "giphyWarningDescription"
+                            .put(key: "app_name", value: Singleton.appName)
+                            .localized()
+                    ),
+                    confirmTitle: "theContinue".localized()
                 ) { [weak self] _ in
                     Storage.shared.writeAsync(
                         updates: { db in
@@ -350,16 +348,7 @@ extension ConversationVC:
         }
         catch {
             DispatchQueue.main.async { [weak self] in
-                let modal: ConfirmationModal = ConfirmationModal(
-                    targetView: self?.view,
-                    info: ConfirmationModal.Info(
-                        title: "Session",
-                        body: .text("An error occurred."),
-                        cancelTitle: "BUTTON_OK".localized(),
-                        cancelStyle: .alert_text
-                    )
-                )
-                self?.present(modal, animated: true)
+                self?.viewModel.showToast(text: "attachmentsErrorLoad".localized())
             }
             return
         }
@@ -370,9 +359,9 @@ extension ConversationVC:
                 let modal: ConfirmationModal = ConfirmationModal(
                     targetView: self?.view,
                     info: ConfirmationModal.Info(
-                        title: "ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_TITLE".localized(),
-                        body: .text("ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_BODY".localized()),
-                        cancelTitle: "BUTTON_OK".localized(),
+                        title: "attachmentsErrorNotSupported".localized(),
+                        body: .text("attachmentsErrorSize".localized()),
+                        cancelTitle: "okay".localized(),
                         cancelStyle: .alert_text
                     )
                 )
@@ -381,18 +370,10 @@ extension ConversationVC:
             return
         }
         
-        let fileName = urlResourceValues.name ?? NSLocalizedString("ATTACHMENT_DEFAULT_FILENAME", comment: "")
+        let fileName = urlResourceValues.name ?? "attachment".localized()
         guard let dataSource = DataSourcePath.dataSource(with: url, shouldDeleteOnDeallocation: false) else {
             DispatchQueue.main.async { [weak self] in
-                let modal: ConfirmationModal = ConfirmationModal(
-                    targetView: self?.view,
-                    info: ConfirmationModal.Info(
-                        title: "ATTACHMENT_PICKER_DOCUMENTS_FAILED_ALERT_TITLE".localized(),
-                        cancelTitle: "BUTTON_OK".localized(),
-                        cancelStyle: .alert_text
-                    )
-                )
-                self?.present(modal, animated: true)
+                self?.viewModel.showToast(text: "attachmentsErrorLoad".localized())
             }
             return
         }
@@ -485,9 +466,9 @@ extension ConversationVC:
             // Warn the user if they're about to send their seed to someone
             let modal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
-                    title: "modal_send_seed_title".localized(),
-                    body: .text("modal_send_seed_explanation".localized()),
-                    confirmTitle: "modal_send_seed_send_button_title".localized(),
+                    title: "warning".localized(),
+                    body: .text("recoveryPasswordWarningSendDescription".localized()),
+                    confirmTitle: "send".localized(),
                     confirmStyle: .danger,
                     cancelStyle: .alert_text,
                     onConfirm: { [weak self] _ in
@@ -659,9 +640,13 @@ extension ConversationVC:
     func showLinkPreviewSuggestionModal() {
         let linkPreviewModal: ConfirmationModal = ConfirmationModal(
             info: ConfirmationModal.Info(
-                title: "modal_link_previews_title".localized(),
-                body: .text("modal_link_previews_explanation".localized()),
-                confirmTitle: "modal_link_previews_button_title".localized()
+                title: "linkPreviewsEnable".localized(),
+                body: .text(
+                    "linkPreviewsFirstDescription"
+                        .put(key: "app_name", value: Singleton.appName)
+                        .localized()
+                ),
+                confirmTitle: "enable".localized()
             ) { [weak self] _ in
                 Storage.shared.writeAsync { db in
                     db[.areLinkPreviewsEnabled] = true
@@ -733,7 +718,7 @@ extension ConversationVC:
         
         let newText: String = snInputView.text.replacingCharacters(
             in: currentMentionStartIndex...,
-            with: "@\(mentionInfo.profile.displayName(for: self.viewModel.threadData.threadVariant)) "
+            with: "@\(mentionInfo.profile.displayName(for: self.viewModel.threadData.threadVariant)) " // stringlint:disable
         )
         
         snInputView.text = newText
@@ -792,8 +777,8 @@ extension ConversationVC:
     func replaceMentions(in text: String) -> String {
         var result = text
         for mention in mentions {
-            guard let range = result.range(of: "@\(mention.profile.displayName(for: mention.threadVariant))") else { continue }
-            result = result.replacingCharacters(in: range, with: "@\(mention.profile.id)")
+            guard let range = result.range(of: "@\(mention.profile.displayName(for: mention.threadVariant))") else { continue } // stringlint:disable
+            result = result.replacingCharacters(in: range, with: "@\(mention.profile.id)") // stringlint:disable
         }
         
         return result
@@ -903,35 +888,23 @@ extension ConversationVC:
         guard cellViewModel.variant != .infoDisappearingMessagesUpdate else {
             let messageDisappearingConfig = cellViewModel.messageDisappearingConfiguration()
             let expirationTimerString: String = floor(messageDisappearingConfig.durationSeconds).formatted(format: .long)
-            let expirationTypeString: String = (messageDisappearingConfig.type == .disappearAfterRead ? "DISAPPEARING_MESSAGE_STATE_READ".localized() : "DISAPPEARING_MESSAGE_STATE_SENT".localized())
-            let modalBodyString: String = (
-                messageDisappearingConfig.isEnabled ?
-                String(
-                    format: "FOLLOW_SETTING_EXPLAINATION_TURNING_ON".localized(),
-                    expirationTimerString,
-                    expirationTypeString
-                ) :
-                "FOLLOW_SETTING_EXPLAINATION_TURNING_OFF".localized()
-            )
-            let modalConfirmTitle: String = messageDisappearingConfig.isEnabled ? "DISAPPERING_MESSAGES_SAVE_TITLE".localized() : "CONFIRM_BUTTON_TITLE".localized()
+            let expirationTypeString: String = (messageDisappearingConfig.type?.localizedName ?? "")
+            let modalBodyString: String = {
+                if messageDisappearingConfig.isEnabled {
+                    return "disappearingMessagesFollowSettingOn"
+                        .put(key: "time", value: expirationTimerString)
+                        .put(key: "disappearing_messages_type", value: expirationTypeString)
+                        .localized()
+                } else {
+                    return "disappearingMessagesFollowSettingOff"
+                        .localized()
+                }
+            }()
+            let modalConfirmTitle: String = messageDisappearingConfig.isEnabled ? "set".localized() : "CONFIRM_BUTTON_TITLE".localized()
             let confirmationModal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
-                    title: "FOLLOW_SETTING_TITLE".localized(),
-                    body: .attributedText(
-                        NSAttributedString(string: modalBodyString)
-                            .adding(
-                                attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
-                                range: (modalBodyString as NSString).range(of: expirationTypeString)
-                            )
-                            .adding(
-                                attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
-                                range: (modalBodyString as NSString).range(of: expirationTimerString)
-                            )
-                            .adding(
-                                attributes: [ .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize) ],
-                                range: (modalBodyString as NSString).range(of: "DISAPPEARING_MESSAGES_OFF".localized().lowercased())
-                            )
-                    ),
+                    title: "disappearingMessagesFollowSetting".localized(),
+                    body: .attributedText(modalBodyString.formatted(baseFont: .systemFont(ofSize: Values.smallFontSize))),
                     accessibility: Accessibility(identifier: "Follow setting dialog"),
                     confirmTitle: modalConfirmTitle,
                     confirmAccessibility: Accessibility(identifier: "Set button"),
@@ -958,16 +931,12 @@ extension ConversationVC:
         
         // If it's an incoming media message and the thread isn't trusted then show the placeholder view
         if cellViewModel.cellType != .textOnlyMessage && cellViewModel.variant == .standardIncoming && !cellViewModel.threadIsTrusted {
-            let message: String = String(
-                format: "modal_download_attachment_explanation".localized(),
-                cellViewModel.authorName
-            )
+            let message: String = "attachmentsAutoDownloadModalDescription"
+                .put(key: "conversation_name", value: cellViewModel.authorName)
+                .localized()
             let confirmationModal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
-                    title: String(
-                        format: "modal_download_attachment_title".localized(),
-                        cellViewModel.authorName
-                    ),
+                    title: "attachmentsAutoDownloadModalTitle".localized(),
                     body: .attributedText(
                         NSAttributedString(string: message)
                             .adding(
@@ -975,7 +944,7 @@ extension ConversationVC:
                                 range: (message as NSString).range(of: cellViewModel.authorName)
                             )
                     ),
-                    confirmTitle: "modal_download_button_title".localized(),
+                    confirmTitle: "download".localized(),
                     confirmAccessibility: Accessibility(identifier: "Download media"),
                     cancelAccessibility: Accessibility(identifier: "Don't download media"),
                     dismissOnConfirm: false // Custom dismissal logic
@@ -1218,15 +1187,17 @@ extension ConversationVC:
         
         // URLs can be unsafe, so always ask the user whether they want to open one
         let actionSheet: UIAlertController = UIAlertController(
-            title: "modal_open_url_title".localized(),
-            message: String(format: "modal_open_url_explanation".localized(), url.absoluteString),
+            title: "urlOpen".localized(),
+            message: "urlOpenDescription"
+                .put(key: "url", value: url.absoluteString)
+                .localized(),
             preferredStyle: .actionSheet
         )
-        actionSheet.addAction(UIAlertAction(title: "modal_open_url_button_title".localized(), style: .default) { [weak self] _ in
+        actionSheet.addAction(UIAlertAction(title: "open".localized(), style: .default) { [weak self] _ in
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             self?.showInputAccessoryView()
         })
-        actionSheet.addAction(UIAlertAction(title: "modal_copy_url_button_title".localized(), style: .default) { [weak self] _ in
+        actionSheet.addAction(UIAlertAction(title: "urlCopy".localized(), style: .default) { [weak self] _ in
             UIPasteboard.general.string = url.absoluteString
             self?.showInputAccessoryView()
         })
@@ -1441,7 +1412,7 @@ extension ConversationVC:
             (sentTimestamp - (recentReactionTimestamps.first ?? sentTimestamp)) > (60 * 1000)
         else {
             let toastController: ToastController = ToastController(
-                text: "EMOJI_REACTS_RATE_LIMIT_TOAST".localized(),
+                text: "emojiReactsCoolDown".localized(),
                 background: .backgroundSecondary
             )
             toastController.presentToastView(
@@ -1689,15 +1660,15 @@ extension ConversationVC:
         let sheet = UIAlertController(
             title: (cellViewModel.state == .failedToSync ?
                 "MESSAGE_DELIVERY_FAILED_SYNC_TITLE".localized() :
-                "MESSAGE_DELIVERY_FAILED_TITLE".localized()
+                "messageStatusFailedToSend".localized()
             ),
             message: cellViewModel.mostRecentFailureText,
             preferredStyle: .actionSheet
         )
-        sheet.addAction(UIAlertAction(title: "TXT_CANCEL_TITLE".localized(), style: .cancel, handler: nil))
+        sheet.addAction(UIAlertAction(title: "cancel".localized(), style: .cancel, handler: nil))
         
         if cellViewModel.state != .failedToSync {
-            sheet.addAction(UIAlertAction(title: "TXT_DELETE_TITLE".localized(), style: .destructive, handler: { _ in
+            sheet.addAction(UIAlertAction(title: "delete".localized(), style: .destructive, handler: { _ in
                 Storage.shared.writeAsync { db in
                     try Interaction
                         .filter(id: cellViewModel.id)
@@ -1708,22 +1679,22 @@ extension ConversationVC:
         
         sheet.addAction(UIAlertAction(
             title: (cellViewModel.state == .failedToSync ?
-                "context_menu_resync".localized() :
-                "context_menu_resend".localized()
+                "resync".localized() :
+                "resend".localized()
             ),
             style: .default,
             handler: { [weak self] _ in self?.retry(cellViewModel, using: dependencies) }
         ))
         
         // HACK: Extracting this info from the error string is pretty dodgy
-        let prefix: String = "HTTP request failed at destination (Service node "
+        let prefix: String = "HTTP request failed at destination (Service node " // stringlint:disable
         if let mostRecentFailureText: String = cellViewModel.mostRecentFailureText, mostRecentFailureText.hasPrefix(prefix) {
             let rest = mostRecentFailureText.substring(from: prefix.count)
             
-            if let index = rest.firstIndex(of: ")") {
+            if let index = rest.firstIndex(of: ")") { // stringlint:disable
                 let snodeAddress = String(rest[rest.startIndex..<index])
                 
-                sheet.addAction(UIAlertAction(title: "Copy Service Node Info", style: .default) { _ in
+                sheet.addAction(UIAlertAction(title: "Copy Service Node Info", style: .default) { _ in // stringlint:disable
                     UIPasteboard.general.string = snodeAddress
                 })
             }
@@ -1735,11 +1706,13 @@ extension ConversationVC:
     
     func joinOpenGroup(name: String?, url: String) {
         // Open groups can be unsafe, so always ask the user whether they want to join one
-        let finalName: String = (name ?? "Open Group")
-        let message: String = "Are you sure you want to join the \(finalName) open group?";
+        let finalName: String = (name ?? "communityUnknown".localized())
+        let message: String = "communityJoinDescription"
+            .put(key: "community_name", value: finalName)
+            .localized()
         let modal: ConfirmationModal = ConfirmationModal(
             info: ConfirmationModal.Info(
-                title: "Join \(finalName)?",
+                title: "join".localized() + " \(finalName)?",
                 body: .attributedText(
                     NSMutableAttributedString(string: message)
                         .adding(
@@ -1747,7 +1720,7 @@ extension ConversationVC:
                             range: (message as NSString).range(of: finalName)
                         )
                 ),
-                confirmTitle: "JOIN_COMMUNITY_BUTTON_TITLE".localized(),
+                confirmTitle: "join".localized(),
                 onConfirm: { modal in
                     guard let presentingViewController: UIViewController = modal.presentingViewController else {
                         return
@@ -1756,8 +1729,10 @@ extension ConversationVC:
                     guard let (room, server, publicKey) = LibSession.parseCommunity(url: url) else {
                         let errorModal: ConfirmationModal = ConfirmationModal(
                             info: ConfirmationModal.Info(
-                                title: "COMMUNITY_ERROR_GENERIC".localized(),
-                                cancelTitle: "BUTTON_OK".localized(),
+                                title: "communityJoinError"
+                                    .put(key: "community_name", value: finalName)
+                                    .localized(),
+                                cancelTitle: "okay".localized(),
                                 cancelStyle: .alert_text
                             )
                         )
@@ -1805,9 +1780,11 @@ extension ConversationVC:
                                         // Show the user an error indicating they failed to properly join the group
                                         let errorModal: ConfirmationModal = ConfirmationModal(
                                             info: ConfirmationModal.Info(
-                                                title: "COMMUNITY_ERROR_GENERIC".localized(),
+                                                title: "communityJoinError"
+                                                    .put(key: "community_name", value: finalName)
+                                                    .localized(),
                                                 body: .text(error.localizedDescription),
-                                                cancelTitle: "BUTTON_OK".localized(),
+                                                cancelTitle: "okay".localized(),
                                                 cancelStyle: .alert_text
                                             )
                                         )
@@ -1861,9 +1838,9 @@ extension ConversationVC:
                 // Show an error for the retry
                 let modal: ConfirmationModal = ConfirmationModal(
                     info: ConfirmationModal.Info(
-                        title: "ALERT_ERROR_TITLE".localized(),
-                        body: .text("FAILED_TO_STORE_OUTGOING_MESSAGE".localized()),
-                        cancelTitle: "BUTTON_OK".localized(),
+                        title: "theError".localized(),
+                        body: .text("shareExtensionDatabaseError".localized()),
+                        cancelTitle: "okay".localized(),
                         cancelStyle: .alert_text
                     )
                 )
@@ -2005,7 +1982,6 @@ extension ConversationVC:
             case .standardOutgoing, .standardIncoming: break
         }
         
-        let threadName: String = self.viewModel.threadData.displayName
         let userPublicKey: String = getUserHexEncodedPublicKey()
         
         // Remote deletion logic
@@ -2207,7 +2183,7 @@ extension ConversationVC:
                 
                 let actionSheet: UIAlertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
                 actionSheet.addAction(UIAlertAction(
-                    title: "delete_message_for_me".localized(),
+                    title: "deleteMessageDeviceOnly".localized(),
                     accessibilityIdentifier: "Delete for me",
                     style: .destructive
                 ) { [weak self] _ in
@@ -2232,54 +2208,52 @@ extension ConversationVC:
                     self?.viewModel.stopAudioIfNeeded(for: cellViewModel)
                 })
                 
-                actionSheet.addAction(UIAlertAction(
-                    title: {
-                        switch cellViewModel.threadVariant {
-                            case .legacyGroup, .group: return "delete_message_for_everyone".localized()
-                            default:
-                                return (cellViewModel.threadId == userPublicKey ?
-                                    "delete_message_for_me_and_my_devices".localized() :
-                                    String(format: "delete_message_for_me_and_recipient".localized(), threadName)
-                                )
-                        }
-                    }(),
-                    accessibilityIdentifier: "Delete for everyone",
-                    style: .destructive
-                ) { [weak self] _ in
-                    let completeServerDeletion = { [weak self] in
-                        Storage.shared.writeAsync { db in
-                            try MessageSender
-                                .send(
-                                    db,
-                                    message: unsendRequest,
-                                    interactionId: nil,
-                                    threadId: cellViewModel.threadId,
-                                    threadVariant: cellViewModel.threadVariant,
-                                    using: dependencies
-                                )
+                if cellViewModel.threadId != userPublicKey {
+                    actionSheet.addAction(UIAlertAction(
+                        title: {
+                            switch cellViewModel.threadVariant {
+                                case .legacyGroup, .group: return "clearMessagesForEveryone".localized()
+                                default: return "deleteMessageEveryone".localized()
+                            }
+                        }(),
+                        accessibilityIdentifier: "Delete for everyone",
+                        style: .destructive
+                    ) { [weak self] _ in
+                        let completeServerDeletion = { [weak self] in
+                            Storage.shared.writeAsync { db in
+                                try MessageSender
+                                    .send(
+                                        db,
+                                        message: unsendRequest,
+                                        interactionId: nil,
+                                        threadId: cellViewModel.threadId,
+                                        threadVariant: cellViewModel.threadVariant,
+                                        using: dependencies
+                                    )
+                            }
+                            
+                            self?.showInputAccessoryView()
                         }
                         
-                        self?.showInputAccessoryView()
-                    }
-                    
-                    // We can only delete messages on the server for `contact` and `group` conversations
-                    guard cellViewModel.threadVariant == .contact || cellViewModel.threadVariant == .group else {
-                        return completeServerDeletion()
-                    }
-                    
-                    deleteRemotely(
-                        from: self,
-                        request: SnodeAPI
-                            .deleteMessages(
-                                swarmPublicKey: targetPublicKey,
-                                serverHashes: [serverHash]
-                            )
-                            .map { _ in () }
-                            .eraseToAnyPublisher()
-                    ) { completeServerDeletion() }
-                })
+                        // We can only delete messages on the server for `contact` and `group` conversations
+                        guard cellViewModel.threadVariant == .contact || cellViewModel.threadVariant == .group else {
+                            return completeServerDeletion()
+                        }
+                        
+                        deleteRemotely(
+                            from: self,
+                            request: SnodeAPI
+                                .deleteMessages(
+                                    swarmPublicKey: targetPublicKey,
+                                    serverHashes: [serverHash]
+                                )
+                                .map { _ in () }
+                                .eraseToAnyPublisher()
+                        ) { completeServerDeletion() }
+                    })
+                }
 
-                actionSheet.addAction(UIAlertAction.init(title: "TXT_CANCEL_TITLE".localized(), style: .cancel) { [weak self] _ in
+                actionSheet.addAction(UIAlertAction.init(title: "cancel".localized(), style: .cancel) { [weak self] _ in
                     self?.showInputAccessoryView()
                 })
 
@@ -2341,9 +2315,9 @@ extension ConversationVC:
         let modal: ConfirmationModal = ConfirmationModal(
             targetView: self.view,
             info: ConfirmationModal.Info(
-                title: "Session",
+                title: Singleton.appName,
                 body: .text("This will ban the selected user from this room. It won't ban them from other rooms."),
-                confirmTitle: "BUTTON_OK".localized(),
+                confirmTitle: "okay".localized(),
                 cancelStyle: .alert_text,
                 onConfirm: { [weak self] _ in
                     Storage.shared
@@ -2367,18 +2341,16 @@ extension ConversationVC:
                         .sinkUntilComplete(
                             receiveCompletion: { result in
                                 switch result {
-                                    case .finished: break
-                                    case .failure:
-                                        let modal: ConfirmationModal = ConfirmationModal(
-                                            targetView: self?.view,
-                                            info: ConfirmationModal.Info(
-                                                title: CommonStrings.errorAlertTitle,
-                                                body: .text("context_menu_ban_user_error_alert_message".localized()),
-                                                cancelTitle: "BUTTON_OK".localized(),
-                                                cancelStyle: .alert_text
-                                            )
+                                    case .finished:
+                                        self?.viewModel.showToast(
+                                            text: "banUserBanned".localized(),
+                                            backgroundColor: .backgroundSecondary
                                         )
-                                        self?.present(modal, animated: true)
+                                    case .failure:
+                                        self?.viewModel.showToast(
+                                            text: "banErrorFailed".localized(),
+                                            backgroundColor: .backgroundSecondary
+                                        )
                                 }
                             }
                         )
@@ -2398,9 +2370,9 @@ extension ConversationVC:
         let modal: ConfirmationModal = ConfirmationModal(
             targetView: self.view,
             info: ConfirmationModal.Info(
-                title: "Session",
+                title: Singleton.appName,
                 body: .text("This will ban the selected user from this room and delete all messages sent by them. It won't ban them from other rooms or delete the messages they sent there."),
-                confirmTitle: "BUTTON_OK".localized(),
+                confirmTitle: "okay".localized(),
                 cancelStyle: .alert_text,
                 onConfirm: { [weak self] _ in
                     Storage.shared
@@ -2424,18 +2396,16 @@ extension ConversationVC:
                         .sinkUntilComplete(
                             receiveCompletion: { result in
                                 switch result {
-                                    case .finished: break
-                                    case .failure:
-                                        let modal: ConfirmationModal = ConfirmationModal(
-                                            targetView: self?.view,
-                                            info: ConfirmationModal.Info(
-                                                title: CommonStrings.errorAlertTitle,
-                                                body: .text("context_menu_ban_user_error_alert_message".localized()),
-                                                cancelTitle: "BUTTON_OK".localized(),
-                                                cancelStyle: .alert_text
-                                            )
+                                    case .finished:
+                                        self?.viewModel.showToast(
+                                            text: "banUserBanned".localized(),
+                                            backgroundColor: .backgroundSecondary
                                         )
-                                        self?.present(modal, animated: true)
+                                    case .failure:
+                                        self?.viewModel.showToast(
+                                            text: "banErrorFailed".localized(),
+                                            backgroundColor: .backgroundSecondary
+                                        )
                                 }
                             }
                         )
@@ -2467,7 +2437,7 @@ extension ConversationVC:
         
         // Create URL
         let directory: String = Singleton.appContext.temporaryDirectory
-        let fileName: String = "\(SnodeAPI.currentOffsetTimestampMs()).m4a"
+        let fileName: String = "\(SnodeAPI.currentOffsetTimestampMs()).m4a" // stringlint:disable
         let url: URL = URL(fileURLWithPath: directory).appendingPathComponent(fileName)
         
         // Set up audio session
@@ -2515,9 +2485,9 @@ extension ConversationVC:
                 let modal: ConfirmationModal = ConfirmationModal(
                     targetView: self.view,
                     info: ConfirmationModal.Info(
-                        title: "ALERT_ERROR_TITLE".localized(),
-                        body: .text("VOICE_MESSAGE_FAILED_TO_START_MESSAGE".localized()),
-                        cancelTitle: "BUTTON_OK".localized(),
+                        title: "theError".localized(),
+                        body: .text("audioUnableToRecord".localized()),
+                        cancelTitle: "okay".localized(),
                         cancelStyle: .alert_text
                     )
                 )
@@ -2553,9 +2523,9 @@ extension ConversationVC:
             let modal: ConfirmationModal = ConfirmationModal(
                 targetView: self.view,
                 info: ConfirmationModal.Info(
-                    title: "VOICE_MESSAGE_TOO_SHORT_ALERT_TITLE".localized(),
-                    body: .text("VOICE_MESSAGE_TOO_SHORT_ALERT_MESSAGE".localized()),
-                    cancelTitle: "BUTTON_OK".localized(),
+                    title: "messageVoice".localized(),
+                    body: .text("messageVoiceErrorShort".localized()),
+                    cancelTitle: "okay".localized(),
                     cancelStyle: .alert_text
                 )
             )
@@ -2570,7 +2540,7 @@ extension ConversationVC:
         guard let dataSource = dataSourceOrNil else { return SNLog("Couldn't load recorded data.") }
         
         // Create attachment
-        let fileName = ("VOICE_MESSAGE_FILE_NAME".localized() as NSString).appendingPathExtension("m4a")
+        let fileName = ("messageVoice".localized() as NSString).appendingPathExtension("m4a")
         dataSource.sourceFilename = fileName
         
         let attachment = SignalAttachment.voiceMessageAttachment(dataSource: dataSource, dataUTI: kUTTypeMPEG4Audio as String)
@@ -2634,9 +2604,9 @@ extension ConversationVC:
         let modal: ConfirmationModal = ConfirmationModal(
             targetView: self.view,
             info: ConfirmationModal.Info(
-                title: "ATTACHMENT_ERROR_ALERT_TITLE".localized(),
+                title: "attachmentsErrorSending".localized(),
                 body: .text(attachment.localizedErrorDescription ?? SignalAttachment.missingDataErrorMessage),
-                cancelTitle: "BUTTON_OK".localized(),
+                cancelTitle: "okay".localized(),
                 cancelStyle: .alert_text
             )
         )
@@ -2746,7 +2716,8 @@ extension ConversationVC {
             indexPath: IndexPath(row: 0, section: 0),
             tableView: self.tableView,
             threadViewModel: self.viewModel.threadData,
-            viewController: self
+            viewController: self, 
+            navigatableStateHolder: nil
         )
         
         guard let action: UIContextualAction = actions?.first else { return }
@@ -2769,7 +2740,8 @@ extension ConversationVC {
             indexPath: IndexPath(row: 0, section: 0),
             tableView: self.tableView,
             threadViewModel: self.viewModel.threadData,
-            viewController: self
+            viewController: self,
+            navigatableStateHolder: nil
         )
         
         guard let action: UIContextualAction = actions?.first else { return }

@@ -83,7 +83,7 @@ final class ReactionListSheet: BaseVC {
     private lazy var clearAllButton: SessionButton = {
         let result: SessionButton = SessionButton(style: .destructiveBorderless, size: .small)
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("MESSAGE_REQUESTS_CLEAR_ALL".localized(), for: .normal)
+        result.setTitle("clearAll".localized(), for: .normal)
         result.addTarget(self, action: #selector(clearAllTapped), for: .touchUpInside)
         result.isHidden = true
         
@@ -551,7 +551,7 @@ extension ReactionListSheet {
             emojiLabel.text = emoji
             numberLabel.text = (count < 1000 ?
                 "\(count)" :
-                String(format: "%.1fk", Float(count) / 1000)
+                String(format: "%.1fk", Float(count) / 1000) // stringlint:disable
             )
             snContentView.themeBorderColor = (isCurrentSelection ? .primary : .clear)
         }
@@ -593,7 +593,10 @@ extension ReactionListSheet {
         func update(moreReactorCount: Int, emoji: String) {
             label.text = (moreReactorCount == 1 ?
                 String(format: "EMOJI_REACTS_MORE_REACTORS_ONE".localized(), "\(emoji)") :
-                String(format: "EMOJI_REACTS_MORE_REACTORS_MUTIPLE".localized(), "\(moreReactorCount)" ,"\(emoji)")
+                "emojiReactsCountOthers"
+                    .put(key: "count", value: moreReactorCount)
+                    .put(key: "emoji", value: emoji)
+                    .localized()
             )
         }
     }

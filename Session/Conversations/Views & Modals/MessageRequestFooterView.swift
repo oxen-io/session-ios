@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 class MessageRequestFooterView: UIView {
     private var onBlock: (() -> ())?
@@ -61,7 +62,7 @@ class MessageRequestFooterView: UIView {
         result.translatesAutoresizingMaskIntoConstraints = false
         result.clipsToBounds = true
         result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 16)
-        result.setTitle("TXT_BLOCK_USER_TITLE".localized(), for: .normal)
+        result.setTitle("deleteAfterGroupPR1BlockUser".localized(), for: .normal)
         result.setThemeTitleColor(.danger, for: .normal)
         result.addTarget(self, action: #selector(block), for: .touchUpInside)
 
@@ -73,7 +74,7 @@ class MessageRequestFooterView: UIView {
         result.accessibilityLabel = "Accept message request"
         result.isAccessibilityElement = true
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("TXT_DELETE_ACCEPT".localized(), for: .normal)
+        result.setTitle("accept".localized(), for: .normal)
         result.addTarget(self, action: #selector(accept), for: .touchUpInside)
 
         return result
@@ -84,7 +85,7 @@ class MessageRequestFooterView: UIView {
         result.accessibilityLabel = "Delete message request"
         result.isAccessibilityElement = true
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("TXT_DELETE_TITLE".localized(), for: .normal)
+        result.setTitle("decline".localized(), for: .normal)
         result.addTarget(self, action: #selector(decline), for: .touchUpInside)
 
         return result
@@ -161,8 +162,8 @@ class MessageRequestFooterView: UIView {
             threadRequiresApproval
         )
         self.descriptionLabel.text = (threadRequiresApproval ?
-            "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized() :
-            "MESSAGE_REQUESTS_INFO".localized()
+            "messageRequestPendingDescription".localized() :
+            "messageRequestsAcceptDescription".localized()
         )
         self.actionStackView.isHidden = threadRequiresApproval
         self.messageRequestDescriptionLabelBottomConstraint?.constant = (threadRequiresApproval ? -4 : -20)

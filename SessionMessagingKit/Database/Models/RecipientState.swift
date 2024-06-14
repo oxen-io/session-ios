@@ -47,72 +47,72 @@ public struct RecipientState: Codable, Equatable, FetchableRecord, PersistableRe
             switch self {
                 case .sending:
                     guard hasAttachments else {
-                        return "MESSAGE_STATUS_SENDING".localized()
+                        return "sending".localized()
                     }
                     
-                    return "MESSAGE_STATUS_UPLOADING".localized()
+                    return "uploading".localized()
                 
-                case .failed: return "MESSAGE_STATUS_FAILED".localized()
+                case .failed: return "messageStatusFailedToSend".localized()
                     
                 case .sent:
                     guard hasAtLeastOneReadReceipt else {
-                        return "MESSAGE_STATUS_SENT".localized()
+                        return "disappearingMessagesSent".localized()
                     }
                     
-                    return "MESSAGE_STATUS_READ".localized()
+                    return "read".localized()
                 
-                case .failedToSync: return "MESSAGE_DELIVERY_STATUS_FAILED_SYNC".localized()
-                case .syncing: return "MESSAGE_DELIVERY_STATUS_SYNCING".localized()
+                case .failedToSync: return "messageStatusFailedToSync".localized()
+                case .syncing: return "messageStatusSyncing".localized()
                     
                 default:
                     owsFailDebug("Message has unexpected status: \(self).")
-                    return "MESSAGE_STATUS_SENT".localized()
+                    return "disappearingMessagesSent".localized()
             }
         }
         
         public func statusIconInfo(variant: Interaction.Variant, hasAtLeastOneReadReceipt: Bool) -> (image: UIImage?, text: String?, themeTintColor: ThemeValue) {
-            guard variant == .standardOutgoing else { return (nil, "MESSAGE_DELIVERY_STATUS_READ".localized(), .messageBubble_deliveryStatus) }
+            guard variant == .standardOutgoing else { return (nil, "read".localized(), .messageBubble_deliveryStatus) }
 
             switch (self, hasAtLeastOneReadReceipt) {
                 case (.sending, _):
                     return (
                         UIImage(systemName: "ellipsis.circle"),
-                        "MESSAGE_DELIVERY_STATUS_SENDING".localized(),
+                        "sending".localized(),
                         .messageBubble_deliveryStatus
                     )
 
                 case (.sent, false), (.skipped, _):
                     return (
                         UIImage(systemName: "checkmark.circle"),
-                        "MESSAGE_DELIVERY_STATUS_SENT".localized(),
+                        "disappearingMessagesSent".localized(),
                         .messageBubble_deliveryStatus
                     )
 
                 case (.sent, true):
                     return (
                         UIImage(systemName: "eye.fill"),
-                        "MESSAGE_DELIVERY_STATUS_READ".localized(),
+                        "read".localized(),
                         .messageBubble_deliveryStatus
                     )
                     
                 case (.failed, _):
                     return (
                         UIImage(systemName: "exclamationmark.triangle"),
-                        "MESSAGE_DELIVERY_STATUS_FAILED".localized(),
+                        "messageStatusFailedToSend".localized(),
                         .danger
                     )
                     
                 case (.failedToSync, _):
                     return (
                         UIImage(systemName: "exclamationmark.triangle"),
-                        "MESSAGE_DELIVERY_STATUS_FAILED_SYNC".localized(),
+                        "messageStatusFailedToSync".localized(),
                         .warning
                     )
                     
                 case (.syncing, _):
                     return (
                         UIImage(systemName: "ellipsis.circle"),
-                        "MESSAGE_DELIVERY_STATUS_SYNCING".localized(),
+                        "messageStatusSyncing".localized(),
                         .warning
                     )
 

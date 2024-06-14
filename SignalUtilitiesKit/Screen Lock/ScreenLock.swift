@@ -5,6 +5,7 @@ import GRDB
 import LocalAuthentication
 import SessionMessagingKit
 import SignalCoreKit
+import SessionUtilitiesKit
 
 public class ScreenLock {
     public enum ScreenLockError: Error {
@@ -51,7 +52,9 @@ public class ScreenLock {
         tryToVerifyLocalAuthentication(
             // Description of how and why Signal iOS uses Touch ID/Face ID/Phone Passcode to
             // unlock 'screen lock'.
-            localizedReason: "SCREEN_LOCK_REASON_UNLOCK_SCREEN_LOCK".localized()
+            localizedReason: "authenticateToOpen"
+                .put(key: "app_name", value: Singleton.appName)
+                .localized()
         ) { outcome in
             AssertIsOnMainThread()
             
@@ -89,7 +92,7 @@ public class ScreenLock {
     ) {
         AssertIsOnMainThread()
 
-        let defaultErrorDescription = "SCREEN_LOCK_ENABLE_UNKNOWN_ERROR".localized()
+        let defaultErrorDescription = "authenticateNotAccessed".localized()
 
         // Ensure completion is always called on the main thread.
         let completion = { outcome in
@@ -154,15 +157,15 @@ public class ScreenLock {
             switch laError.code {
                 case .biometryNotAvailable:
                     Logger.error("local authentication error: biometryNotAvailable.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_AVAILABLE".localized())
+                    return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .biometryNotEnrolled:
                     Logger.error("local authentication error: biometryNotEnrolled.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_ENROLLED".localized())
+                    return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .biometryLockout:
                     Logger.error("local authentication error: biometryLockout.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_LOCKOUT".localized())
+                    return .failure(error: "authenticateFailedTooManyAttempts".localized())
                     
                 default:
                     // Fall through to second switch
@@ -172,7 +175,7 @@ public class ScreenLock {
             switch laError.code {
                 case .authenticationFailed:
                     Logger.error("local authentication error: authenticationFailed.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_FAILED".localized())
+                    return .failure(error: "authenticateFailed".localized())
                     
                 case .userCancel, .userFallback, .systemCancel, .appCancel:
                     Logger.info("local authentication cancelled.")
@@ -180,19 +183,19 @@ public class ScreenLock {
                     
                 case .passcodeNotSet:
                     Logger.error("local authentication error: passcodeNotSet.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_PASSCODE_NOT_SET".localized())
+                    return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .touchIDNotAvailable:
                     Logger.error("local authentication error: touchIDNotAvailable.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_AVAILABLE".localized())
+                    return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .touchIDNotEnrolled:
                     Logger.error("local authentication error: touchIDNotEnrolled.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_ENROLLED".localized())
+                    return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .touchIDLockout:
                     Logger.error("local authentication error: touchIDLockout.")
-                    return .failure(error: "SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_LOCKOUT".localized())
+                    return .failure(error: "authenticateFailedTooManyAttempts".localized())
                     
                 case .invalidContext:
                     Logger.error("context not valid.")

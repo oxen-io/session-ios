@@ -37,7 +37,7 @@ class VersionFooterView: UIView {
             let version: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
             let buildNumber: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
         {
-            result.text = "Version \(version) (\(buildNumber))"
+            result.text = "Version \(version) (\(buildNumber))" // stringlint:disable
         }
         
         return result

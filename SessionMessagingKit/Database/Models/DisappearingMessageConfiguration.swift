@@ -40,6 +40,17 @@ public struct DisappearingMessagesConfiguration: Codable, Identifiable, Equatabl
         case unknown
         case disappearAfterRead
         case disappearAfterSend
+        
+        public var localizedName: String {
+            switch self {
+                case .unknown:
+                    return ""
+                case .disappearAfterRead:
+                    return "disappearingMessagesTypeRead".localized()
+                case .disappearAfterSend:
+                    return "disappearingMessagesTypeSent".localized()
+            }
+        }
 
         init(protoType: SNProtoContent.SNProtoContentExpirationType) {
             switch protoType {
@@ -137,48 +148,50 @@ public extension DisappearingMessagesConfiguration {
             
             guard let senderName: String = senderName else {
                 guard isEnabled, durationSeconds > 0 else {
-                    return "YOU_DISAPPEARING_MESSAGES_INFO_DISABLE".localized()
+                    return "disappearingMessagesTurnedOffYou".localized()
                 }
                 
-                return String(
-                    format: "YOU_DISAPPEARING_MESSAGES_INFO_ENABLE".localized(),
-                    floor(durationSeconds).formatted(format: .long),
-                    (type == .disappearAfterRead ? "DISAPPEARING_MESSAGE_STATE_READ".localized() : "DISAPPEARING_MESSAGE_STATE_SENT".localized())
-                )
+                return "disappearingMessagesSetYou"
+                    .put(key: "time", value: floor(durationSeconds).formatted(format: .long))
+                    .put(key: "disappearing_messages_type", value: (type?.localizedName ?? ""))
+                    .localized()
             }
             
             guard isEnabled, durationSeconds > 0 else {
-                return String(format: "DISAPPERING_MESSAGES_INFO_DISABLE".localized(), senderName)
+                return "disappearingMessagesTurnedOff"
+                    .put(key: "name", value: senderName)
+                    .localized()
             }
             
-            return String(
-                format: "DISAPPERING_MESSAGES_INFO_ENABLE".localized(),
-                senderName,
-                floor(durationSeconds).formatted(format: .long),
-                (type == .disappearAfterRead ? "DISAPPEARING_MESSAGE_STATE_READ".localized() : "DISAPPEARING_MESSAGE_STATE_SENT".localized())
-            )
+            return "disappearingMessagesSet"
+                .put(key: "name", value: senderName)
+                .put(key: "time", value: floor(durationSeconds).formatted(format: .long))
+                .put(key: "disappearing_messages_type", value: (type?.localizedName ?? ""))
+                .localized()
         }
         
+        // TODO: Remove me
         private var legacyPreviewText: String {
             guard let senderName: String = senderName else {
                 // Changed by this device or via synced transcript
-                guard isEnabled, durationSeconds > 0 else { return "YOU_DISABLED_DISAPPEARING_MESSAGES_CONFIGURATION".localized() }
+                guard isEnabled, durationSeconds > 0 else { return "disappearingMessagesTurnedOffYou".localized() }
                 
-                return String(
-                    format: "YOU_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(),
-                    floor(durationSeconds).formatted(format: .long)
-                )
+                return "disappearingMessagesSetYou"
+                    .put(key: "time", value: floor(durationSeconds).formatted(format: .long))
+                    .put(key: "disappearing_messages_type", value: (type?.localizedName ?? ""))
+                    .localized()
             }
             
             guard isEnabled, durationSeconds > 0 else {
-                return String(format: "OTHER_DISABLED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(), senderName)
+                return "disappearingMessagesTurnedOff"
+                    .put(key: "name", value: senderName)
+                    .localized()
             }
             
-            return String(
-                format: "OTHER_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION".localized(),
-                senderName,
-                floor(durationSeconds).formatted(format: .long)
-            )
+            return "deleteAfterLegacyDisappearingMessagesTheyChangedTimer"
+                .put(key: "name", value: senderName)
+                .put(key: "time", value: floor(durationSeconds).formatted(format: .long))
+                .localized()
         }
     }
     

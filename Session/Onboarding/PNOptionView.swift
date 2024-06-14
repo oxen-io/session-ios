@@ -90,7 +90,7 @@ final class OptionView: UIView {
         if isRecommended {
             let recommendedLabel: UILabel = UILabel()
             recommendedLabel.font = .boldSystemFont(ofSize: Values.smallFontSize)
-            recommendedLabel.text = "vc_pn_mode_recommended_option_tag".localized()
+            recommendedLabel.text = "recommended".localized()
             recommendedLabel.themeTextColor = .primary
             stackView.addArrangedSubview(recommendedLabel)
         }

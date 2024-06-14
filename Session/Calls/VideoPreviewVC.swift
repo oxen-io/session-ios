@@ -74,7 +74,7 @@ class VideoPreviewVC: UIViewController, CameraManagerDelegate {
     private lazy var titleLabel: UILabel = {
         let result = UILabel()
         result.font = .boldSystemFont(ofSize: Values.veryLargeFontSize)
-        result.text = "Preview"
+        result.text = "preview".localized()
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         

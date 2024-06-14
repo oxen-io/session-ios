@@ -59,19 +59,24 @@ public enum GroupLeavingJob: JobExecutor {
             .receive(on: queue)
             .sinkUntilComplete(
                 receiveCompletion: { result in
-                    let failureChanges: [ConfigColumnAssignment] = [
-                        Interaction.Columns.variant
-                            .set(to: Interaction.Variant.infoClosedGroupCurrentUserErrorLeaving),
-                        Interaction.Columns.body.set(to: "group_unable_to_leave".localized())
-                    ]
-                    let successfulChanges: [ConfigColumnAssignment] = [
-                        Interaction.Columns.variant
-                            .set(to: Interaction.Variant.infoClosedGroupCurrentUserLeft),
-                        Interaction.Columns.body.set(to: "GROUP_YOU_LEFT".localized())
-                    ]
-                    
                     // Handle the appropriate response
                     dependencies.storage.writeAsync { db in
+                        let failureChanges: [ConfigColumnAssignment] = [
+                            Interaction.Columns.variant
+                                .set(to: Interaction.Variant.infoClosedGroupCurrentUserErrorLeaving),
+                            Interaction.Columns.body
+                                .set(to: "groupLeaveErrorFailed"
+                                    .put(key: "group_name", value: ((try? ClosedGroup.fetchOne(db, id: threadId))?.name ?? ""))
+                                    .localized()
+                                )
+                        ]
+                        
+                        let successfulChanges: [ConfigColumnAssignment] = [
+                            Interaction.Columns.variant
+                                .set(to: Interaction.Variant.infoClosedGroupCurrentUserLeft),
+                            Interaction.Columns.body.set(to: "groupMemberYouLeft".localized())
+                        ]
+                        
                         // If it failed due to one of these errors then clear out any associated data (as somehow
                         // the 'SessionThread' exists but not the data required to send the 'MEMBER_LEFT' message
                         // which would leave the user in a state where they can't leave the group)

@@ -72,4 +72,12 @@ public extension UIView {
         
         return result
     }
+    
+    static func line() -> UIView {
+        let result: UIView = UIView()
+        result.set(.height, to: 1)
+        result.themeBackgroundColor = .borderSeparator
+        
+        return result
+    }
 }

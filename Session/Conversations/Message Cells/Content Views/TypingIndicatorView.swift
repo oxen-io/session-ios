@@ -200,8 +200,8 @@ import SessionUtilitiesKit
 
             let groupAnimation = CAAnimationGroup()
             groupAnimation.animations = [
-                makeAnimation("fillColor", colorValues),
-                makeAnimation("path", pathValues)
+                makeAnimation("fillColor", colorValues), // stringlint:disable
+                makeAnimation("path", pathValues) // stringlint:disable
             ]
             groupAnimation.duration = animationDuration
             groupAnimation.repeatCount = MAXFLOAT

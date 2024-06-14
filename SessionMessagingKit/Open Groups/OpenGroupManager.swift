@@ -65,7 +65,7 @@ public final class OpenGroupManager {
     
     private static func port(for server: String, serverUrl: URL) -> String {
         if let port: Int = serverUrl.port {
-            return ":\(port)"
+            return ":\(port)" // stringlint:disable
         }
         
         let components: [String] = server.components(separatedBy: ":")
@@ -78,7 +78,7 @@ public final class OpenGroupManager {
             )
         else { return "" }
         
-        return ":\(port)"
+        return ":\(port)" // stringlint:disable
     }
     
     public static func isSessionRunOpenGroup(server: String) -> Bool {
@@ -101,6 +101,23 @@ public final class OpenGroupManager {
         ])
         
         return options.contains(serverHost)
+    }
+    
+    public func hasExistingOpenGroup(
+        roomToken: String,
+        server: String,
+        publicKey: String,
+        using dependencies: Dependencies = Dependencies()
+    ) -> Bool? {
+        return Storage.shared.read { db in
+            self.hasExistingOpenGroup(
+                db,
+                roomToken: roomToken,
+                server: server,
+                publicKey: publicKey,
+                using: dependencies
+            )
+        }
     }
     
     public func hasExistingOpenGroup(

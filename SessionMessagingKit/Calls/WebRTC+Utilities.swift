@@ -1,3 +1,5 @@
+// stringlint:disable
+
 import WebRTC
 
 extension RTCSignalingState : CustomStringConvertible {

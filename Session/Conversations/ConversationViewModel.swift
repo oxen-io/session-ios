@@ -7,7 +7,7 @@ import DifferenceKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
-public class ConversationViewModel: OWSAudioPlayerDelegate {
+public class ConversationViewModel: OWSAudioPlayerDelegate, NavigatableStateHolder {
     public typealias SectionModel = ArraySection<Section, MessageViewModel>
     
     // MARK: - FocusBehaviour
@@ -46,6 +46,9 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     public static let pageSize: Int = 50
     
+    public let navigatableState: NavigatableState = NavigatableState()
+    public var disposables: Set<AnyCancellable> = Set()
+    
     private var threadId: String
     public let initialThreadVariant: SessionThread.Variant
     public var sentMessageBeforeUpdate: Bool = false
@@ -66,9 +69,9 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                     threadVariant: threadData.threadVariant
                 )
                 
-                return "\(name) is blocked. Unblock them?"
+            return "blockBlockedDescription".localized()
                 
-            default: return "Thread is blocked. Unblock it?"
+            default: return "Thread is blocked. Unblock it?" // Should not happen // stringlint:disable
         }
     }()
     
@@ -637,7 +640,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                     $0.id,
                     $0.messageViewModel.with(
                         state: .failed,
-                        mostRecentFailureText: "FAILED_TO_STORE_OUTGOING_MESSAGE".localized()
+                        mostRecentFailureText: "shareExtensionDatabaseError".localized()
                     ),
                     $0.interaction,
                     $0.attachmentData,
@@ -875,12 +878,23 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
         let threadId: String = self.threadId
+        let displayName: String = self._threadData.wrappedValue.displayName
         
-        Storage.shared.writeAsync { db in
-            try Contact
-                .filter(id: threadId)
-                .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false))
-        }
+        Storage.shared.writeAsync(
+            updates: { db in
+                try Contact
+                    .filter(id: threadId)
+                    .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false))
+            },
+            completion: { [weak self] _, _ in
+                self?.showToast(
+                    text: "blockUnblockedUser"
+                        .put(key: "name", value: displayName)
+                        .localized(),
+                    backgroundColor: .backgroundSecondary
+                )
+            }
+        )
     }
     
     public func expandReactions(for interactionId: Int64) {

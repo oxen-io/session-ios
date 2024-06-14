@@ -37,14 +37,6 @@ public extension String {
         )
     }
     
-    func localized() -> String {
-        // If the localized string matches the key provided then the localisation failed
-        let localizedString = NSLocalizedString(self, comment: "")
-        owsAssertDebug(localizedString != self, "Key \"\(self)\" is not set in Localizable.strings")
-
-        return localizedString
-    }
-    
     func ranges(of substring: String, options: CompareOptions = [], locale: Locale? = nil) -> [Range<Index>] {
         var ranges: [Range<Index>] = []
         
@@ -108,239 +100,43 @@ public extension String.StringInterpolation {
 
 public extension String {
     static func formattedDuration(_ duration: TimeInterval, format: TimeInterval.DurationFormat = .short) -> String {
-        let secondsPerMinute: TimeInterval = 60
-        let secondsPerHour: TimeInterval = (secondsPerMinute * 60)
-        let secondsPerDay: TimeInterval = (secondsPerHour * 24)
-        let secondsPerWeek: TimeInterval = (secondsPerDay * 7)
+        var dateComponentsFormatter = DateComponentsFormatter()
+        dateComponentsFormatter.allowedUnits = [.weekOfMonth, .day, .hour, .minute, .second]
+        var calendar = Calendar.current
         
         switch format {
             case .videoDuration:
-                let seconds: Int = Int(duration.truncatingRemainder(dividingBy: 60))
-                let minutes: Int = Int((duration / 60).truncatingRemainder(dividingBy: 60))
-                let hours: Int = Int(duration / 3600)
-                
-                guard hours > 0 else { return String(format: "%02ld:%02ld", minutes, seconds) }
-                
-                return String(format: "%ld:%02ld:%02ld", hours, minutes, seconds)
+                guard duration < 3600 else { fallthrough }
+                dateComponentsFormatter.maximumUnitCount = 2
+                dateComponentsFormatter.unitsStyle = .positional
+                dateComponentsFormatter.zeroFormattingBehavior = .pad
+                return dateComponentsFormatter.string(from: duration) ?? ""
             
             case .hoursMinutesSeconds:
-                let seconds: Int = Int(duration.truncatingRemainder(dividingBy: 60))
-                let minutes: Int = Int((duration / 60).truncatingRemainder(dividingBy: 60))
-                let hours: Int = Int(duration / 3600)
+                dateComponentsFormatter.maximumUnitCount = 3
+                dateComponentsFormatter.unitsStyle = .positional
+                dateComponentsFormatter.zeroFormattingBehavior = .dropLeading
+                return dateComponentsFormatter.string(from: duration) ?? ""
                 
-                guard hours > 0 else { return String(format: "%ld:%02ld", minutes, seconds) }
+            case .short: // Single unit, no localization, short version e.g. 1w
+                dateComponentsFormatter.maximumUnitCount = 1
+                dateComponentsFormatter.unitsStyle = .abbreviated
+                calendar.locale = Locale(identifier: "en-US")
+                dateComponentsFormatter.calendar = calendar
+                return dateComponentsFormatter.string(from: duration) ?? ""
                 
-                return String(format: "%ld:%02ld:%02ld", hours, minutes, seconds)
-                
-            case .short:
-                switch duration {
-                    case 0..<secondsPerMinute:  // Seconds
-                        return String(
-                            format: "TIME_AMOUNT_SECONDS_SHORT_FORMAT".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration)),
-                                number: .none
-                            )
-                        )
-                    
-                    case secondsPerMinute..<secondsPerHour:   // Minutes
-                        return String(
-                            format: "TIME_AMOUNT_MINUTES_SHORT_FORMAT".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerMinute)),
-                                number: .none
-                            )
-                        )
-                        
-                    case secondsPerHour..<secondsPerDay:   // Hours
-                        return String(
-                            format: "TIME_AMOUNT_HOURS_SHORT_FORMAT".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerHour)),
-                                number: .none
-                            )
-                        )
-                        
-                    case secondsPerDay..<secondsPerWeek:   // Days
-                        return String(
-                            format: "TIME_AMOUNT_DAYS_SHORT_FORMAT".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerDay)),
-                                number: .none
-                            )
-                        )
-                        
-                    default:   // Weeks
-                        return String(
-                            format: "TIME_AMOUNT_WEEKS_SHORT_FORMAT".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerWeek)),
-                                number: .none
-                            )
-                        )
-                }
-                
-            case .long:
-                switch duration {
-                    case 0..<secondsPerMinute:  // XX Seconds
-                        return String(
-                            format: "TIME_AMOUNT_SECONDS".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration)),
-                                number: .none
-                            )
-                        )
-                    
-                    case secondsPerMinute..<(secondsPerMinute * 1.5):   // 1 Minute
-                        return String(
-                            format: "TIME_AMOUNT_SINGLE_MINUTE".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerMinute)),
-                                number: .none
-                            )
-                        )
-                        
-                    case (secondsPerMinute * 1.5)..<secondsPerHour:   // Multiple Minutes
-                        return String(
-                            format: "TIME_AMOUNT_MINUTES".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerMinute)),
-                                number: .none
-                            )
-                        )
-                        
-                    case secondsPerHour..<(secondsPerHour * 1.5):   // 1 Hour
-                        return String(
-                            format: "TIME_AMOUNT_SINGLE_HOUR".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerHour)),
-                                number: .none
-                            )
-                        )
-                        
-                    case (secondsPerHour * 1.5)..<secondsPerDay:   // Multiple Hours
-                        return String(
-                            format: "TIME_AMOUNT_HOURS".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerHour)),
-                                number: .none
-                            )
-                        )
-                        
-                    case secondsPerDay..<(secondsPerDay * 1.5):   // 1 Day
-                        return String(
-                            format: "TIME_AMOUNT_SINGLE_DAY".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerDay)),
-                                number: .none
-                            )
-                        )
-                        
-                    case (secondsPerDay * 1.5)..<secondsPerWeek:   // Multiple Days
-                        return String(
-                            format: "TIME_AMOUNT_DAYS".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerDay)),
-                                number: .none
-                            )
-                        )
-                        
-                    case secondsPerWeek..<(secondsPerWeek * 1.5):   // 1 Week
-                        return String(
-                            format: "TIME_AMOUNT_SINGLE_WEEK".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerWeek)),
-                                number: .none
-                            )
-                        )
-                        
-                    default:   // Multiple Weeks
-                        return String(
-                            format: "TIME_AMOUNT_WEEKS".localized(),
-                            NumberFormatter.localizedString(
-                                from: NSNumber(floatLiteral: floor(duration / secondsPerWeek)),
-                                number: .none
-                            )
-                        )
-                }
-            case .twoUnits:
-                let seconds: Int = Int(duration.truncatingRemainder(dividingBy: 60))
-                let minutes: Int = Int((duration / 60).truncatingRemainder(dividingBy: 60))
-                let hours: Int = Int((duration / 3600).truncatingRemainder(dividingBy: 24))
-                let days: Int = Int((duration / 3600 / 24).truncatingRemainder(dividingBy: 7))
-                let weeks: Int = Int(duration / 3600 / 24 / 7)
+            case .long: // Single unit, long version e.g. 1 week
+                dateComponentsFormatter.maximumUnitCount = 1
+                dateComponentsFormatter.unitsStyle = .full
+                return dateComponentsFormatter.string(from: duration) ?? ""
             
-                guard weeks == 0 else {
-                    return String(
-                        format: "TIME_AMOUNT_WEEKS_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: weeks),
-                            number: .none
-                        )
-                    ) + " " + String(
-                        format: "TIME_AMOUNT_DAYS_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: days),
-                            number: .none
-                        )
-                    )
-                }
-                
-                guard days == 0 else {
-                    return String(
-                        format: "TIME_AMOUNT_DAYS_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: days),
-                            number: .none
-                        )
-                    ) + " " + String(
-                        format: "TIME_AMOUNT_HOURS_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: hours),
-                            number: .none
-                        )
-                    )
-                }
-            
-                guard hours == 0 else {
-                    return String(
-                        format: "TIME_AMOUNT_HOURS_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: hours),
-                            number: .none
-                        )
-                    ) + " " + String(
-                        format: "TIME_AMOUNT_MINUTES_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: minutes),
-                            number: .none
-                        )
-                    )
-                }
-            
-                guard minutes == 0 else {
-                    return String(
-                        format: "TIME_AMOUNT_MINUTES_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: minutes),
-                            number: .none
-                        )
-                    ) + " " + String(
-                        format: "TIME_AMOUNT_SECONDS_SHORT_FORMAT".localized(),
-                        NumberFormatter.localizedString(
-                            from: NSNumber(integerLiteral: seconds),
-                            number: .none
-                        )
-                    )
-                }
-            
-                return String(
-                    format: "TIME_AMOUNT_SECONDS_SHORT_FORMAT".localized(), 
-                    NumberFormatter.localizedString(
-                        from: NSNumber(integerLiteral: seconds),
-                        number: .none
-                    )
-                )
+            case .twoUnits: // 2 units, no localization, short version e.g 1w 1d
+                dateComponentsFormatter.maximumUnitCount = 2
+                dateComponentsFormatter.unitsStyle = .abbreviated
+                dateComponentsFormatter.zeroFormattingBehavior = .dropLeading
+                calendar.locale = Locale(identifier: "en-US")
+                dateComponentsFormatter.calendar = calendar
+                return dateComponentsFormatter.string(from: duration) ?? ""
             }
     }
 }

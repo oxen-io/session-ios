@@ -10,5 +10,5 @@ public class GiphyDownloader: ProxiedContentDownloader {
 
     // MARK: - Properties
 
-    public static let giphyDownloader = GiphyDownloader(downloadFolderName: "GIFs")
+    public static let giphyDownloader = GiphyDownloader(downloadFolderName: "GIFs") // stringlint:disable
 }

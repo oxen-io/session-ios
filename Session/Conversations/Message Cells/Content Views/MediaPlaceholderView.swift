@@ -34,13 +34,13 @@ final class MediaPlaceholderView: UIView {
                 cellViewModel.variant == .standardIncoming,
                 let attachment: Attachment = cellViewModel.attachments?.first
             else {
-                return ("actionsheet_document_black", "file") // Should never occur
+                return ("actionsheet_document_black", "file".localized().lowercased()) // Should never occur
             }
             
-            if attachment.isAudio { return ("attachment_audio", "audio") }
-            if attachment.isImage || attachment.isVideo { return ("actionsheet_camera_roll_black", "media") }
+            if attachment.isAudio { return ("attachment_audio", "audio".localized().lowercased()) }
+            if attachment.isImage || attachment.isVideo { return ("actionsheet_camera_roll_black", "media".localized().lowercased()) }
             
-            return ("actionsheet_document_black", "file")
+            return ("actionsheet_document_black", "file".localized().lowercased())
         }()
         
         // Image view
@@ -62,7 +62,9 @@ final class MediaPlaceholderView: UIView {
         // Body label
         let titleLabel = UILabel()
         titleLabel.font = .systemFont(ofSize: Values.mediumFontSize)
-        titleLabel.text = "Tap to download \(attachmentDescription)"
+        titleLabel.text = "attachmentsTapToDownload"
+            .put(key: "file_type", value: attachmentDescription)
+            .localized()
         titleLabel.themeTextColor = textColor
         titleLabel.lineBreakMode = .byTruncatingTail
         

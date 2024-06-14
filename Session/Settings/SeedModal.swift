@@ -10,7 +10,7 @@ final class SeedModal: Modal {
     // MARK: - Initialization
     
     init() throws {
-        self.mnemonic = try SeedVC.mnemonic()
+        self.mnemonic = try Identity.mnemonic()
         
         super.init(targetView: nil, dismissType: .recursive, afterClosed: nil)
         
@@ -27,7 +27,7 @@ final class SeedModal: Modal {
     private let titleLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
-        result.text = "modal_seed_title".localized()
+        result.text = "sessionRecoveryPassword".localized()
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping
@@ -39,7 +39,7 @@ final class SeedModal: Modal {
     private let explanationLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = "modal_seed_explanation".localized()
+        result.text = "recoveryPasswordDescription".localized()
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping
