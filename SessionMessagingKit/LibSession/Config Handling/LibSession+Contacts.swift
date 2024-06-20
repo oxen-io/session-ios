@@ -179,9 +179,7 @@ internal extension LibSession {
                     .fetchOne(db, id: sessionId)
                     .defaulting(to: DisappearingMessagesConfiguration.defaultWith(sessionId))
                 
-                let isValid: Bool = Features.useNewDisappearingMessagesConfig ? data.config.isValidV2Config() : true
-                
-                if isValid && data.config != localConfig {
+                if data.config.isValidV2Config() && data.config != localConfig {
                     try data.config
                         .saved(db)
                         .clearUnrelatedControlMessages(

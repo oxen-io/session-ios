@@ -1149,7 +1149,6 @@ public final class MessageSender {
             Message.shouldSync(message: message)
         {
             if let message = message as? VisibleMessage { message.syncTarget = publicKey }
-            if let message = message as? ExpirationTimerUpdate { message.syncTarget = publicKey }
             
             dependencies.jobRunner.add(
                 db,

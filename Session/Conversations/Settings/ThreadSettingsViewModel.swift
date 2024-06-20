@@ -452,12 +452,6 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigationItemSource, Navi
                                 guard current.disappearingMessagesConfig.isEnabled else {
                                     return "DISAPPEARING_MESSAGES_SUBTITLE_OFF".localized()
                                 }
-                                guard Features.useNewDisappearingMessagesConfig else {
-                                    return String(
-                                        format: "DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_LEGACY".localized(),
-                                        current.disappearingMessagesConfig.durationString
-                                    )
-                                }
                                 
                                 return String(
                                     format: (current.disappearingMessagesConfig.type == .disappearAfterRead ?

@@ -647,15 +647,7 @@ struct SessionProtos_DataMessage {
   /// Clears the value of `flags`. Subsequent reads from it will return its default value.
   mutating func clearFlags() {_uniqueStorage()._flags = nil}
 
-  var expireTimer: UInt32 {
-    get {return _storage._expireTimer ?? 0}
-    set {_uniqueStorage()._expireTimer = newValue}
-  }
-  /// Returns true if `expireTimer` has been explicitly set.
-  var hasExpireTimer: Bool {return _storage._expireTimer != nil}
-  /// Clears the value of `expireTimer`. Subsequent reads from it will return its default value.
-  mutating func clearExpireTimer() {_uniqueStorage()._expireTimer = nil}
-
+  /// optional uint32                 expireTimer                    = 5;  // No longer used
   var profileKey: Data {
     get {return _storage._profileKey ?? Data()}
     set {_uniqueStorage()._profileKey = newValue}
@@ -2091,7 +2083,6 @@ extension SessionProtos_DataMessage: SwiftProtobuf.Message, SwiftProtobuf._Messa
     1: .same(proto: "body"),
     2: .same(proto: "attachments"),
     4: .same(proto: "flags"),
-    5: .same(proto: "expireTimer"),
     6: .same(proto: "profileKey"),
     7: .same(proto: "timestamp"),
     8: .same(proto: "quote"),
@@ -2108,7 +2099,6 @@ extension SessionProtos_DataMessage: SwiftProtobuf.Message, SwiftProtobuf._Messa
     var _body: String? = nil
     var _attachments: [SessionProtos_AttachmentPointer] = []
     var _flags: UInt32? = nil
-    var _expireTimer: UInt32? = nil
     var _profileKey: Data? = nil
     var _timestamp: UInt64? = nil
     var _quote: SessionProtos_DataMessage.Quote? = nil
@@ -2128,7 +2118,6 @@ extension SessionProtos_DataMessage: SwiftProtobuf.Message, SwiftProtobuf._Messa
       _body = source._body
       _attachments = source._attachments
       _flags = source._flags
-      _expireTimer = source._expireTimer
       _profileKey = source._profileKey
       _timestamp = source._timestamp
       _quote = source._quote
@@ -2172,7 +2161,6 @@ extension SessionProtos_DataMessage: SwiftProtobuf.Message, SwiftProtobuf._Messa
         case 1: try { try decoder.decodeSingularStringField(value: &_storage._body) }()
         case 2: try { try decoder.decodeRepeatedMessageField(value: &_storage._attachments) }()
         case 4: try { try decoder.decodeSingularUInt32Field(value: &_storage._flags) }()
-        case 5: try { try decoder.decodeSingularUInt32Field(value: &_storage._expireTimer) }()
         case 6: try { try decoder.decodeSingularBytesField(value: &_storage._profileKey) }()
         case 7: try { try decoder.decodeSingularUInt64Field(value: &_storage._timestamp) }()
         case 8: try { try decoder.decodeSingularMessageField(value: &_storage._quote) }()
@@ -2203,9 +2191,6 @@ extension SessionProtos_DataMessage: SwiftProtobuf.Message, SwiftProtobuf._Messa
       }
       try { if let v = _storage._flags {
         try visitor.visitSingularUInt32Field(value: v, fieldNumber: 4)
-      } }()
-      try { if let v = _storage._expireTimer {
-        try visitor.visitSingularUInt32Field(value: v, fieldNumber: 5)
       } }()
       try { if let v = _storage._profileKey {
         try visitor.visitSingularBytesField(value: v, fieldNumber: 6)
@@ -2249,7 +2234,6 @@ extension SessionProtos_DataMessage: SwiftProtobuf.Message, SwiftProtobuf._Messa
         if _storage._body != rhs_storage._body {return false}
         if _storage._attachments != rhs_storage._attachments {return false}
         if _storage._flags != rhs_storage._flags {return false}
-        if _storage._expireTimer != rhs_storage._expireTimer {return false}
         if _storage._profileKey != rhs_storage._profileKey {return false}
         if _storage._timestamp != rhs_storage._timestamp {return false}
         if _storage._quote != rhs_storage._quote {return false}

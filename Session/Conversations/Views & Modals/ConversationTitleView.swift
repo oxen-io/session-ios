@@ -228,30 +228,17 @@ final class ConversationTitleView: UIView {
                     height: Values.miniFontSize
                 )
                 
-                let disappearingMessageSettingLabelString: NSAttributedString = {
-                    guard Features.useNewDisappearingMessagesConfig else {
-                        return NSAttributedString(attachment: imageAttachment)
-                            .appending(string: " ")
-                            .appending(string: String(
-                                format: "DISAPPERING_MESSAGES_SUMMARY_LEGACY".localized(),
-                                floor(config.durationSeconds).formatted(format: .short)
-                            ))
-                    }
-                    
-                    return NSAttributedString(attachment: imageAttachment)
-                        .appending(string: " ")
-                        .appending(string: String(
-                            format: (config.type == .disappearAfterRead ?
-                                "DISAPPERING_MESSAGES_SUMMARY_READ".localized() :
-                                "DISAPPERING_MESSAGES_SUMMARY_SEND".localized()
-                            ),
-                            floor(config.durationSeconds).formatted(format: .short)
-                        ))
-                }()
-                
                 labelInfos.append(
                     SessionLabelCarouselView.LabelInfo(
-                        attributedText: disappearingMessageSettingLabelString,
+                        attributedText: NSAttributedString(attachment: imageAttachment)
+                            .appending(string: " ")
+                            .appending(string: String(
+                                format: (config.type == .disappearAfterRead ?
+                                    "DISAPPERING_MESSAGES_SUMMARY_READ".localized() :
+                                    "DISAPPERING_MESSAGES_SUMMARY_SEND".localized()
+                                ),
+                                floor(config.durationSeconds).formatted(format: .short)
+                            )),
                         accessibility: Accessibility(
                             identifier: "Disappearing messages type and time",
                             label: "Disappearing messages type and time"
