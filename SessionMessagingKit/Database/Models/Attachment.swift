@@ -266,7 +266,11 @@ extension Attachment: CustomStringConvertible {
     public static func description(for descriptionInfo: DescriptionInfo, count: Int) -> String {
         // We only support multi-attachment sending of images so we can just default to the image attachment
         // if there were multiple attachments
-        guard count == 1 else { return "\(emoji(for: OWSMimeTypeImageJpeg)) \("ATTACHMENT".localized())" }
+        guard count == 1 else {
+            return "attachmentsNotification"
+                .put(key: "emoji", value: emoji(for: OWSMimeTypeImageJpeg))
+                .localized()
+        }
         
         if MIMETypeUtil.isAudio(descriptionInfo.contentType) {
             // a missing filename is the legacy way to determine if an audio attachment is
@@ -276,11 +280,11 @@ extension Attachment: CustomStringConvertible {
                 descriptionInfo.sourceFilename == nil ||
                 (descriptionInfo.sourceFilename?.count ?? 0) == 0
             {
-                return "🎙️ \("ATTACHMENT_TYPE_VOICE_MESSAGE".localized())"
+                return "🎙️ \("messageVoice".localized())"
             }
         }
         
-        return "\(emoji(for: descriptionInfo.contentType)) \("ATTACHMENT".localized())"
+        return "\(emoji(for: descriptionInfo.contentType)) \("attachment".localized())"
     }
     
     public static func emoji(for contentType: String) -> String {
@@ -604,7 +608,7 @@ extension Attachment {
     
     private static var sharedDataAttachmentsDirPath: String = {
         URL(fileURLWithPath: OWSFileSystem.appSharedDataDirectoryPath())
-            .appendingPathComponent("Attachments")
+            .appendingPathComponent("Attachments") // stringlint:disable
             .path
     }()
     
@@ -720,7 +724,7 @@ extension Attachment {
 // MARK: - Convenience
 
 extension Attachment {
-    public static let nonMediaQuoteFileId: String = "NON_MEDIA_QUOTE_FILE_ID"
+    public static let nonMediaQuoteFileId: String = "NON_MEDIA_QUOTE_FILE_ID" // stringlint:disable
     
     public enum ThumbnailSize {
         case small
@@ -753,7 +757,7 @@ extension Attachment {
     var thumbnailsDirPath: String {
         // Thumbnails are written to the caches directory, so that iOS can
         // remove them if necessary
-        return "\(OWSFileSystem.cachesDirectoryPath())/\(id)-thumbnails"
+        return "\(OWSFileSystem.cachesDirectoryPath())/\(id)-thumbnails" // stringlint:disable
     }
     
     var legacyThumbnailPath: String? {
@@ -766,7 +770,7 @@ extension Attachment {
         let filename: String = fileUrl.lastPathComponent.filenameWithoutExtension
         let containingDir: String = fileUrl.deletingLastPathComponent().path
         
-        return "\(containingDir)/\(filename)-signal-ios-thumbnail.jpg"
+        return "\(containingDir)/\(filename)-signal-ios-thumbnail.jpg" // stringlint:disable
     }
     
     var originalImage: UIImage? {
@@ -791,17 +795,17 @@ extension Attachment {
     
     public var documentFileName: String {
         if let sourceFilename: String = sourceFilename { return sourceFilename }
-        if isImage { return "Image File" }
-        if isAudio { return "Audio File" }
-        if isVideo { return "Video File" }
-        return "File"
+        if isImage { return "image".localized() + " " + "file".localized() }
+        if isAudio { return "audio".localized() + " " + "file".localized() }
+        if isVideo { return "video".localized() + " " + "file".localized() }
+        return "file".localized()
     }
     
     public var shortDescription: String {
-        if isImage { return "Image" }
-        if isAudio { return "Audio" }
-        if isVideo { return "Video" }
-        return "Document"
+        if isImage { return "image".localized() }
+        if isAudio { return "audio".localized() }
+        if isVideo { return "video".localized() }
+        return "document".localized()
     }
     
     public var documentFileInfo: String {
@@ -822,7 +826,7 @@ extension Attachment {
     }
     
     public func thumbnailPath(for dimensions: UInt) -> String {
-        return "\(thumbnailsDirPath)/thumbnail-\(dimensions).jpg"
+        return "\(thumbnailsDirPath)/thumbnail-\(dimensions).jpg" // stringlint:disable
     }
     
     private func loadThumbnail(with dimensions: UInt, success: @escaping (UIImage, () throws -> Data) -> (), failure: @escaping () -> ()) {
@@ -900,7 +904,7 @@ extension Attachment {
     
     public func cloneAsQuoteThumbnail() -> Attachment? {
         let cloneId: String = UUID().uuidString
-        let thumbnailName: String = "quoted-thumbnail-\(sourceFilename ?? "null")"
+        let thumbnailName: String = "quoted-thumbnail-\(sourceFilename ?? "null")" // stringlint:disable
         
         guard self.isVisualMedia else { return nil }
         

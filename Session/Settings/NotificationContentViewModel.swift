@@ -29,7 +29,7 @@ class NotificationContentViewModel: SessionTableViewModel, NavigatableStateHolde
     
     // MARK: - Content
     
-    let title: String = "NOTIFICATIONS_STYLE_CONTENT_TITLE".localized()
+    let title: String = "notificationsContent".localized()
     
     lazy var observation: TargetObservation = ObservationBuilder
         .databaseObservation(self) { db -> Preferences.NotificationPreviewType in

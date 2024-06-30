@@ -9,7 +9,7 @@ public class TopBannerController: UIViewController {
         
         var text: String {
             switch self {
-                case .outdatedUserConfig: return "USER_CONFIG_OUTDATED_WARNING".localized()
+                case .outdatedUserConfig: return "deleteAfterGroupFirstReleaseConfigOutdated".localized()
             }
         }
     }

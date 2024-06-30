@@ -13,10 +13,10 @@ public struct SessionApp {
     
     static var versionInfo: String {
         let buildNumber: String = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String)
-            .map { " (\($0))" }
+            .map { " (\($0))" } // stringlint:disable
             .defaulting(to: "")
         let appVersion: String? = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
-            .map { "App: \($0)\(buildNumber)" }
+            .map { "App: \($0)\(buildNumber)" } // stringlint:disable
         #if DEBUG
         let commitInfo: String? = (Bundle.main.infoDictionary?["GitCommitHash"] as? String).map { "Commit: \($0)" }
         #else
@@ -24,9 +24,9 @@ public struct SessionApp {
         #endif
         
         let versionInfo: [String] = [
-            "iOS \(UIDevice.current.systemVersion)",
+            "iOS \(UIDevice.current.systemVersion)",        // stringlint:disable
             appVersion,
-            "libSession: \(LibSession.libSessionVersion)",
+            "libSession: \(LibSession.libSessionVersion)",  // stringlint:disable
             commitInfo
         ].compactMap { $0 }
         

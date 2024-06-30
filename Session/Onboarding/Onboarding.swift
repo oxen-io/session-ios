@@ -58,6 +58,20 @@ enum Onboarding {
             .eraseToAnyPublisher()
     }
     
+    enum SeedSource {
+        case qrCode
+        case mnemonic
+        
+        var genericErrorMessage: String {
+            switch self {
+                case .qrCode:
+                    "qrNotRecoveryPassword".localized()
+                case .mnemonic:
+                    "recoveryPasswordErrorMessageGeneric".localized()
+            }
+        }
+    }
+    
     enum State: CustomStringConvertible {
         case newUser
         case missingName
@@ -97,6 +111,7 @@ enum Onboarding {
             // Clear any data which gets set during Onboarding
             Storage.shared.write { db in
                 db[.hasViewedSeed] = false
+                db[.hideRecoveryPasswordPermanently] = false
                 
                 try SessionThread.deleteAll(db)
                 try Profile.deleteAll(db)

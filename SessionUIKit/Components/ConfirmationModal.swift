@@ -113,9 +113,9 @@ public class ConfirmationModal: Modal, UITextFieldDelegate {
         result.isLayoutMarginsRelativeArrangement = true
         result.layoutMargins = UIEdgeInsets(
             top: Values.largeSpacing,
-            left: Values.largeSpacing,
+            left: Values.veryLargeSpacing,
             bottom: Values.verySmallSpacing,
-            right: Values.largeSpacing
+            right: Values.veryLargeSpacing
         )
         
         return result
@@ -355,7 +355,7 @@ public extension ConfirmationModal {
             confirmAccessibility: Accessibility? = nil,
             confirmStyle: ThemeValue = .alert_text,
             confirmEnabled: Bool = true,
-            cancelTitle: String = "TXT_CANCEL_TITLE".localized(),
+            cancelTitle: String = "cancel".localized(),
             cancelAccessibility: Accessibility? = Accessibility(
                 identifier: "Cancel"
             ),

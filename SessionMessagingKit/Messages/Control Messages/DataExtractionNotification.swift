@@ -21,8 +21,8 @@ public final class DataExtractionNotification: ControlMessage {
 
         public var description: String {
             switch self {
-                case .screenshot: return "screenshot"
-                case .mediaSaved: return "mediaSaved"
+                case .screenshot: return "screenshot" // stringlint:disable
+                case .mediaSaved: return "mediaSaved" // stringlint:disable
             }
         }
     }

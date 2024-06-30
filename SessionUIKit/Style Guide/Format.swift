@@ -29,16 +29,16 @@ public enum Format {
             case oneMegabyte...Double.greatestFiniteMagnitude:
                 return (Format.fileSizeFormatter
                     .string(from: NSNumber(floatLiteral: (fileSizeDouble / oneMegabyte)))?
-                    .appending("MB") ?? "n/a")
+                    .appending("MB") ?? "attachmentsNa".localized())
             
             default:
                 return (Format.fileSizeFormatter
                     .string(from: NSNumber(floatLiteral: max(0.1, (fileSizeDouble / oneKilobyte))))?
-                    .appending("KB") ?? "n/a")
+                    .appending("KB") ?? "attachmentsNa".localized())
         }
     }
     
     public static func duration(_ duration: TimeInterval) -> String {
-        return (Format.durationFormatter.string(from: duration) ?? "0:00")
+        return (Format.durationFormatter.string(from: duration) ?? "0:00") // stringlint:disable
     }
 }

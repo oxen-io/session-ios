@@ -137,7 +137,7 @@ class EmojiPickerCollectionView: UICollectionView {
 
     func nameForSection(_ section: Int) -> String? {
         guard section > 0 || !hasRecentEmoji else {
-            return "EMOJI_CATEGORY_RECENTS_NAME".localized()
+            return "emojiCategoryRecentlyUsed".localized()
         }
 
         guard let category = Emoji.Category.allCases[safe: section - categoryIndexOffset] else {

@@ -10,12 +10,12 @@ enum QRCode {
     static func generate(for string: String, hasBackground: Bool) -> UIImage {
         let data = string.data(using: .utf8)
         var qrCodeAsCIImage: CIImage
-        let filter1 = CIFilter(name: "CIQRCodeGenerator")!
+        let filter1 = CIFilter(name: "CIQRCodeGenerator")! // stringlint:disable
         filter1.setValue(data, forKey: "inputMessage")
         qrCodeAsCIImage = filter1.outputImage!
         
         guard !hasBackground else {
-            let filter2 = CIFilter(name: "CIFalseColor")!
+            let filter2 = CIFilter(name: "CIFalseColor")! // stringlint:disable
             filter2.setValue(qrCodeAsCIImage, forKey: "inputImage")
             filter2.setValue(CIColor(color: .black), forKey: "inputColor0")
             filter2.setValue(CIColor(color: .white), forKey: "inputColor1")
@@ -25,10 +25,10 @@ enum QRCode {
             return UIImage(ciImage: scaledQRCodeAsCIImage)
         }
         
-        let filter2 = CIFilter(name: "CIColorInvert")!
+        let filter2 = CIFilter(name: "CIColorInvert")! // stringlint:disable
         filter2.setValue(qrCodeAsCIImage, forKey: "inputImage")
         qrCodeAsCIImage = filter2.outputImage!
-        let filter3 = CIFilter(name: "CIMaskToAlpha")!
+        let filter3 = CIFilter(name: "CIMaskToAlpha")! // stringlint:disable
         filter3.setValue(qrCodeAsCIImage, forKey: "inputImage")
         qrCodeAsCIImage = filter3.outputImage!
         
@@ -40,5 +40,81 @@ enum QRCode {
         // work around this we convert the image to data and then back into an image
         let imageData: Data = UIImage(ciImage: scaledQRCodeAsCIImage).pngData()!
         return UIImage(data: imageData)!
+    }
+}
+
+import SwiftUI
+import SessionUIKit
+
+struct QRCodeView: View {
+    let string: String
+    let hasBackground: Bool
+    let logo: String?
+    let themeStyle: UIUserInterfaceStyle
+    var backgroundThemeColor: ThemeValue {
+        switch themeStyle {
+            case .light:
+                return .backgroundSecondary
+            default:
+                return .textPrimary
+        }
+    }
+    var qrCodeThemeColor: ThemeValue {
+        switch themeStyle {
+            case .light:
+                return .textPrimary
+            default:
+                return .backgroundPrimary
+        }
+    }
+    
+    static private var cornerRadius: CGFloat = 10
+    static private var logoSize: CGFloat = 66
+    
+    var body: some View {
+        ZStack(alignment: .center) {
+            ZStack(alignment: .center) {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(themeColor: backgroundThemeColor)
+                
+                Image(uiImage: QRCode.generate(for: string, hasBackground: hasBackground))
+                    .resizable()
+                    .renderingMode(.template)
+                    .foregroundColor(themeColor: qrCodeThemeColor)
+                    .scaledToFit()
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity
+                    )
+                    .padding(.vertical, Values.smallSpacing)
+                
+                if let logo = logo {
+                    ZStack(alignment: .center) {
+                        Rectangle()
+                            .fill(themeColor: backgroundThemeColor)
+                        
+                        Image(logo)
+                            .resizable()
+                            .renderingMode(.template)
+                            .foregroundColor(themeColor: qrCodeThemeColor)
+                            .scaledToFit()
+                            .frame(
+                                maxWidth: .infinity,
+                                maxHeight: .infinity
+                            )
+                            .padding(.all, 4)
+                    }
+                    .frame(
+                        width: Self.logoSize,
+                        height: Self.logoSize
+                    )
+                }
+            }
+            .frame(
+                maxWidth: 400,
+                maxHeight: 400
+            )
+        }
+        .frame(maxWidth: .infinity)
     }
 }

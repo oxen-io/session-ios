@@ -18,12 +18,12 @@ public class AllMediaViewController: UIViewController, UIPageViewControllerDataS
     private lazy var tabBar: TabBar = {
         let result: TabBar = TabBar(
             tabs: [
-                TabBar.Tab(title: MediaStrings.media) { [weak self] in
+                TabBar.Tab(title: "media".localized()) { [weak self] in
                     guard let self = self else { return }
                     self.pageVC.setViewControllers([ self.pages[0] ], direction: .forward, animated: false, completion: nil)
                     self.updateSelectButton(updatedData: self.mediaTitleViewController.viewModel.galleryData, inBatchSelectMode: self.mediaTitleViewController.isInBatchSelectMode)
                 },
-                TabBar.Tab(title: MediaStrings.document) { [weak self] in
+                TabBar.Tab(title: "files".localized()) { [weak self] in
                     guard let self = self else { return }
                     self.pageVC.setViewControllers([ self.pages[1] ], direction: .forward, animated: false, completion: nil)
                     self.endSelectMode()
@@ -70,7 +70,7 @@ public class AllMediaViewController: UIViewController, UIPageViewControllerDataS
         
         ViewControllerUtilities.setUpDefaultSessionStyle(
             for: self,
-            title: MediaStrings.allMedia,
+            title: "conversationsSettingsAllMedia".localized(),
             hasCustomBackButton: false
         )
         
@@ -190,7 +190,7 @@ extension AllMediaViewController: MediaTileViewControllerDelegate {
         }
         else {
             self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-                title: "BUTTON_SELECT".localized(),
+                title: "select".localized(),
                 style: .plain,
                 target: self,
                 action: #selector(didTapSelect)

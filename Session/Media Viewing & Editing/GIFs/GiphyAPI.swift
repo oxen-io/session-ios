@@ -20,8 +20,8 @@ enum GiphyError: Error {
 extension GiphyError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-            case .assertionError: return "GIF_PICKER_ERROR_GENERIC".localized()
-            case .fetchFailure: return "GIF_PICKER_ERROR_FETCH_FAILURE".localized()
+            case .assertionError: return "errorUnknown".localized()
+            case .fetchFailure: return "errorUnknown".localized()
         }
     }
 }

@@ -231,8 +231,8 @@ extension AttachmentDownloadJob {
 
         public var errorDescription: String? {
             switch self {
-                case .failedToSaveFile: return "Failed to save file"
-                case .invalidUrl: return "Invalid file URL"
+                case .failedToSaveFile: return "Failed to save file" // stringlint:disable
+                case .invalidUrl: return "Invalid file URL" // stringlint:disable
             }
         }
     }

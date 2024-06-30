@@ -124,10 +124,10 @@ extension PushNotificationAPI {
             /// on whether the subscription wants message data included; and the trailing `NS[i]` values are a
             /// comma-delimited list of namespaces that should be subscribed to, in the same sorted order as
             /// the `namespaces` parameter.
-            let verificationBytes: [UInt8] = "MONITOR".bytes
+            let verificationBytes: [UInt8] = "MONITOR".bytes // stringlint:disable
                 .appending(contentsOf: pubkey.bytes)
                 .appending(contentsOf: "\(timestamp)".bytes)
-                .appending(contentsOf: (includeMessageData ? "1" : "0").bytes)
+                .appending(contentsOf: (includeMessageData ? "1" : "0").bytes) // stringlint:disable
                 .appending(
                     contentsOf: namespaces
                         .map { $0.rawValue }    // Intentionally not using `verificationString` here

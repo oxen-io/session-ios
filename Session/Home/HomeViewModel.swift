@@ -7,7 +7,9 @@ import SignalUtilitiesKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
-public class HomeViewModel {
+public class HomeViewModel: NavigatableStateHolder {
+    public let navigatableState: NavigatableState = NavigatableState()
+    
     public typealias SectionModel = ArraySection<Section, SessionThreadViewModel>
     
     // MARK: - Section

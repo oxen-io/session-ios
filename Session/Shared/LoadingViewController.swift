@@ -46,7 +46,7 @@ public class LoadingViewController: UIViewController {
     private var topLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = UIFont.systemFont(ofSize: Values.mediumFontSize)
-        result.text = "DATABASE_VIEW_OVERLAY_TITLE".localized()
+        result.text = "databaseOptimizing".localized()
         result.themeTextColorForced = .theme(.classicDark, color: .textPrimary)
         result.textAlignment = .center
         result.numberOfLines = 0
@@ -58,7 +58,7 @@ public class LoadingViewController: UIViewController {
     private var bottomLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = UIFont.systemFont(ofSize: Values.verySmallFontSize)
-        result.text = "DATABASE_VIEW_OVERLAY_SUBTITLE".localized()
+        result.text = "waitFewMinutes".localized()
         result.themeTextColorForced = .theme(.classicDark, color: .textPrimary)
         result.textAlignment = .center
         result.numberOfLines = 0

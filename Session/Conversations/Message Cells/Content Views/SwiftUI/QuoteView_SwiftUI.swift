@@ -54,7 +54,7 @@ struct QuoteView_SwiftUI: View {
         return nil
     }
     private var author: String? {
-        guard !isCurrentUser else { return "MEDIA_GALLERY_SENDER_NAME_YOU".localized() }
+        guard !isCurrentUser else { return "you".localized() }
         guard quotedText != nil else {
             // When we can't find the quoted message we want to hide the author label
             return Profile.displayNameNoFallback(
@@ -115,7 +115,7 @@ struct QuoteView_SwiftUI: View {
                             height: Self.thumbnailSize,
                             alignment: .center
                         )
-                        .background(themeColor: .messageBubble_overlay)
+                        .backgroundColor(themeColor: .messageBubble_overlay)
                         .cornerRadius(Self.cornerRadius)
                 }
             } else {
@@ -174,7 +174,7 @@ struct QuoteView_SwiftUI: View {
                     )
                     .lineLimit(2)
                 } else {
-                    Text("QUOTED_MESSAGE_NOT_FOUND".localized())
+                    Text("messageErrorOriginal".localized())
                         .font(.system(size: Values.smallFontSize))
                         .foregroundColor(themeColor: targetThemeColor)
                 }
@@ -208,11 +208,7 @@ struct QuoteView_SwiftUI: View {
 struct QuoteView_SwiftUI_Previews: PreviewProvider {
     static var previews: some View {
         ZStack {
-            if #available(iOS 14.0, *) {
-                ThemeManager.currentTheme.colorSwiftUI(for: .backgroundPrimary).ignoresSafeArea()
-            } else {
-                ThemeManager.currentTheme.colorSwiftUI(for: .backgroundPrimary)
-            }
+            ThemeManager.currentTheme.colorSwiftUI(for: .backgroundPrimary).ignoresSafeArea()
             
             QuoteView_SwiftUI(
                 info: QuoteView_SwiftUI.Info(

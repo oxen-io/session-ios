@@ -53,6 +53,9 @@ public extension Setting.BoolKey {
     /// A flag indicating whether the user has ever viewed their seed
     static let hasViewedSeed: Setting.BoolKey = "hasViewedSeed"
     
+    /// A flag indicating whether the user hides the recovery password permanently
+    static let hideRecoveryPasswordPermanently: Setting.BoolKey = "hideRecoveryPasswordPermanently"
+    
     /// A flag indicating whether the user has ever saved a thread
     static let hasSavedThread: Setting.BoolKey = "hasSavedThread"
     
@@ -113,9 +116,9 @@ public enum Preferences {
         
         public var name: String {
             switch self {
-                case .nameAndPreview: return "NOTIFICATIONS_STYLE_CONTENT_OPTION_NAME_AND_CONTENT".localized()
-                case .nameNoPreview: return "NOTIFICATIONS_STYLE_CONTENT_OPTION_NAME_ONLY".localized()
-                case .noNameNoPreview: return "NOTIFICATIONS_STYLE_CONTENT_OPTION_NO_NAME_OR_CONTENT".localized()
+                case .nameAndPreview: return "notificationsContentShowNameAndContent".localized()
+                case .nameNoPreview: return "notificationsContentShowNameOnly".localized()
+                case .noNameNoPreview: return "notificationsContentShowNoNameOrContent".localized()
             }
         }
     }
@@ -212,7 +215,7 @@ public enum Preferences {
                 
                 // Other
                 case .messageSent: return "Message Sent"
-                case .none: return "SOUNDS_NONE".localized()
+                case .none: return "none".localized()
             }
         }
         

@@ -36,7 +36,7 @@ open class ScreenLockViewController: UIViewController {
     public lazy var unlockButton: SessionButton = {
         let result: SessionButton = SessionButton(style: .bordered, size: .medium)
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("Unlock Session", for: .normal)
+        result.setTitle("lockAppUnlock".localized(), for: .normal)
         result.addTarget(self, action: #selector(showUnlockUI), for: .touchUpInside)
         result.isHidden = true
         

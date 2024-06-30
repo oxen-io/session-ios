@@ -2,12 +2,17 @@
 
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 //
-// This script is based on https://github.com/ginowu7/CleanSwiftLocalizableExample the main difference
-// is canges to the localized usage regex
-//
 // stringlint:disable
+//
+/// This script is based on https://github.com/ginowu7/CleanSwiftLocalizableExample
+/// The main differences are:
+/// 1. Changes to the localised usage regex
+/// 2. Addition to excluded unlocalised cases
+/// 3. Functionality to update and copy localised permission requirement strings to infoPlist.xcstrings
 
 import Foundation
+
+typealias JSON = [String:Any]
 
 extension ProjectState {
     /// Adding `// stringlint:disable` to the top of a source file (before imports) or after a string will mean that file/line gets
@@ -15,6 +20,22 @@ extension ProjectState {
     static let lintSuppression: String = "stringlint:disable"
     static let primaryLocalisationFile: String = "en"
     static let validLocalisationSuffixes: Set<String> = ["Localizable.strings"]
+    static let permissionStrings: Set<String> = [
+        "permissionsStorageSend",
+        "permissionsFaceId",
+        "cameraGrantAccessDescription",
+        "permissionsAppleMusic",
+        "permissionsStorageSave",
+        "permissionsMicrophoneAccessRequiredIos"
+    ]
+    static let permissionStringsMap: [String: String] = [
+        "permissionsStorageSend": "NSPhotoLibraryUsageDescription",
+        "permissionsFaceId": "NSFaceIDUsageDescription",
+        "cameraGrantAccessDescription": "NSCameraUsageDescription",
+        "permissionsAppleMusic": "NSAppleMusicUsageDescription",
+        "permissionsStorageSave": "NSPhotoLibraryAddUsageDescription",
+        "permissionsMicrophoneAccessRequiredIos": "NSMicrophoneUsageDescription"
+    ]
     static let validSourceSuffixes: Set<String> = [".swift", ".m"]
     static let excludedPaths: Set<String> = [
         "build/",                   // Files under the build folder (CI)
@@ -27,7 +48,7 @@ extension ProjectState {
         "_SharedTestUtilities/",    // Exclude shared test directory
         "external/"                 // External dependencies
     ]
-    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", "null" ]
+    static let excludedPhrases: Set<String> = [ "", " ", "  ", ",", ", ", "null", "\"", "@[0-9a-fA-F]{66}", "^[0-9A-Fa-f]+$", "/" ]
     static let excludedUnlocalisedStringLineMatching: Set<MatchType> = [
         .contains(ProjectState.lintSuppression, caseSensitive: false),
         .prefix("#import", caseSensitive: false),
@@ -50,11 +71,12 @@ extension ProjectState {
         .contains("UIImage(named:", caseSensitive: false),
         .contains("UIImage(systemName:", caseSensitive: false),
         .contains("[UIImage imageNamed:", caseSensitive: false),
+        .contains("Image(", caseSensitive: false),
         .contains("UIFont(name:", caseSensitive: false),
         .contains(".dateFormat =", caseSensitive: false),
-        .contains(".accessibilityLabel =", caseSensitive: false),
-        .contains(".accessibilityValue =", caseSensitive: false),
-        .contains(".accessibilityIdentifier =", caseSensitive: false),
+        .contains("accessibilityLabel =", caseSensitive: false),
+        .contains("accessibilityValue =", caseSensitive: false),
+        .contains("accessibilityIdentifier =", caseSensitive: false),
         .contains("accessibilityIdentifier:", caseSensitive: false),
         .contains("accessibilityLabel:", caseSensitive: false),
         .contains("Accessibility(identifier:", caseSensitive: false),
@@ -79,6 +101,18 @@ extension ProjectState {
             .previousLine(numEarlier: 2, .contains("Accessibility(", caseSensitive: false))
         ),
         .contains("SQL(", caseSensitive: false),
+        .contains(" == ", caseSensitive: false),
+        .contains("forResource:", caseSensitive: false),
+        .contains("imageName:", caseSensitive: false),
+        .contains(".userInfo[", caseSensitive: false),
+        .contains("payload[", caseSensitive: false),
+        .contains(".infoDictionary?[", caseSensitive: false),
+        .contains("accessibilityId:", caseSensitive: false),
+        .contains("key:", caseSensitive: false),
+        .contains("separator:", caseSensitive: false),
+        .contains("separatedBy:", caseSensitive: false),
+        .nextLine(.contains(".put(key:", caseSensitive: false)),
+        .nextLine(.contains(".localized()", caseSensitive: false)),
         .regex(".*static var databaseTableName: String"),
         .regex("case .* = "),
         .regex("Error.*\\(")
@@ -111,6 +145,7 @@ targetActions.forEach { $0.perform(projectState: projectState) }
 enum ScriptAction: String {
     case validateFilesCopied = "validate"
     case lintStrings = "lint"
+    case updatePermissionStrings = "update"
     
     func perform(projectState: ProjectState) {
         // Perform the action
@@ -177,6 +212,17 @@ enum ScriptAction: String {
                     missingKeysFromOtherFiles.forEach { missingKey, namesOfFilesItWasFound in
                         Output.warning(file, "Phrase '\(missingKey)' is missing (found in: \(namesOfFilesItWasFound.joined(separator: ", ")))")
                     }
+                    
+                    var maybeFaulty: [String] = []
+                    file.keyPhrase.forEach { key, phrase in
+                        guard let original = projectState.primaryLocalizationFile.keyPhrase[key] else { return }
+                        let numberOfVarablesOrignal = Regex.matches("\\{.*\\}", content: original.value).count
+                        let numberOfVarablesPhrase = Regex.matches("\\{.*\\}", content: phrase.value).count
+                        if numberOfVarablesPhrase != numberOfVarablesOrignal {
+                            maybeFaulty.append(key)
+                        }
+                    }
+                    maybeFaulty.forEach { key in Output.warning(file, "\(key) may be faulty.") }
                 }
                 
                 // Process the source code
@@ -199,6 +245,43 @@ enum ScriptAction: String {
                     }
                 }
                 break
+            case .updatePermissionStrings:
+                print("------------ Updating permission strings ------------")
+                var updatedInfoPlistJSON: JSON = projectState.infoPlistLocalizationFile.json
+                var strings: JSON = updatedInfoPlistJSON["strings"] as! JSON
+                projectState.localizationFiles.forEach { file in
+                    ProjectState.permissionStrings.forEach { key in
+                        guard let nsKey: String = ProjectState.permissionStringsMap[key] else { return }
+                        var keyPhrases: JSON = strings[nsKey] as! JSON
+                        var localizations: JSON = keyPhrases["localizations"] as! JSON
+                        if let phrase: String = file.keyPhrase[key]?.value {
+                            if let translations: JSON = localizations[file.name] as? JSON {
+                                var stringUnit: JSON = translations["stringUnit"] as! JSON
+                                if (stringUnit["value"] as! String) != phrase {
+                                    stringUnit["state"] = "translated"
+                                    stringUnit["value"] = phrase
+                                }
+                            } else {
+                                let stringUnit: JSON = [
+                                    "state": "translated",
+                                    "value": phrase.replacingOccurrences(of: "\"", with: "")
+                                ]
+                                localizations[file.name] = ["stringUnit": stringUnit]
+                            }
+                        }
+                        keyPhrases["localizations"] = localizations
+                        strings[nsKey] = keyPhrases
+                    }
+                }
+                updatedInfoPlistJSON["strings"] = strings
+                
+            if let data: Data = try? JSONSerialization.data(withJSONObject: updatedInfoPlistJSON, options: [ .fragmentsAllowed ]) {
+                do {
+                    try data.write(to: URL(fileURLWithPath: projectState.infoPlistLocalizationFile.path), options: [.atomic])
+                } catch {
+                    fatalError("Could not write to InfoPlist.xcstrings, error: \(error)")
+                }
+            }
         }
         
         print("------------ Complete ------------")
@@ -264,6 +347,7 @@ struct ProjectState {
     let primaryLocalizationFile: LocalizationStringsFile
     let localizationFiles: [LocalizationStringsFile]
     let sourceFiles: [SourceFile]
+    let infoPlistLocalizationFile: XCStringsFile
     
     init(path: String, loadSourceFiles: Bool) {
         guard
@@ -293,6 +377,11 @@ struct ProjectState {
         }
         self.primaryLocalizationFile = primaryLocalizationFile
         
+        self.infoPlistLocalizationFile = validFileUrls
+            .filter { fileUrl in fileUrl.path.contains("InfoPlist.xcstrings") }
+            .map { XCStringsFile(path: $0.path) }
+            .last!
+        
         guard loadSourceFiles else {
             self.sourceFiles = []
             return
@@ -315,6 +404,33 @@ protocol KeyedLocatable: Locatable {
 }
 
 extension ProjectState {
+    // MARK: - XCStringsFile
+    struct XCStringsFile: Locatable {
+        let name: String
+        let path: String
+        var json: JSON
+        
+        var location: String { path }
+        
+        init(path: String) {
+            self.name = (path
+                .replacingOccurrences(of: ".xcstrings", with: "")
+                .components(separatedBy: "/")
+                .last ?? "Unknown")
+            self.path = path
+            self.json = XCStringsFile.parse(path)
+        }
+        
+        static func parse(_ path: String) -> JSON {
+            guard
+                let data: Data = FileManager.default.contents(atPath: path),
+                let json: JSON = try? JSONSerialization.jsonObject(with: data, options: [ .fragmentsAllowed ]) as? JSON
+            else { fatalError("Could not read from path: \(path)") }
+            
+            return json
+        }
+    }
+    
     // MARK: - LocalizationStringsFile
     
     struct LocalizationStringsFile: Locatable {
@@ -549,6 +665,7 @@ indirect enum MatchType: Hashable {
     case containsAnd(String, caseSensitive: Bool, MatchType)
     case regex(String)
     case previousLine(numEarlier: Int, MatchType)
+    case nextLine(MatchType)
     
     func matches(_ value: String, _ index: Int, _ lines: [String]) -> Bool {
         switch self {
@@ -582,6 +699,10 @@ indirect enum MatchType: Hashable {
                 
                 let targetIndex: Int = (index - numEarlier)
                 return type.matches(lines[targetIndex], targetIndex, lines)
+            
+            case .nextLine(let type):
+                guard index + 1 < lines.count else { return false }
+                return type.matches(lines[index + 1], index + 1, lines)
         }
     }
 }

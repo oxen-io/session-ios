@@ -12,6 +12,8 @@ public extension Singleton {
     static var hasAppContext: Bool { _appContext.wrappedValue != nil }
     
     static func setup(appContext: AppContext) { _appContext.mutate { $0 = appContext } }
+    
+    static var appName: String { "Session" } // stringlint:disable
 }
 
 // MARK: - AppContext

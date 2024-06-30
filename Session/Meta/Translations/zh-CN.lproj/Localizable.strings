@@ -1,1055 +1,726 @@
-/* No comment provided by engineer. */
-"ATTACHMENT" = "附件";
-/* Title for 'caption' mode of the attachment approval view. */
-"ATTACHMENT_APPROVAL_CAPTION_TITLE" = "注释";
-/* Format string for file extension label in call interstitial view */
-"ATTACHMENT_APPROVAL_FILE_EXTENSION_FORMAT" = "文件类型: %@";
-/* Format string for file size label in call interstitial view. Embeds: {{file size as 'N mb' or 'N kb'}}. */
-"ATTACHMENT_APPROVAL_FILE_SIZE_FORMAT" = "大小: %@";
-/* One-line label indicating the user can add no more text to the media message field. */
-"ATTACHMENT_APPROVAL_MESSAGE_LENGTH_LIMIT_REACHED" = "消息字数已满。";
-/* Label for 'send' button in the 'attachment approval' dialog. */
-"ATTACHMENT_APPROVAL_SEND_BUTTON" = "发送";
-/* Generic filename for an attachment with no known name */
-"ATTACHMENT_DEFAULT_FILENAME" = "附件";
-/* The title of the 'attachment error' alert. */
-"ATTACHMENT_ERROR_ALERT_TITLE" = "发送附件时出错";
-/* Attachment error message for image attachments which could not be converted to JPEG */
-"ATTACHMENT_ERROR_COULD_NOT_CONVERT_TO_JPEG" = "无法转码该图片。";
-/* Attachment error message for video attachments which could not be converted to MP4 */
-"ATTACHMENT_ERROR_COULD_NOT_CONVERT_TO_MP4" = "无法解析该视频。";
-/* Attachment error message for image attachments which cannot be parsed */
-"ATTACHMENT_ERROR_COULD_NOT_PARSE_IMAGE" = "无法识别图片。";
-/* Attachment error message for image attachments in which metadata could not be removed */
-"ATTACHMENT_ERROR_COULD_NOT_REMOVE_METADATA" = "无法清除图片元数据。";
-/* Attachment error message for image attachments which could not be resized */
-"ATTACHMENT_ERROR_COULD_NOT_RESIZE_IMAGE" = "无法调整图像大小。";
-/* Attachment error message for attachments whose data exceed file size limits */
-"ATTACHMENT_ERROR_FILE_SIZE_TOO_LARGE" = "附件过大。";
-/* Attachment error message for attachments with invalid data */
-"ATTACHMENT_ERROR_INVALID_DATA" = "附件中存在无效内容。";
-/* Attachment error message for attachments with an invalid file format */
-"ATTACHMENT_ERROR_INVALID_FILE_FORMAT" = "附件的文件格式无效。";
-/* Attachment error message for attachments without any data */
-"ATTACHMENT_ERROR_MISSING_DATA" = "无附件。";
-/* Alert title when picking a document fails for an unknown reason */
-"ATTACHMENT_PICKER_DOCUMENTS_FAILED_ALERT_TITLE" = "文件选取失败。";
-/* Alert body when picking a document fails because user picked a directory/bundle */
-"ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_BODY" = "请将此文件或目录压缩后再发送。";
-/* Alert title when picking a document fails because user picked a directory/bundle */
-"ATTACHMENT_PICKER_DOCUMENTS_PICKED_DIRECTORY_FAILED_ALERT_TITLE" = "不支持的文件";
-/* Short text label for a voice message attachment, used for thread preview and on the lock screen */
-"ATTACHMENT_TYPE_VOICE_MESSAGE" = "语音消息";
-/* Button label for the 'block' button */
-"BLOCK_LIST_BLOCK_BUTTON" = "加入黑名单";
-/* A format for the 'block user' action sheet title. Embeds {{the blocked user's name or phone number}}. */
-"BLOCK_LIST_BLOCK_USER_TITLE_FORMAT" = "屏蔽 %@？";
-/* A format for the 'unblock user' action sheet title. Embeds {{the unblocked user's name or phone number}}. */
-"BLOCK_LIST_UNBLOCK_TITLE_FORMAT" = "取消屏蔽 %@吗？";
-/* Button label for the 'unblock' button */
-"BLOCK_LIST_UNBLOCK_BUTTON" = "从黑名单中移除";
-/* The message format of the 'conversation blocked' alert. Embeds the {{conversation title}}. */
-"BLOCK_LIST_VIEW_BLOCKED_ALERT_MESSAGE_FORMAT" = "已屏蔽 %@。";
-/* The title of the 'user blocked' alert. */
-"BLOCK_LIST_VIEW_BLOCKED_ALERT_TITLE" = "用户已屏蔽";
-/* Alert title after unblocking a group or 1:1 chat. Embeds the {{conversation title}}. */
-"BLOCK_LIST_VIEW_UNBLOCKED_ALERT_TITLE_FORMAT" = "已取消屏蔽 %@。";
-/* An explanation of the consequences of blocking another user. */
-"BLOCK_USER_BEHAVIOR_EXPLANATION" = "被屏蔽的用户将无法向您发起通话，或发送消息。";
-/* Label for generic done button. */
-"BUTTON_DONE" = "完成";
-/* Button text to enable batch selection mode */
-"BUTTON_SELECT" = "选择";
-/* keyboard toolbar label when starting to search with no current results */
-"CONVERSATION_SEARCH_SEARCHING" = "正在搜索...";
-/* keyboard toolbar label when no messages match the search string */
-"CONVERSATION_SEARCH_NO_RESULTS" = "没有结果";
-/* keyboard toolbar label when exactly 1 message matches the search string */
-"CONVERSATION_SEARCH_ONE_RESULT" = "1个结果";
-/* keyboard toolbar label when more than 1 message matches the search string. Embeds {{number/position of the 'currently viewed' result}} and the {{total number of results}} */
-"CONVERSATION_SEARCH_RESULTS_FORMAT" = "%d条结果(共%d条)";
-/* table cell label in conversation settings */
-"CONVERSATION_SETTINGS_BLOCK_THIS_USER" = "屏蔽该用户";
-/* label for 'mute thread' cell in conversation settings */
-"CONVERSATION_SETTINGS_MUTE_LABEL" = "静音";
-/* Table cell label in conversation settings which returns the user to the conversation with 'search mode' activated */
-"CONVERSATION_SETTINGS_SEARCH" = "搜索对话";
-/* Title for the 'crop/scale image' dialog. */
-"CROP_SCALE_IMAGE_VIEW_TITLE" = "移动与缩放";
-/* Subtitle shown while the app is updating its database. */
-"DATABASE_VIEW_OVERLAY_SUBTITLE" = "这需要几分钟的时间。";
-/* Title shown while the app is updating its database. */
-"DATABASE_VIEW_OVERLAY_TITLE" = "正在优化数据库";
-/* The present; the current time. */
-"DATE_NOW" = "现在";
-/* table cell label in conversation settings */
-"DISAPPEARING_MESSAGES" = "阅后即焚";
-/* table cell label in conversation settings */
-"EDIT_GROUP_ACTION" = "编辑群组";
-/* Label indicating media gallery is empty */
-"GALLERY_TILES_EMPTY_GALLERY" = "此对话中没有媒体。";
-/* Label indicating loading is in progress */
-"GALLERY_TILES_LOADING_MORE_RECENT_LABEL" = "正在加载新媒体...";
-/* Label indicating loading is in progress */
-"GALLERY_TILES_LOADING_OLDER_LABEL" = "正在加载较早媒体...";
-/* Error displayed when there is a failure fetching a GIF from the remote service. */
-"GIF_PICKER_ERROR_FETCH_FAILURE" = "无法读取所请求的 GIF。请确认您是否处于在线状态。";
-/* Generic error displayed when picking a GIF */
-"GIF_PICKER_ERROR_GENERIC" = "发生了未知错误。";
-/* Shown when selected GIF couldn't be fetched */
-"GIF_PICKER_FAILURE_ALERT_TITLE" = "无法选择 GIF";
-/* Alert message shown when user tries to search for GIFs without entering any search terms. */
-"GIF_PICKER_VIEW_MISSING_QUERY" = "请输入您的搜索词。";
-/* Indicates that an error occurred while searching. */
-"GIF_VIEW_SEARCH_ERROR" = "错误。点击重试。";
-/* Indicates that the user's search had no results. */
-"GIF_VIEW_SEARCH_NO_RESULTS" = "无结果。";
-/* No comment provided by engineer. */
-"GROUP_CREATED" = "组群已成功创建。";
-/* No comment provided by engineer. */
-"GROUP_MEMBER_JOINED" = "%@ 加入了群组。 ";
-/* No comment provided by engineer. */
-"GROUP_MEMBER_LEFT" = "%@已退出群组。 ";
-/* No comment provided by engineer. */
-"GROUP_MEMBER_REMOVED" = "%@ 已被移出群组。 ";
-/* No comment provided by engineer. */
-"GROUP_MEMBERS_REMOVED" = "%@ 已被移出群组。 ";
-/* No comment provided by engineer. */
-"GROUP_TITLE_CHANGED" = "群组名称已改为 '%@'。";
-/* No comment provided by engineer. */
-"GROUP_UPDATED" = "群组更新完成。";
-/* No comment provided by engineer. */
-"GROUP_YOU_LEFT" = "您退出了这个群。";
-/* No comment provided by engineer. */
-"YOU_WERE_REMOVED" = " 您已被移出群组 ";
-/* Momentarily shown to the user when attempting to select more images than is allowed. Embeds {{max number of items}} that can be shared. */
-"IMAGE_PICKER_CAN_SELECT_NO_MORE_TOAST_FORMAT" = "您最多分享%@项。";
-/* alert title */
-"IMAGE_PICKER_FAILED_TO_PROCESS_ATTACHMENTS" = "选择附件失败。";
-/* Message for the alert indicating that an audio file is invalid. */
-"INVALID_AUDIO_FILE_ALERT_ERROR_MESSAGE" = "语音文件无效";
-/* Confirmation button within contextual alert */
-"LEAVE_BUTTON_TITLE" = "离开群组";
-/* table cell label in conversation settings */
-"LEAVE_GROUP_ACTION" = "离开群组";
-/* nav bar button item */
-"MEDIA_DETAIL_VIEW_ALL_MEDIA_BUTTON" = "所有媒体";
-/* Confirmation button text to delete selected media from the gallery, embeds {{number of messages}} */
-"MEDIA_GALLERY_DELETE_MULTIPLE_MESSAGES_FORMAT" = "删除%d条消息";
-/* Confirmation button text to delete selected media message from the gallery */
-"MEDIA_GALLERY_DELETE_SINGLE_MESSAGE" = "删除消息";
-/* embeds {{sender name}} and {{sent datetime}}, e.g. 'Sarah on 10/30/18, 3:29' */
-"MEDIA_GALLERY_LANDSCAPE_TITLE_FORMAT" = "%@ 于 %@";
-/* Format for the 'more items' indicator for media galleries. Embeds {{the number of additional items}}. */
-"MEDIA_GALLERY_MORE_ITEMS_FORMAT" = "+%@";
-/* Short sender label for media sent by you */
-"MEDIA_GALLERY_SENDER_NAME_YOU" = "您";
-/* Section header in media gallery collection view */
-"MEDIA_GALLERY_THIS_MONTH_HEADER" = "这个月";
-/* status message for failed messages */
-"MESSAGE_STATUS_FAILED" = "发送失败。";
-/* status message for read messages */
-"MESSAGE_STATUS_READ" = "已读";
-/* message status while message is sending. */
-"MESSAGE_STATUS_SENDING" = "发送中...";
-/* status message for sent messages */
-"MESSAGE_STATUS_SENT" = "已发送";
-/* status message while attachment is uploading */
-"MESSAGE_STATUS_UPLOADING" = "上传中...";
-/* notification title. Embeds {{author name}} and {{group name}} */
-"NEW_GROUP_MESSAGE_NOTIFICATION_TITLE" = "%@至%@";
-/* Label for 1:1 conversation with yourself. */
-"NOTE_TO_SELF" = "备忘录";
-/* Lock screen notification text presented after user powers on their device without unlocking. Embeds {{device model}} (either 'iPad' or 'iPhone') */
-"NOTIFICATION_BODY_PHONE_LOCKED_FORMAT" = "您可能在%@重启时收到了新消息。";
-/* No comment provided by engineer. */
-"BUTTON_OK" = "好";
-/* Info Message when {{other user}} disables or doesn't support disappearing messages */
-"OTHER_DISABLED_DISAPPEARING_MESSAGES_CONFIGURATION" = "%@ 取消了阅后即焚。";
-/* Info Message when {{other user}} updates message expiration to {{time amount}}, see the *_TIME_AMOUNT strings for context. */
-"OTHER_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION" = "%@ 将阅后即焚时长设为 %@。";
-/* alert title, generic error preventing user from capturing a photo */
-"PHOTO_CAPTURE_GENERIC_ERROR" = "无法拍摄图片。";
-/* alert title */
-"PHOTO_CAPTURE_UNABLE_TO_CAPTURE_IMAGE" = "无法拍摄图片。";
-/* alert title */
-"PHOTO_CAPTURE_UNABLE_TO_INITIALIZE_CAMERA" = "配置摄像头失败。";
-/* label for system photo collections which have no name. */
-"PHOTO_PICKER_UNNAMED_COLLECTION" = "未命名的相册";
-/* Notification action button title */
-"PUSH_MANAGER_MARKREAD" = "标记为已读";
-/* Notification action button title */
-"PUSH_MANAGER_REPLY" = "回复";
-/* Description of how and why Session iOS uses Touch ID/Face ID/Phone Passcode to unlock 'screen lock'. */
-"SCREEN_LOCK_REASON_UNLOCK_SCREEN_LOCK" = "验证以打开 Session。";
-/* Title for alert indicating that screen lock could not be unlocked. */
-"SCREEN_LOCK_UNLOCK_FAILED" = "认证失败";
-/* alert title when user attempts to leave the send media flow when they have an in-progress album */
-"SEND_MEDIA_ABANDON_TITLE" = "丢弃媒体？";
-/* alert action, confirming the user wants to exit the media flow and abandon any photos they've taken */
-"SEND_MEDIA_CONFIRM_ABANDON_ALBUM" = "丢弃媒体";
-/* Format string for the default 'Note' sound. Embeds the system {{sound name}}. */
-"SETTINGS_AUDIO_DEFAULT_TONE_LABEL_FORMAT" = "%@（默认）";
-/* Label for settings view that allows user to change the notification sound. */
-"SETTINGS_ITEM_NOTIFICATION_SOUND" = "消息提示音";
-/* Label for the 'no sound' option that allows users to disable sounds for notifications, etc. */
-"SOUNDS_NONE" = "无";
-/* {{number of days}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{5 days}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_DAYS" = "%@天";
-/* Label text below navbar button, embeds {{number of days}}. Must be very short, like 1 or 2 characters, The space is intentionally omitted between the text and the embedded duration so that we get, e.g. '5d' not '5 d'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_DAYS_SHORT_FORMAT" = "%@天";
-/* {{number of hours}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{5 hours}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_HOURS" = "%@小时";
-/* Label text below navbar button, embeds {{number of hours}}. Must be very short, like 1 or 2 characters, The space is intentionally omitted between the text and the embedded duration so that we get, e.g. '5h' not '5 h'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_HOURS_SHORT_FORMAT" = "%@时";
-/* {{number of minutes}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{5 minutes}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_MINUTES" = "%@分钟";
-/* Label text below navbar button, embeds {{number of minutes}}. Must be very short, like 1 or 2 characters, The space is intentionally omitted between the text and the embedded duration so that we get, e.g. '5m' not '5 m'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_MINUTES_SHORT_FORMAT" = "%@分";
-/* {{number of seconds}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{5 seconds}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_SECONDS" = "%@秒";
-/* Label text below navbar button, embeds {{number of seconds}}. Must be very short, like 1 or 2 characters, The space is intentionally omitted between the text and the embedded duration so that we get, e.g. '5s' not '5 s'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_SECONDS_SHORT_FORMAT" = "%@秒";
-/* {{1 day}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{1 day}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_SINGLE_DAY" = "%@天";
-/* {{1 hour}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{1 hour}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_SINGLE_HOUR" = "%@小时";
-/* {{1 minute}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{1 minute}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_SINGLE_MINUTE" = "%@分钟";
-/* {{1 week}} embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{1 week}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_SINGLE_WEEK" = "%@个星期";
-/* {{number of weeks}}, embedded in strings, e.g. 'Alice updated disappearing messages expiration to {{5 weeks}}'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_WEEKS" = "%@个星期";
-/* Label text below navbar button, embeds {{number of weeks}}. Must be very short, like 1 or 2 characters, The space is intentionally omitted between the text and the embedded duration so that we get, e.g. '5w' not '5 w'. See other *_TIME_AMOUNT strings */
-"TIME_AMOUNT_WEEKS_SHORT_FORMAT" = "%@周";
-/* Label for the cancel button in an alert or action sheet. */
-"TXT_CANCEL_TITLE" = "取消";
-/* No comment provided by engineer. */
-"TXT_DELETE_TITLE" = "删除";
-/* Filename for voice messages. */
-"VOICE_MESSAGE_FILE_NAME" = "语音消息";
-/* Message for the alert indicating the 'voice message' needs to be held to be held down to record. */
-"VOICE_MESSAGE_TOO_SHORT_ALERT_MESSAGE" = "长按来录制语音消息。";
-/* Title for the alert indicating the 'voice message' needs to be held to be held down to record. */
-"VOICE_MESSAGE_TOO_SHORT_ALERT_TITLE" = "语音消息";
-/* Info Message when you disable disappearing messages */
-"YOU_DISABLED_DISAPPEARING_MESSAGES_CONFIGURATION" = "您取消了阅后即焚。";
-/* Info message embedding a {{time amount}}, see the *_TIME_AMOUNT strings for context. */
-"YOU_UPDATED_DISAPPEARING_MESSAGES_CONFIGURATION" = "您将阅后即焚时长设置为%@。";
-// MARK: - Session
-"continue_2" = "继续";
-"copy" = "拷贝";
-"invalid_url" = "无效链接";
-"next" = "下一步";
-"share" = "共享";
-"invalid_session_id" = "无效的Session ID";
-"cancel" = "取消";
-"your_session_id" = "您的Session ID";
-"vc_landing_title_2" = "您的Session从这里开始...";
-"vc_landing_register_button_title" = "创建Session ID";
-"vc_landing_restore_button_title" = "继续使用您的Session ID";
-"vc_landing_link_button_title" = "关联现有帐号";
-"view_fake_chat_bubble_1" = "什么是Session？";
-"view_fake_chat_bubble_2" = "Session是一个去中心化的加密消息应用。";
-"view_fake_chat_bubble_3" = "所以Session不会收集我的个人信息或者对话元数据？怎么做到的？";
-"view_fake_chat_bubble_4" = "通过结合高效的匿名路由和端到端的加密技术。";
-"view_fake_chat_bubble_5" = "好朋友之间就要使用能够保证信息安全的聊天工具，不用谢啦！";
-"vc_register_title" = "向您的Session ID打个招呼吧";
-"vc_register_explanation" = "您的Session ID是其他用户在与您聊天时使用的独一无二的地址。Session ID与您的真实身份无关，它在设计上完全是匿名且私密的。";
-"vc_restore_title" = "恢复您的帐号";
-"vc_restore_explanation" = "在您重新登陆并需要恢复账户时，请输入您注册帐号时的恢复口令。";
-"vc_restore_seed_text_field_hint" = "输入您的恢复口令";
-"vc_link_device_title" = "关联设备";
-"vc_link_device_scan_qr_code_tab_title" = "扫描二维码";
-"vc_display_name_title_2" = "选择您的昵称";
-"vc_display_name_explanation" = "这就是您在使用Session时的名字。它可以是您的真实姓名，别名或您喜欢的其他任何名称。";
-"vc_display_name_text_field_hint" = "输入昵称";
-"vc_display_name_display_name_missing_error" = "请设定一个昵称";
-"vc_display_name_display_name_too_long_error" = "请选择一个更短的昵称";
-"vc_pn_mode_recommended_option_tag" = "推荐选项";
-"vc_pn_mode_no_option_picked_modal_title" = "请选择一个选项";
-"vc_home_empty_state_message" = "您还没有任何联系人";
-"vc_home_empty_state_button_title" = "开始对话";
-"vc_seed_title" = "您的恢复口令";
-"vc_seed_title_2" = "这里是您的恢复口令";
-"vc_seed_explanation" = "您的恢复口令是Session ID的主密钥 - 如果您无法访问您的现有设备，则可以使用它在其他设备上恢复您的Session ID。请将您的恢复口令存储在安全的地方，不要将其提供给任何人。";
-"vc_seed_reveal_button_title" = "长按显示内容";
-"view_seed_reminder_subtitle_1" = "保存恢复口令以保护您的帐号安全";
-"view_seed_reminder_subtitle_2" = "点击并按住遮盖住的单词以显示您的恢复口令，请将它安全地存储以保护您的Session ID。";
-"view_seed_reminder_subtitle_3" = "请确保将恢复口令存储在安全的地方";
-"vc_path_title" = "路径";
-"vc_path_explanation" = "Session会通过其去中心化网络中的多个服务节点跳转消息以隐藏IP。以下国家是您目前的消息连接跳转服务节点所在地：";
-"vc_path_device_row_title" = "您";
-"vc_path_guard_node_row_title" = "入口节点";
-"vc_path_service_node_row_title" = "服务节点";
-"vc_path_destination_row_title" = "目的地";
-"vc_path_learn_more_button_title" = "用于显示更详细的洋葱请求信息的按钮的标题。";
-"vc_create_private_chat_title" = "新消息";
-"vc_create_private_chat_enter_session_id_tab_title" = "输入Session ID";
-"vc_create_private_chat_scan_qr_code_tab_title" = "扫描二维码";
-"vc_enter_public_key_explanation" = "通过某人的 Session ID 或与他人分享你自己的 Session ID 来开始新的会话.";
-"vc_scan_qr_code_camera_access_explanation" = "Session需要摄像头访问权限才能扫描二维码";
-"vc_create_closed_group_title" = "创建群组";
-"vc_create_closed_group_text_field_hint" = "输入群组名称";
-"vc_create_closed_group_empty_state_message" = "您还没有任何联系人";
-"vc_create_closed_group_group_name_missing_error" = "请输入群组名称";
-"vc_create_closed_group_group_name_too_long_error" = "请输入较短的群组名称";
-"vc_create_closed_group_too_many_group_members_error" = "私密群组成员不得超过100个";
-"vc_join_public_chat_title" = "加入社区";
-"vc_join_public_chat_enter_group_url_tab_title" = "社区 URL";
-"vc_join_public_chat_scan_qr_code_tab_title" = "扫描二维码";
-"vc_enter_chat_url_text_field_hint" = "输入社区 URL";
-"vc_settings_title" = "设置";
-"vc_group_settings_title" = "群组设置";
-"vc_settings_display_name_missing_error" = "请设定一个名称";
-"vc_settings_display_name_too_long_error" = "请设定一个较短的名称";
-"vc_settings_privacy_button_title" = "隐私";
-"vc_settings_notifications_button_title" = "通知";
-"vc_settings_recovery_phrase_button_title" = "恢复口令";
-"vc_settings_clear_all_data_button_title" = "清除数据";
-"vc_qr_code_title" = "二维码";
-"vc_qr_code_view_my_qr_code_tab_title" = "查看我的二维码";
-"vc_qr_code_view_scan_qr_code_tab_title" = "扫描二维码";
-"vc_qr_code_view_scan_qr_code_explanation" = "扫描对方的二维码以发起对话";
-"vc_view_my_qr_code_explanation" = "这是您的二维码。其他用户可以对其进行扫描以发起与您的对话。";
-// MARK: - Not Yet Translated
-"fast_mode_explanation" = "新消息将快捷可靠地通过Apple通知服务发送。";
-"fast_mode" = "高速模式";
-"slow_mode_explanation" = "Session将不时在后台获取新消息。";
-"slow_mode" = "慢速模式";
-"vc_pn_mode_title" = "消息通知";
-"vc_link_device_recovery_phrase_tab_title" = "恢复口令";
-"vc_link_device_scan_qr_code_explanation" = "在您的其他设备上导航到设置 -> 恢复短语以显示您的 QR 代码。";
-"vc_enter_recovery_phrase_title" = "恢复口令";
-"vc_enter_recovery_phrase_explanation" = "输入您注册时获得的恢复口令以连接你的设备";
-"vc_enter_public_key_text_field_hint" = "输入Session ID或ONS名称";
-"admin_group_leave_warning" = "因为您是这个组的创建者，该组将被解散。该操作无法恢复。";
-"vc_join_open_group_suggestions_title" = "也可以加入这些…";
-"vc_settings_invite_a_friend_button_title" = "邀请朋友";
-"copied" = "已复制";
-"vc_conversation_settings_copy_session_id_button_title" = "复制Session ID";
-"vc_conversation_input_prompt" = "消息";
-"vc_conversation_voice_message_cancel_message" = "滑动以取消";
-"modal_download_attachment_title" = "是否信任 %@?";
-"modal_download_attachment_explanation" = "您确定要下载%@发送的媒体消息吗?";
-"modal_download_button_title" = "下载";
-"modal_open_url_title" = "打开链接?";
-"modal_open_url_explanation" = "确定要打开 %@ 吗?";
-"modal_open_url_button_title" = "打开";
-"modal_copy_url_button_title" = "复制链接";
-"modal_blocked_title" = "从黑名单中移除 %@ 吗？";
-"modal_blocked_explanation" = "确定解除屏蔽%@吗?";
-"modal_blocked_button_title" = "解除屏蔽";
-"modal_link_previews_title" = "是否启用链接预览?";
-"modal_link_previews_explanation" = "链接预览将为您发送或收到的URL生成预览内容。 该功能非常实用，但Session需要访问该链接指向的网站以生成预览。您可以随后在会话设置中禁用该功能。";
-"modal_link_previews_button_title" = "启用";
-"vc_share_title" = "分享到 Session";
-"vc_share_loading_message" = "正在准备附件......";
-"vc_share_sending_message" = "正在发送…";
-"vc_share_link_previews_unsecure" = "未加载非安全链接预览";
-"vc_share_link_previews_error" = "未能加载预览";
-"vc_share_link_previews_disabled_title" = "链接预览已禁用";
-"vc_share_link_previews_disabled_explanation" = "开启链接预览将为您发送或收到的URL生成预览内容。 该功能非常实用，但Session需要访问该链接指向的网站以生成预览。\n\n您可以随后在会话设置中禁用该功能。";
-"view_open_group_invitation_description" = "打开群组邀请";
-"vc_conversation_settings_invite_button_title" = "添加成员";
-"modal_send_seed_title" = "警告";
-"modal_send_seed_explanation" = "这是您的恢复口令。如果您将其发送给某人，他们将完全有权访问您的帐户。";
-"modal_send_seed_send_button_title" = "发送";
-"vc_conversation_settings_notify_for_mentions_only_title" = "仅在提及时通知";
-"vc_conversation_settings_notify_for_mentions_only_explanation" = "启用后，您只会收到提及您的消息通知。";
-"view_conversation_title_notify_for_mentions_only" = "仅在提及时通知";
-"message_deleted" = "此消息已被删除";
-"delete_message_for_me" = "仅为我删除";
-"delete_message_for_everyone" = "为所有人删除";
-"delete_message_for_me_and_recipient" = "为我和 %@ 删除";
-"context_menu_reply" = "回复";
-"context_menu_save" = "保存";
-"context_menu_ban_user" = "封禁用户";
-"context_menu_ban_and_delete_all" = "封禁并删除全部";
-"context_menu_ban_user_error_alert_message" = "无法封禁此用户。";
-"accessibility_expanding_attachments_button" = "添加附件";
-"accessibility_gif_button" = "Gif";
-"accessibility_document_button" = "文件";
-"accessibility_library_button" = "照片库";
-"accessibility_camera_button" = "相机";
-"accessibility_main_button_collapse" = "收起附件选项";
-"invalid_recovery_phrase" = "恢复口令无效";
-"DISMISS_BUTTON_TEXT" = "取消";
-/* Button text which opens the settings app */
-"OPEN_SETTINGS_BUTTON" = "设置";
-"call_outgoing" = "您呼叫了 %@";
-"call_incoming" = "%@ 来电";
-"call_missed" = "来自 %@ 的未接来电";
-"APN_Message" = "您有一条新消息。";
-"APN_Collapsed_Messages" = "你有 %@ 条新消息。";
-"PIN_BUTTON_TEXT" = "置顶";
-"UNPIN_BUTTON_TEXT" = "取消置顶";
-"modal_call_missed_tips_title" = "未接来电";
-"modal_call_missed_tips_explanation" = "未接听 '%@'，因为您需要在隐私设置中启用“语音和视频通话”权限。";
-"media_saved" = "%@ 保存了媒体内容。";
-"screenshot_taken" = "%@ 进行了截图。";
-"SEARCH_SECTION_CONTACTS" = "联系人和群组";
-"SEARCH_SECTION_MESSAGES" = "消息";
-"MESSAGE_REQUESTS_TITLE" = "消息请求";
-"MESSAGE_REQUESTS_EMPTY_TEXT" = "没有待处理的消息请求";
-"MESSAGE_REQUESTS_CLEAR_ALL" = "清除所有";
-"MESSAGE_REQUESTS_CLEAR_ALL_CONFIRMATION_TITLE" = "您确定要清除所有消息请求和群组邀请吗？";
-"MESSAGE_REQUESTS_CLEAR_ALL_CONFIRMATION_ACTON" = "清除";
-"MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON" = "您确定要删除此消息请求吗？";
-"MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON" = "您确定要屏蔽该联系人吗？";
-"MESSAGE_REQUESTS_INFO" = "发送消息给此用户将自动接受他们的消息请求并显示您的 Session ID。";
-"MESSAGE_REQUESTS_ACCEPTED" = "您的消息请求已被接受。";
-"MESSAGE_REQUESTS_NOTIFICATION" = "您有一个新的消息请求";
-"TXT_HIDE_TITLE" = "隐藏";
-"TXT_DELETE_ACCEPT" = "接受";
-"TXT_BLOCK_USER_TITLE" = "屏蔽用户";
-"ALERT_ERROR_TITLE" = "错误";
-"modal_call_permission_request_title" = "请授予通话权限";
-"modal_call_permission_request_explanation" = "您可以在隐私设置中启用“语音和视频通话”权限。";
-"DEFAULT_OPEN_GROUP_LOAD_ERROR_TITLE" = "啊呀！出错了。";
-"DEFAULT_OPEN_GROUP_LOAD_ERROR_SUBTITLE" = "请稍后再试";
-"LOADING_CONVERSATIONS" = "载入对话中...";
-"DATABASE_MIGRATION_FAILED" = "优化数据库\n时发生错误\n您可以导出并分享您的应用程序日志来帮助我们排除故障，或者您也可以还原您的设备\n\n警告：还原您的设备将导致丢失两周前的所有数据。";
-"RECOVERY_PHASE_ERROR_GENERIC" = "出现了一些问题，请检查您的恢复短语，然后重试。";
-"RECOVERY_PHASE_ERROR_LENGTH" = "看起来您没有输入足够多的单词。请检查您的恢复短语，然后重试。";
-"RECOVERY_PHASE_ERROR_LAST_WORD" = "您似乎缺少您恢复短语的最后一个词。请检查您输入的内容，然后重试。";
-"RECOVERY_PHASE_ERROR_INVALID_WORD" = "恢复短语中似乎有一个无效的单词。请检查您输入的内容，然后重试。";
-"RECOVERY_PHASE_ERROR_FAILED" = "无法验证您的恢复短语。请检查您输入的内容，然后重试。";
-/* Indicates that an unknown error occurred while using Touch ID/Face ID/Phone Passcode. */
-"SCREEN_LOCK_ENABLE_UNKNOWN_ERROR" = "无法访问身份验证。";
-/* Indicates that Touch ID/Face ID/Phone Passcode authentication failed. */
-"SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_FAILED" = "验证失败";
-/* Indicates that Touch ID/Face ID/Phone Passcode is 'locked out' on this device due to authentication failures. */
-"SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_LOCKOUT" = "认证失败次数太多，请稍后再试。";
-/* Indicates that Touch ID/Face ID/Phone Passcode are not available on this device. */
-"SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_AVAILABLE" = "您必须在您的 iOS 设置中启用密码才能使用屏幕锁定。";
-/* Indicates that Touch ID/Face ID/Phone Passcode is not configured on this device. */
-"SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_NOT_ENROLLED" = "您必须在您的 iOS 设置中启用密码才能使用屏幕锁定。";
-/* Indicates that Touch ID/Face ID/Phone Passcode passcode is not set. */
-"SCREEN_LOCK_ERROR_LOCAL_AUTHENTICATION_PASSCODE_NOT_SET" = "您必须在您的 iOS 设置中启用密码才能使用屏幕锁定。";
-/* Label for the button to send a message */
-"SEND_BUTTON_TITLE" = "发送";
-/* Generic text for button that retries whatever the last action was. */
-"RETRY_BUTTON_TEXT" = "重试";
-/* notification action */
-"SHOW_THREAD_BUTTON_TITLE" = "显示聊天";
-/* notification body */
-"SEND_FAILED_NOTIFICATION_BODY" = "消息发送失败";
-"INVALID_SESSION_ID_MESSAGE" = "请检查 Session ID，然后重试。";
-"INVALID_RECOVERY_PHRASE_MESSAGE" = "请检查恢复短语，然后重试。";
-"MEDIA_TAB_TITLE" = "媒体";
-"DOCUMENT_TAB_TITLE" = "文档";
-"DOCUMENT_TILES_EMPTY_DOCUMENT" = "您在此对话中没有任何文档。";
-"DOCUMENT_TILES_LOADING_MORE_RECENT_LABEL" = "正在加载较新的文档…";
-"DOCUMENT_TILES_LOADING_OLDER_LABEL" = "正在加载旧文档…";
-/* The name for the emoji category 'Activities' */
-"EMOJI_CATEGORY_ACTIVITIES_NAME" = "活动";
-/* The name for the emoji category 'Animals & Nature' */
-"EMOJI_CATEGORY_ANIMALS_NAME" = "动物和自然";
-/* The name for the emoji category 'Flags' */
-"EMOJI_CATEGORY_FLAGS_NAME" = "旗帜";
-/* The name for the emoji category 'Food & Drink' */
-"EMOJI_CATEGORY_FOOD_NAME" = "食物和饮料";
-/* The name for the emoji category 'Objects' */
-"EMOJI_CATEGORY_OBJECTS_NAME" = "物体";
-/* The name for the emoji category 'Recents' */
-"EMOJI_CATEGORY_RECENTS_NAME" = "最近使用过的";
-/* The name for the emoji category 'Smileys & People' */
-"EMOJI_CATEGORY_SMILEYSANDPEOPLE_NAME" = "表情和人物";
-/* The name for the emoji category 'Symbols' */
-"EMOJI_CATEGORY_SYMBOLS_NAME" = "符号";
-/* The name for the emoji category 'Travel & Places' */
-"EMOJI_CATEGORY_TRAVEL_NAME" = "旅行和地点";
-"EMOJI_REACTS_NOTIFICATION" = "%@用 %@ 对一条消息作出表态。";
-"EMOJI_REACTS_MORE_REACTORS_ONE" = "和另一个人对此消息作出%@表态。";
-"EMOJI_REACTS_MORE_REACTORS_MUTIPLE" = "还有 %@ 个其他人对此消息作出了 %@ 表态。";
-"EMOJI_REACTS_RATE_LIMIT_TOAST" = "慢点！您已经发送了太多的表情回应。请稍后再试。";
-/* New conversation screen*/
-"vc_new_conversation_title" = "新的会话";
-"CREATE_GROUP_BUTTON_TITLE" = "创建";
-"JOIN_COMMUNITY_BUTTON_TITLE" = "加入";
-"PRIVACY_TITLE" = "隐私";
-"PRIVACY_SECTION_SCREEN_SECURITY" = "屏幕安全";
-"PRIVACY_SCREEN_SECURITY_LOCK_SESSION_TITLE" = "锁定 Session";
-"PRIVACY_SCREEN_SECURITY_LOCK_SESSION_DESCRIPTION" = "需要Touch ID、Face ID或您的密码解锁 Session。";
-"PRIVACY_SECTION_READ_RECEIPTS" = "已读回执";
-"PRIVACY_READ_RECEIPTS_TITLE" = "已读回执";
-"PRIVACY_READ_RECEIPTS_DESCRIPTION" = "在一对一的聊天中发送已读回执";
-"PRIVACY_SECTION_TYPING_INDICATORS" = "输入状态展示";
-"PRIVACY_TYPING_INDICATORS_TITLE" = "输入状态展示";
-"PRIVACY_TYPING_INDICATORS_DESCRIPTION" = "在一对一聊天中查看并展示输入状态。";
-"PRIVACY_SECTION_LINK_PREVIEWS" = "链接预览";
-"PRIVACY_LINK_PREVIEWS_TITLE" = "发送链接预览";
-"PRIVACY_LINK_PREVIEWS_DESCRIPTION" = "为支持的 URL 生成链接预览。";
-"PRIVACY_SECTION_CALLS" = "呼叫(Beta功能)";
-"PRIVACY_CALLS_TITLE" = "语音和视频通话";
-"PRIVACY_CALLS_DESCRIPTION" = "允许与其它用户进行语音和视频通话。";
-"PRIVACY_CALLS_WARNING_TITLE" = "语音和视频通话(Beta功能)";
-"PRIVACY_CALLS_WARNING_DESCRIPTION" = "当使用测试中的呼叫功能时，您的 IP 地址对您的通话伙伴和一个 Oxen 基金会服务器可见。 您确定要启用语音和视频通话吗？";
-"NOTIFICATIONS_TITLE" = "通知";
-"NOTIFICATIONS_SECTION_STRATEGY" = "通知选项";
-"NOTIFICATIONS_STRATEGY_FAST_MODE_TITLE" = "使用快速模式";
-"NOTIFICATIONS_STRATEGY_FAST_MODE_DESCRIPTION" = "您将会收到通过Apple 的通知服务器发出的可靠即时的新消息通知。";
-"NOTIFICATIONS_STRATEGY_FAST_MODE_ACTION" = "转到系统通知设置";
-"NOTIFICATIONS_SECTION_STYLE" = "通知样式";
-"NOTIFICATIONS_STYLE_SOUND_TITLE" = "声音";
-"NOTIFICATIONS_STYLE_SOUND_WHEN_OPEN_TITLE" = "打开应用程序时的声音";
-"NOTIFICATIONS_STYLE_CONTENT_TITLE" = "通知内容";
-"NOTIFICATIONS_STYLE_CONTENT_DESCRIPTION" = "在通知中显示的信息。";
-"NOTIFICATIONS_STYLE_CONTENT_OPTION_NAME_AND_CONTENT" = "发件人名称和信息内容";
-"NOTIFICATIONS_STYLE_CONTENT_OPTION_NAME_ONLY" = "仅显示发送者";
-"NOTIFICATIONS_STYLE_CONTENT_OPTION_NO_NAME_OR_CONTENT" = "不显示发送者和信息内容";
-"CONVERSATION_SETTINGS_TITLE" = "对话";
-"CONVERSATION_SETTINGS_SECTION_MESSAGE_TRIMMING" = "信息整理";
-"CONVERSATION_SETTINGS_MESSAGE_TRIMMING_TITLE" = "整理社区";
-"CONVERSATION_SETTINGS_MESSAGE_TRIMMING_DESCRIPTION" = "删除在超过2,000条消息的社区中的6个月之前的消息。";
-"CONVERSATION_SETTINGS_SECTION_AUDIO_MESSAGES" = "音频消息";
-"CONVERSATION_SETTINGS_AUDIO_MESSAGES_AUTOPLAY_TITLE" = "自动播放音频消息";
-"CONVERSATION_SETTINGS_AUDIO_MESSAGES_AUTOPLAY_DESCRIPTION" = "自动播放连续音频消息。";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_TITLE" = "已屏蔽的联系人";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_EMPTY_STATE" = "您没有屏蔽任何联系人。";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK" = "取消屏蔽";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_SINGLE" = "确定解除对%@的屏蔽吗?";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_FALLBACK" = "此联系人";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_1" = "确定解除对%@的屏蔽吗";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_2_SINGLE" = "和 %@？";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_3" = "和另外 %d 个人？";
-"CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_ACTON" = "取消屏蔽";
-"APPEARANCE_TITLE" = "外观";
-"APPEARANCE_THEMES_TITLE" = "主题";
-"APPEARANCE_PRIMARY_COLOR_TITLE" = "主色调";
-"APPEARANCE_PRIMARY_COLOR_PREVIEW_INC_QUOTE" = "你好吗？";
-"APPEARANCE_PRIMARY_COLOR_PREVIEW_INC_MESSAGE" = "我很好，谢谢，你呢？";
-"APPEARANCE_PRIMARY_COLOR_PREVIEW_OUT_MESSAGE" = "我做得很好，谢谢。";
-"APPEARANCE_NIGHT_MODE_TITLE" = "自动开启夜间模式";
-"APPEARANCE_NIGHT_MODE_TOGGLE" = "匹配系统设置";
-"HELP_TITLE" = "帮助";
-"HELP_REPORT_BUG_TITLE" = "报告 Bug";
-"HELP_REPORT_BUG_DESCRIPTION" = "导出您的日志，然后通过Session帮助服务台上传日志。";
-"HELP_REPORT_BUG_ACTION_TITLE" = "导出日志";
-"HELP_TRANSLATE_TITLE" = "翻译 Session";
-"HELP_FEEDBACK_TITLE" = "感谢您的反馈。";
-"HELP_FAQ_TITLE" = "常见问题（FAQ）";
-"HELP_SUPPORT_TITLE" = "帮助";
-"modal_clear_all_data_title" = "清除所有数据";
-"modal_clear_all_data_explanation" = "这将永久删除您的消息和联系人。您想仅清除此设备，还是同时从网络中删除您的数据？";
-"modal_clear_all_data_explanation_2" = "您确定要从网络中删除您的数据吗？ 如果您继续，您将无法恢复您的消息或联系人。";
-"modal_clear_all_data_device_only_button_title" = "仅清除设备";
-"modal_clear_all_data_entire_account_button_title" = "清除设备和网络数据";
-"dialog_clear_all_data_deletion_failed_1" = "数据未被一个服务节点删除。服务节点ID： %@";
-"dialog_clear_all_data_deletion_failed_2" = "数据未被 %@ 服务节点删除。服务节点ID： %@";
-"modal_clear_all_data_confirm" = "清除";
-"modal_seed_title" = "您的恢复口令";
-"modal_seed_explanation" = "您可以使用恢复短语来恢复您的帐户或链接一个设备。";
-"modal_permission_explanation" = "Session 需要 %@ 访问权限才能继续。您可以在 iOS 设置中启用访问。";
-"modal_permission_settings_title" = "设置";
-"modal_permission_camera" = "相机";
-"modal_permission_microphone" = "麦克风";
-"modal_permission_library" = "媒体库";
-"DISAPPEARING_MESSAGES_OFF" = "关闭";
-"DISAPPEARING_MESSAGES_SUBTITLE_OFF" = "关闭";
-"COPY_GROUP_URL" = "复制群组链接";
-"NEW_CONVERSATION_CONTACTS_SECTION_TITLE" = "联系人";
-"GROUP_ERROR_NO_MEMBER_SELECTION" = "请至少选择一名群组成员";
-"GROUP_CREATION_PLEASE_WAIT" = "正在创建群组，请稍候...";
-"GROUP_CREATION_ERROR_TITLE" = "无法创建群组";
-"GROUP_CREATION_ERROR_MESSAGE" = "请检查您的网络连接，然后重试。";
-"GROUP_UPDATE_ERROR_TITLE" = "无法更新群组";
-"GROUP_UPDATE_ERROR_MESSAGE" = "添加或移除其他成员时无法离开。";
-"GROUP_ACTION_REMOVE" = "移除";
-"GROUP_TITLE_MEMBERS" = "成员";
-"GROUP_TITLE_FALLBACK" = "群组";
-"DM_ERROR_DIRECT_BLINDED_ID" = "您只能从社区内发送消息到 Blinded ID";
-"DM_ERROR_INVALID" = "请检查 Session ID 或 ONS 名称，然后重试。";
-"COMMUNITY_ERROR_INVALID_URL" = "请检查你输入的链接是否正确，然后重试。";
-"COMMUNITY_ERROR_GENERIC" = "无法加入";
-"DISAPPERING_MESSAGES_TITLE" = "阅后即焚消息";
-"DISAPPERING_MESSAGES_TYPE_TITLE" = "删除类别";
-"DISAPPERING_MESSAGES_TYPE_AFTER_READ_TITLE" = "阅读后消失";
-"DISAPPERING_MESSAGES_TYPE_AFTER_READ_DESCRIPTION" = "被读取后消息将被删除";
-"DISAPPERING_MESSAGES_TYPE_AFTER_SEND_TITLE" = "发送后消失。";
-"DISAPPERING_MESSAGES_TYPE_AFTER_SEND_DESCRIPTION" = "消息发送后删除消息";
-"DISAPPERING_MESSAGES_TIMER_TITLE" = "定时器";
-"DISAPPERING_MESSAGES_SAVE_TITLE" = "会话设置";
-"DISAPPERING_MESSAGES_GROUP_WARNING" = "此设置适用于此对话中的所有人。";
-"DISAPPERING_MESSAGES_GROUP_WARNING_ADMIN_ONLY" = "此设置适用于此对话中的所有人。只有群组管理员可以更改此设置。";
-/* Informational message shown when a conversation participant enables disappearing messages. The first '%@' will be the participants name, the second '%@' will be the duration and the third '%@' will indicate whether the countdown should start after the messages are sent or after they are read. */
-"DISAPPERING_MESSAGES_INFO_ENABLE" = "%@已设置%@消息在被%@后消失";
-"DISAPPERING_MESSAGES_INFO_UPDATE" = "%@已改变消息%@在被%@后消失";
-/* Informational message shown when a conversation participant enables disappearing messages. The '%@' will be the participants name. */
-"DISAPPERING_MESSAGES_INFO_DISABLE" = "%@ 关闭了阅后即焚消息";
-
-/* context_menu_info */
-"context_menu_info" = "信息";
-
-/* An error that is displayed when the application fails for create it's initial connection to the database */
-"DATABASE_STARTUP_FAILED" = "An error occurred when opening the database\n\nYou can export your application logs to share for troubleshooting or you can try to restore your device\n\nWarning: Restoring your device will result in loss of any data older than two weeks";
-
-/* A warning displayed to the user when the application takes too long to launch */
-"APP_STARTUP_TIMEOUT" = "The app is taking a long time to start\n\nYou can continue to wait for the app to start, export your application logs to share for troubleshooting or you can try to open the app again";
-
-/* The title of a button on a modal shown when the application fails to start, pressing the button closes the application */
-"APP_STARTUP_EXIT" = "退出";
-
-/* An error which occurs if the user tries to restore the database after an initial failure and it fails to restore */
-"DATABASE_RESTORE_FAILED" = "An error occurred when opening the restored database\n\nYou can export your application logs to share for troubleshooting but to continue to use Session you may need to reinstall";
-
-/* Text displayed in place of a quoted message when the original message is not on the device */
-"QUOTED_MESSAGE_NOT_FOUND" = "未找到原消息";
-
-/* EMOJI_REACTS_SHOW_LESS */
-"EMOJI_REACTS_SHOW_LESS" = "隐藏细节";
-
-/* PRIVACY_SECTION_MESSAGE_REQUESTS */
-"PRIVACY_SECTION_MESSAGE_REQUESTS" = "消息请求";
-
-/* PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_TITLE */
-"PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_TITLE" = "群组消息请求";
-
-/* PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_DESCRIPTION */
-"PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_DESCRIPTION" = "允许来自群组会话内成员的消息请求";
-
-/* Information displayed above the input when sending a message to a new user for the first time explaining limitations around the types of messages which can be sent before being approved */
-"MESSAGE_REQUEST_PENDING_APPROVAL_INFO" = "对方同意消息请求后，您将可以发送语音信息及附件";
-
-/* State of a message while it's still in the process of being sent */
-"MESSAGE_DELIVERY_STATUS_SENDING" = "发送中";
-
-/* State of a message once it has been sent */
-"MESSAGE_DELIVERY_STATUS_SENT" = "已发送";
-
-/* State of a message after the recipient has read the message */
-"MESSAGE_DELIVERY_STATUS_READ" = "已读";
-
-/* State of a message if it failed to be sent */
-"MESSAGE_DELIVERY_STATUS_FAILED" = "发送失败";
-
-/* Title of the message information screen describing the date/time a message was sent */
-"MESSAGE_INFO_SENT" = "已发送";
-
-/* Title of the message information screen describing the date/time a message was received on a specific device */
-"MESSAGE_INFO_RECEIVED" = "已接收";
-
-/* Title of the message information screen describing the sender of the message */
-"MESSAGE_INFO_FROM" = "来自";
-
-/* Title of the message information screen describing the identifier of the attachment */
-"ATTACHMENT_INFO_FILE_ID" = "文件ID";
-
-/* Title of the message information screen describing the file type of the attachment */
-"ATTACHMENT_INFO_FILE_TYPE" = "文件类型";
-
-/* Title of the message information screen describing the size of the attachment */
-"ATTACHMENT_INFO_FILE_SIZE" = "文件大小";
-
-/* Title on the message information screen describing the resolution of a media attachment */
-"ATTACHMENT_INFO_RESOLUTION" = "Resolution";
-
-/* Title on the message information screen describing the duration of a media attachment */
-"ATTACHMENT_INFO_DURATION" = "Duration";
-
-/* State of a message after it failed to sync to the current users other devices */
-"MESSAGE_DELIVERY_STATUS_FAILED_SYNC" = "同步失败";
-
-/* State of a message while it's in the process of being synced to the users other devices */
-"MESSAGE_DELIVERY_STATUS_SYNCING" = "正在同步";
-
-/* Title of the modal that appears after a user taps on the state of a message which failed to send */
-"MESSAGE_DELIVERY_FAILED_TITLE" = "消息发送失败";
-
-/* Title of the modal that appears after a user taps on the state of a message which failed to sync to the users other devices */
-"MESSAGE_DELIVERY_FAILED_SYNC_TITLE" = "未能将消息同步至其他设备";
-
-/* Action for the modal shown when asking the user whether they want to delete from all of their devices */
-"delete_message_for_me_and_my_devices" = "从我的所有设备删除";
-
-/* Action in the long-press menu to trigger a message to be sent again after it has failed */
-"context_menu_resend" = "重新发送";
-
-/* Action in the long-press menu to trigger a message to be synced again after it has failed */
-"context_menu_resync" = "重新同步";
-
-/* Title of a modal show the first time a user tries to search for GIFs */
-"GIPHY_PERMISSION_TITLE" = "在查找GIF动态图片吗？";
-
-/* Message of a modal show the first time a user tries to search for GIFs */
-"GIPHY_PERMISSION_MESSAGE" = "Session将会连接到Giphy以提供搜索结果。当您发送GIF动图时，您的元数据无法受到完整保护。";
-
-/* Action in the long-press menu to view more information about a specific message */
-"message_info_title" = "会话信息";
-
-/* Action to mute a conversation in the swipe menu */
-"mute_button_text" = "静音";
-
-/* Action in the swipe menu to unmute a conversation */
-"unmute_button_text" = "解除静音";
-
-/* Action in the swipe menu to mark a conversation as read */
-"MARK_AS_READ" = "标记为已读";
-
-/* Action in the swipe menu to mark a conversation as unread */
-"MARK_AS_UNREAD" = "标记为未读";
-
-/* Title of the confirmation modal show when attempting to leave a group conversation */
-"leave_group_confirmation_alert_title" = "离开群组";
-
-/* Title of the confirmation modal show when attempting to leave a community conversation */
-"leave_community_confirmation_alert_title" = "离开社区";
-
-/* Message in the confirmation modal when leaving a community conversation */
-"leave_community_confirmation_alert_message" = "确定要退出%@吗？";
-
-/* Conversation subtitle while the user in the process of leaving */
-"group_you_leaving" = "退出中...";
-
-/* Conversation subtitle if the user in the failed to leave */
-"group_leave_error" = "退出群组失败！";
-
-/* Message within a conversation indicating the device was unable to leave a group conversation */
-"group_unable_to_leave" = "未能退出群组，请重试";
-
-/* Title in the confirmation modal to delete a group */
-"delete_group_confirmation_alert_title" = "删除群组";
-
-/* Message in the confirmation modal to delete a group */
-"delete_group_confirmation_alert_message" = "您确定要删除%@吗？";
-
-/* Title in the confirmation modal when the user tries to delete a one-to-one conversation */
-"delete_conversation_confirmation_alert_title" = "删除会话";
-
-/* Message in the confirmation modal when the user tries to delete a one-to-one conversation */
-"delete_conversation_confirmation_alert_message" = "Are you sure you want to delete your conversation with %@?";
-
-/* Title in the confirmation modal when the user tries to hide the 'Note to Self' conversation */
-"hide_note_to_self_confirmation_alert_title" = "隐藏备忘录";
-
-/* Message in the confirmation modal when the user tries to hide the 'Note to Self' conversation */
-"hide_note_to_self_confirmation_alert_message" = "您确定要隐藏%@吗？";
-
-/* Title in the modal for updating the users profile display picture */
-"update_profile_modal_title" = " 设置展示图片";
-
-/* Save action in the modal for updating the users profile display picture */
-"update_profile_modal_save" = "保存";
-
-/* Remove action in the modal for updating the users profile display picture */
-"update_profile_modal_remove" = "Remove";
-
-/* Title for the error when failing to remove the users profile display picture */
-"update_profile_modal_remove_error_title" = "Unable to remove avatar image";
-
-/* Title for the error when the user selects a profile display picture that is too large */
-"update_profile_modal_max_size_error_title" = "Maximum File Size Exceeded";
-
-/* Message for the error when the user selects a profile display picture that is too large */
-"update_profile_modal_max_size_error_message" = "Please select a smaller photo and try again";
-
-/* Title for the error when the user fails to update their profile display picture */
-"update_profile_modal_error_title" = "Couldn't Update Profile";
-
-/* Message for the error when the user fails to update their profile display picture */
-"update_profile_modal_error_message" = "Please check your internet connection and try again";
-
-/* Placeholder when entering a nickname for a contact */
-"CONTACT_NICKNAME_PLACEHOLDER" = "Enter a name";
-
-/* The separator within a conversation indicating that following messages are unread */
-"UNREAD_MESSAGES" = "Unread Messages";
-
-/* Empty state for a conversation */
-"CONVERSATION_EMPTY_STATE" = "You have no messages from %@. Send a message to start the conversation!";
-
-/* Empty state for a read-only conversation */
-"CONVERSATION_EMPTY_STATE_READ_ONLY" = "There are no messages in %@.";
-
-/* Empty state for the 'Note to Self' conversation */
-"CONVERSATION_EMPTY_STATE_NOTE_TO_SELF" = "You have no messages in %@.";
-
-/* Message to indicate a user has Community Message Requests disabled */
-"COMMUNITY_MESSAGE_REQUEST_DISABLED_EMPTY_STATE" = "%@ has message requests from Community conversations turned off, so you cannot send them a message.";
-
-/* Warning to indicate one of the users devices is running an old version of Session */
-"USER_CONFIG_OUTDATED_WARNING" = "Some of your devices are using outdated versions. Syncing may be unreliable until they are updated.";
-
-/* Ann error displayed if the device is unable to retrieve the users recovery password */
-"LOAD_RECOVERY_PASSWORD_ERROR" = "An error occurred when trying to load your recovery password.\n\nPlease export your logs, then upload the file though Session's Help Desk to help resolve this issue.";
-
-/* An error displayed when trying to send a message if the device is unable to save it to the database */
-"FAILED_TO_STORE_OUTGOING_MESSAGE" = "An error occurred when trying to store the outgoing message for sending, you may need to restart the app before you can send messages.";
-
-/* An error indicating that the device was unable to access the database for some reason */
-"database_inaccessible_error" = "There is an issue opening the database. Please restart the app and try again.";
-
-/* A message indicating how the disappearing messages setting applies in a one-to-one conversation */
-"DISAPPERING_MESSAGES_SUBTITLE_CONTACTS" = "This setting applies to messages you send in this conversation.";
-
-/* A message indicating how the disappearing messages setting applies in a group conversation */
-"DISAPPERING_MESSAGES_SUBTITLE_GROUPS" = "Messages disappear after they have been sent.";
-
-/* A record that appears within the message history to indicate that the current user turned on disappearing messages */
-"YOU_DISAPPEARING_MESSAGES_INFO_ENABLE" = "You set your messages to disappear %@ after they have been %@.";
-
-/* A record that appears within the message history to indicate that the current user update the disappearing messages setting */
-"YOU_DISAPPEARING_MESSAGES_INFO_UPDATE" = "You have changed messages to disappear %@ after they have been %@";
-
-/* A record that appears within the message history to indicate that the current user has disabled disappearing messages */
-"YOU_DISAPPEARING_MESSAGES_INFO_DISABLE" = "You turned off disappearing messages. Messages you send will no longer disappear.";
-
-/* The title for the legacy type of disappearing messages on the disappearing messages configuration screen */
-"DISAPPEARING_MESSAGES_TYPE_LEGACY_TITLE" = "Legacy";
-
-/* The description for the legacy type of disappearing messages on the disappearing messages configuration screen */
-"DISAPPEARING_MESSAGES_TYPE_LEGACY_DESCRIPTION" = "Original version of disappearing messages.";
-
-/* A warning shown at the top of a conversation to indicate a participant is using an old version of Session which may not support the updated disappearing messages functionality */
-"DISAPPEARING_MESSAGES_OUTDATED_CLIENT_BANNER" = "%@ is using an outdated client. Disappearing messages may not work as expected.";
-
-/* An error which can occur when a user tries to update from a version that Session no longer supports updating from */
-"DATABASE_UNSUPPORTED_MIGRATION" = "You are trying to updated from a version which no longer supports upgrading\n\nIn order to continue to use session you need to restore your device\n\nWarning: Restoring your device will result in loss of any data older than two weeks";
-
-/* DISAPPEARING_MESSAGE_STATE_READ
-The point that a message will disappear in a disappearing message update message for disappear after read */
-"DISAPPEARING_MESSAGE_STATE_READ" = "read";
-
-/* The point that a message will disappear in a disappearing message update message for disappear after send */
-"DISAPPEARING_MESSAGE_STATE_SENT" = "sent";
-
-/* The current state for the legacy disappearing messages setting, the '%@' will be replaced by a short-form duration */
-"DISAPPERING_MESSAGES_SUMMARY_LEGACY" = "Disappear After - %@";
-
-/* The current state for the disappear after read setting, the '%@' will be replaced by a short-form duration */
-"DISAPPERING_MESSAGES_SUMMARY_READ" = "Disappear After Read - %@";
-
-/* The current state for the disappear after send setting, the '%@' will be replaced by a short-form duration */
-"DISAPPERING_MESSAGES_SUMMARY_SEND" = "Disappear After Send - %@";
-
-/* The subtitle describing the current legacy disappearing messages setting, the '%@' will be replaced by a duration */
-"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_LEGACY" = "Disappear After: %@";
-
-/* The subtitle describing the current disappear after read setting, the '%@' will be replaced by a duration */
-"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_READ" = "Disappear After Read: %@";
-
-/* The subtitle describing the current disappear after send setting, the '%@' will be replaced by a duration */
-"DISAPPEARING_MESSAGES_SUBTITLE_DISAPPEAR_AFTER_SEND" = "Disappear After Send: %@";
-
-/* An informational message displayed when the name of a group is changed, the '%@' will be the updated name. */
-"GROUP_MESSAGE_INFO_NAME_UPDATED_TO" = "Group name is now %@.";
-
-/* An informational message displayed when the name of a group is changed. */
-"GROUP_MESSAGE_INFO_NAME_UPDATED" = "Group name updated.";
-
-/* An informational message displayed when the display picture of a group is changed. */
-"GROUP_MESSAGE_INFO_PICTURE_UPDATED" = "Group display picture updated.";
-
-/* An informational message displayed when a single member joined the group, the '%@' will be the members name. */
-"GROUP_MESSAGE_INFO_MEMBER_ADDED" = "%@ was invited to join the group.";
-
-/* An informational message displayed when two members joined the group, the '%@' will be the names of both members. */
-"GROUP_MESSAGE_INFO_TWO_MEMBERS_ADDED" = "%@ and %@ were invited to join the group.";
-
-/* An informational message displayed when multiple members joined the group, the first '%@' will be the first members name and the second '%@' will be the number of additional members added. */
-"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_ADDED" = "%@ and %@ others were invited to join the group.";
-
-/* An informational message displayed when a single member was removed from the group, the '%@' will be the members. */
-"GROUP_MESSAGE_INFO_MEMBER_REMOVED" = "%@ was removed from the group.";
-
-/* An informational message displayed when two members were removed from the group, the '%@' will be the members names. */
-"GROUP_MESSAGE_INFO_TWO_MEMBERS_REMOVED" = "%@ and %@ were removed from the group.";
-
-/* An informational message displayed when multiple members were removed from the group, the first '%@' will be the first members name and the second '%@' will be the number of additional members removed. */
-"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_REMOVED" = "%@ and %@ others were removed from the group.";
-
-/* An informational message displayed when a member leaves the group. */
-"GROUP_MESSAGE_INFO_MEMBER_LEFT" = "%@ left the group.";
-
-/* An informational message displayed when a member of the group was promoted to admin, the '%@' will be the members name. */
-"GROUP_MESSAGE_INFO_MEMBER_PROMOTED" = "%@ was promoted to Admin.";
-
-/* An informational message displayed when two members of the group were promoted to admin, the '%@' will be the members names. */
-"GROUP_MESSAGE_INFO_TWO_MEMBERS_PROMOTED" = "%@和%@被设置为管理员";
-
-/* An informational message displayed when multiple members of the group were promoted to admin, the first '%@' will be the first members name and the second '%@' will be the number of additional members promoted. */
-"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_PROMOTED" = "%@ and %@ others were promoted to Admin.";
-
-/* An informational message displayed the current user was removed from a group, the '%@' will be the name of the group. */
-"GROUP_MESSAGE_INFO_REMOVED" = "您被从%@中移除";
-
-/* Description of a warning prompt when deleting an invitation to join a group conversation. */
-"MESSAGE_REQUESTS_GROUP_DELETE_CONFIRMATION_ACTON" = "Are you sure you want to delete this group invite?";
-
-/* Description of a confirmation prompt when blocking an invitation to join a group conversation. The '%@' will be replaced with the name of the user that sent the invitation. */
-"MESSAGE_REQUESTS_GROUP_BLOCK_CONFIRMATION_ACTON" = "您确定要屏蔽%@吗？被屏蔽的用户将无法向您发送消息请求、群聊邀请或者语音通话。";
-
-/* An informational message displayed when the user has been invited to join a group, the first '%@' will be the name of the user that sent the invitation and the second '%@' will be the name of the group. */
-"GROUP_MESSAGE_INFO_INVITED" = "%@邀请您加入%@";
-
-/* Message within a conversation indicating the device was unable to delete a group conversation */
-"group_unable_to_delete" = "未能删除群组，请重试";
-
-/* Information displayed above the input when opening an invitation to join a group. */
-"GROUP_MESSAGE_REQUEST_INFO" = "向此群组发送消息将会自动接收群聊邀请";
-
-/* An error indicating we were unable to retrieve the required data for some reason. */
-"ERROR_UNABLE_TO_FIND_DATA" = "There is an issue retrieving the required data. Please try again later.";
-
-/* A title for the list of group members. */
-"GROUP_MEMBERS" = "群成员";
-
-/* The status for a group member while their invite is being sent. */
-"GROUP_MEMBER_STATUS_SENDING" = "发送邀请中";
-
-/* The status for a group member while their invite is pending. */
-"GROUP_MEMBER_STATUS_SENT" = "邀请已发送";
-
-/* The status for a group member if their invitation failed to send. */
-"GROUP_MEMBER_STATUS_FAILED" = "邀请失败";
-
-/* The status for a group admin while their invite is being sent. */
-"GROUP_ADMIN_STATUS_SENDING" = "Sending admin promotion";
-
-/* The status for a group admin while their invite is pending. */
-"GROUP_ADMIN_STATUS_SENT" = "Admin promotion sent";
-
-/* The status for a group admin if their invitation failed to send. */
-"GROUP_ADMIN_STATUS_FAILED" = "Admin promotion failed";
-
-/* A title for the modal to edit the group display picture. */
-"EDIT_GROUP_DISPLAY_PICTURE" = "Set Group Display Picture";
-
-/* Error message when trying to update the display picture. */
-"EDIT_DISPLAY_PICTURE_ERROR" = "Couldn't update display picture.";
-
-/* Error message when trying to remove the display picture. */
-"EDIT_DISPLAY_PICTURE_ERROR_REMOVE" = "Unable to remove display picture.";
-
-/* Placeholder text for editing the name of a group. */
-"EDIT_GROUP_NAME_PLACEHOLDER" = "Enter group name";
-
-/* Error message when the edited name of a group is empty. */
-"EDIT_GROUP_NAME_ERROR_MISSING" = "Please pick a group name.";
-
-/* Error message when the edited name of a group is too long. */
-"EDIT_GROUP_NAME_ERROR_LONG" = "Please pick a shorter group name.";
-
-/* Placeholder text for editing the description of a group. */
-"EDIT_GROUP_DESCRIPTION_PLACEHOLDER" = "Enter group description";
-
-/* Error message when the edited description of a group is too long. */
-"EDIT_GROUP_DESCRIPTION_ERROR_LONG" = "Please pick a shorter group description.";
-
-/* Error message when the user attempts to remove an admin from a group. */
-"EDIT_GROUP_MEMBERS_ERROR_REMOVE_ADMIN" = "Admins cannot be removed";
-
-/* A title for the button to send invites for members to join groups. */
-"GROUP_ACTION_INVITE" = "Invite";
-
-/* A title for the button to send invites to contacts to join groups. */
-"GROUP_ACTION_INVITE_CONTACTS" = "Invite Contacts";
-
-/* Text which appears when all of the users contacts are already part of the group they want to invite contacts to. */
-"GROUP_ACTION_INVITE_EMPTY_STATE" = "You don't have any more contacts.";
-
-/* A toast which indicates that a single invitation to join the group is being sent. */
-"GROUP_ACTION_INVITE_SENDING" = "Sending invite";
-
-/* A toast which indicates that multiple invitations to join the group are being sent. */
-"GROUP_ACTION_INVITE_SENDING_MULTIPLE" = "Sending invites";
-
-/* A toast which indicates that a single invitation to join a group failed to send, the first '%@' will be the name of the member that couldn't be invited and the second '%@' will be the name of the group. */
-"GROUP_ACTION_INVITE_FAILED_ONE" = "Failed to invite %@ to %@";
-
-/* A toast which indicates that two invitation to join a group failed to send, the first '%@' will be the name of the first member that couldn't be invited, the second '%@' will be the name of the second member that couldn't be invited, and the third '%@' will be the name of the group. */
-"GROUP_ACTION_INVITE_FAILED_TWO" = "Failed to invite %@ and %@ to %@";
-
-/* A toast which indicates multiple invitations to join a group failed to send, the first '%@' will be the name of the first member that couldn't be invited, the second '%@' will be the number of other members that couldn't be invited, and the third '%@' will be the name of the group. */
-"GROUP_ACTION_INVITE_FAILED_MULTIPLE" = "Failed to invite %@ and %@ others to %@";
-
-/* A title for the screen to select which group members should receive promotions to admin. */
-"GROUP_ACTION_PROMOTE_ADMINS" = "Promote Admins";
-
-/* A title for the button to send promotions to members of a group. */
-"GROUP_ACTION_PROMOTE" = "Promote";
-
-/* Text which appears when all of the members of a group are already admins. */
-"GROUP_ACTION_PROMOTE_EMPTY_STATE" = "There are no more members in this group.";
-
-/* A toast which indicates that a single promotion to admin within a group is being sent. */
-"GROUP_ACTION_PROMOTE_SENDING" = "Sending promotion";
-
-/* A toast which indicates that multiple promotions to admin within a group are being sent. */
-"GROUP_ACTION_PROMOTE_SENDING_MULTIPLE" = "Sending promotions";
-
-/* A toast which indicates that a single promotion to admin within a group failed to send, the first '%@' will be the name of the member that couldn't be promoted and the second '%@' will be the name of the group. */
-"GROUP_ACTION_PROMOTE_FAILED_ONE" = "Failed to promote %@ in %@";
-
-/* A toast which indicates that two promotions to admin within a group failed to send, the first '%@' will be the name of the first member that couldn't be promoted, the second '%@' will be the name of the second member that couldn't be promoted, and the third '%@' will be the name of the group. */
-"GROUP_ACTION_PROMOTE_FAILED_TWO" = "Failed to promote %@ and %@ in %@";
-
-/* A toast which indicates multiple promotions to admin within a group failed to send, the first '%@' will be the name of the first member that couldn't be promoted, the second '%@' will be the number of other members that couldn't be promoted, and the third '%@' will be the name of the group. */
-"GROUP_ACTION_PROMOTE_FAILED_MULTIPLE" = "Failed to promote %@ and %@ others in %@";
-
-/* A warning shown at the top of a conversation to indicate that the conversation is a legacy group conversation which will stop functioning correctly on a certain date, the '%@' will be replaced with the date it will stop working. */
-"LEGACY_GROUPS_DEPRECATED_BANNER" = "Groups have been upgraded, create a new group to upgrade. Old group functionality will be degraded from %@.";
-
-/* Title for the prompt which appears when editing the group name and description. */
-"EDIT_GROUP_INFO_TITLE" = "Update Group Information";
-
-/* Message for the prompt which appears when editing the group name and description. */
-"EDIT_GROUP_INFO_MESSAGE" = "Group name and description is visible to all group members.";
-
-/* Title for the prompt which appears when editing a legacy group name. */
-"EDIT_LEGACY_GROUP_INFO_TITLE" = "Update Group Name";
-
-/* Message for the prompt which appears when editing a legacy group name. */
-"EDIT_LEGACY_GROUP_INFO_MESSAGE" = "Group name is visible to all group members.";
-
-/* An informational message displayed when the user has been invited to join a group, the '%@' will be the name of the group. */
-"GROUP_MESSAGE_INFO_INVITED_FALLBACK" = "You were invited to join %@.";
-
-/* An informational message displayed when the current user joined the group, the '%@' will be replaced with 'You'. */
-"GROUP_MESSAGE_INFO_MEMBER_ADDED_YOU" = "%@ were invited to join the group.";
-
-/* An informational message displayed when a single member joined the group with access to chat history, the '%@' will be the members name. */
-"GROUP_MESSAGE_INFO_MEMBER_ADDED_WITH_HISTORY" = "%@ was invited to join the group. Chat history was shared.";
-
-/* An informational message displayed when the current user joined the group, the '%@' will be replaced with 'You'. */
-"GROUP_MESSAGE_INFO_MEMBER_ADDED_YOU_WITH_HISTORY" = "%@ were invited to join the group. Chat history was shared.";
-
-/* An informational message displayed when two members joined the group with access to chat history, the '%@' will be the names of both members. */
-"GROUP_MESSAGE_INFO_TWO_MEMBERS_ADDED_WITH_HISTORY" = "%@ and %@ were invited to join the group. Chat history was shared.";
-
-/* An informational message displayed when the current user and one other user joined the group, the first '%@' will be 'You' and the second will be the name of the other member. */
-"GROUP_MESSAGE_INFO_TWO_MEMBERS_ADDED_YOU" = "%@ and %@ were invited to join the group.";
-
-/* An informational message displayed when the current user and one other user joined the group with access to chat history, the first '%@' will be 'You' and the second will be the name of the other member. */
-"GROUP_MESSAGE_INFO_TWO_MEMBERS_ADDED_YOU_WITH_HISTORY" = "%@ and %@ were invited to join the group. Chat history was shared.";
-
-/* An informational message displayed when multiple members joined the group with access to chat history, the first '%@' will be the first members name and the second '%@' will be the number of additional members added. */
-"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_ADDED_WITH_HISTORY" = "%@ and %@ were invited to join the group. Chat history was shared.";
-
-/* An informational message displayed when the current user and multiple other users joined the group, the first '%@' will be the first members name and the second '%@' will be the number of additional members added. */
-"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_ADDED_YOU" = "%@ and %@ others were invited to join the group.";
-
-/* An informational message displayed when the current user and multiple other users joined the group with access to chat history, the first '%@' will be the first members name and the second '%@' will be the number of additional members added. */
-"GROUP_MESSAGE_INFO_MULTIPLE_MEMBERS_ADDED_YOU_WITH_HISTORY" = "%@ and %@ others were invited to join the group. Chat history was shared.";
-
-/* Message for the error modal shown when a voice message fails to start recording. */
-"VOICE_MESSAGE_FAILED_TO_START_MESSAGE" = "An error occurred when trying to start recording for the voice message.";
-
-/* Shortcut to copy the disappearing messages setting from another conversation participant. */
-"FOLLOW_SETTING_TITLE" = "Follow Setting";
-
-/* Explanation when following the disappearing messages setting from another conversation participant will turn disappearing messages on. The first '%@' will be the duration messages will remain and the second '%@' will be whether the countdown starts after the messages are sent or after they are read. */
-"FOLLOW_SETTING_EXPLAINATION_TURNING_ON" = "Set your messages to disappear %@ after they have been %@?";
-
-/* Explanation when following the disappearing messages setting from another conversation participant will turn disappearing messages off. */
-"FOLLOW_SETTING_EXPLAINATION_TURNING_OFF" = "Messages you send will no longer disappear. Are you sure you want to turn off disappearing messages?";
-
-/* Title for button on a modal which confirms a change. */
-"CONFIRM_BUTTON_TITLE" = "Confirm";
-
-/* The subtitle of delete action in long press menu screen indicating the time that a message will disappear */
-"DISAPPEARING_MESSAGES_AUTO_DELETES_COUNT_DOWN" = "Auto-deletes in %@";
-
-/* A message indicating how the disappearing messages setting applies in a one-to-one conversation for legacy mode */
-"DISAPPERING_MESSAGES_SUBTITLE_LEGACY" = "This setting applies to everyone in this conversation.";
+"disappearingMessagesUpdated" = "<b>{adminname}</b> updated disappearing message settings.";
+"groupMemberLeft" = "<b>{name}</b> left the group.";
+"adminMorePromotedToAdmin" = "<b>{name}</b> and <b>{count} others</b> were promoted to Admin.";
+"adminTwoPromotedToAdmin" = "<b>{name}</b> and <b>{othername}</b> were promoted to Admin.";
+"adminPromotedToAdmin" = "<b>{name}</b> was promoted to Admin.";
+"groupMemberMoreNew" = "<b>{name}</b> and <b>{count} others</b> joined the group.";
+"groupRemovedMore" = "<b>{name}</b> and <b>{othername}</b> were removed from the group.";
+"groupMemberTwoNew" = "<b>{name}</b> and <b>{othername}</b> joined the group.";
+"groupRemovedTwo" = "<b>{name}</b> and <b>{othername}</b> were removed from the group.";
+"groupMemberNew" = "<b>{name}</b> joined the group.";
+"searchMatches" = "{count} of {total_count} matches";
+"members" = "{count} members";
+"callsCalledYou" = "{name} called you";
+"disappearingMessagesChanged" = "<b>{name}</b> has changed messages to disappear {time} after they have been {disappearing_messages_type}.";
+"disappearingMessagesSet" = "<b>{name}</b> has set messages to disappear {time} after they have been {disappearing_messages_type}.";
+"screenshotTaken" = "<b>{name}</b> took a screenshot.";
+"disappearingMessagesTurnedOff" = "<b>{name}</b> has turned disappearing messages off.";
+"adminRemovedUser" = "<b>{name}</b> was removed as Admin.";
+"groupRemoved" = "<b>{name}</b> was removed from the group.";
+"attachmentsMedia" = "{name} on {date_time}";
+"notificationsIosGroup" = "{name} to {conversation_name}";
+"notificationsAndroidSystem" = "{messagecount} new messages in {conversationcount} conversations";
+"disappearingMessagesOneDay" = "1 Day";
+"disappearingMessagesOneHour" = "1 Hour";
+"disappearingMessagesOneWeek" = "1 Week";
+"disappearingMessagesTwelveHours" = "12 Hours";
+"disappearingMessagesTwelveH" = "12H";
+"disappearingMessagesOneD" = "1D";
+"disappearingMessagesOneH" = "1H";
+"disappearingMessagesOneW" = "1W";
+"disappearingMessagesTwoWeeks" = "2 Weeks";
+"disappearingMessagesTwoW" = "2W";
+"disappearingMessagesFiveMinutes" = "5 Minutes";
+"disappearingMessagesFiveM" = "5M";
+"updateNewVersion" = "A new version of {app_name} is available, tap to update";
+"about" = "About";
+"accept" = "Accept";
+"onboardingAccountCreated" = "Account Created";
+"actualSize" = "Actual Size";
+"add" = "Add";
+"membersAddAccountIdOrOns" = "Add Account ID or ONS";
+"promote" = "Promote";
+"adminPromote" = "Promote Admins";
+"adminAddAsAdmin adminPromoteToAdmin" = "Promote to Admin";
+"attachmentsAdd" = "Add attachment";
+"conversationsAddToHome" = "Add to home screen";
+"conversationsAddedToHome" = "Added to home screen";
+"adminPromotionFailed" = "Admin promotion failed";
+"adminPromotionSent" = "Admin promotion sent";
+"adminSettings" = "Admin Settings";
+"adminCannotBeRemoved" = "Admins cannot be removed.";
+"conversationsSettingsAllMedia" = "All Media";
+"notificationsAllMessages" = "All Messages";
+"permissionsMicrophoneDescription" = "Allow access to microphone";
+"clearDataErrorDescriptionGeneric" = "An unknown error occurred and your data was not deleted. Do you want to delete your data from just this device instead?";
+"errorUnknown" = "An unknown error occurred.";
+"anonymous" = "Anonymous";
+"updateApp" = "App updates";
+"sessionAppearance" = "Appearance";
+"adminPromoteTwoDescription" = "Are you sure you want to promote <b>{name}</b> and <b>{othername}</b> to admin? Admins cannot be removed.";
+"adminPromoteMoreDescription" = "Are you sure you want to promote <b>{name}</b> and <b>{count} others</b> to admin? Admins cannot be removed.";
+"adminPromoteDescription" = "Are you sure you want to promote <b>{name}</b> to admin? Admins cannot be removed.";
+"blockDescription" = "Are you sure you want to block <b>{name}</b>? Blocked users cannot send you message requests, group invites or call you.";
+"clearMessagesGroupDescription" = "Are you sure you want to clear all <b>{group_name}</b> messages from your device?";
+"clearMessagesGroupAdminDescription" = "Are you sure you want to clear all <b>{group_name}</b> messages?";
+"attachmentsClearAllDescription" = "Are you sure you want to clear all attachments? Messages with attachments will also be deleted.";
+"messageRequestsClearAllExplanation" = "Are you sure you want to clear all message and group invites?";
+"clearMessagesChatDescription" = "Are you sure you want to clear all messages from your conversation with <b>{name}</b> from your device?";
+"clearMessagesNoteToSelfDescription" = "Are you sure you want to clear all Note to Self messages from your device?";
+"clearMessagesCommunity" = "Are you sure you want to clear all <b>{community_name}</b> messages from your device?";
+"clearDeviceDescription" = "Are you sure you want to clear your device?";
+"groupDeleteDescription" = "Are you sure you want to delete <b>{group_name}</b>? This will remove all members and delete all group content.";
+"contactDeleteDescription" = "Are you sure you want to delete <b>{name}</b> from your contacts? New messages from <b>{name}</b> will arrive as a message request.";
+"deleteMessagesDescriptionEveryone" = "Are you sure you want to delete these messages for everyone?";
+"groupInviteDelete" = "Are you sure you want to delete this group invite?";
+"deleteMessageDescriptionDevice" = "Are you sure you want to delete this message from your device?";
+"deleteMessagesDescriptionDevice" = "Are you sure you want to delete these messages from your device?";
+"messageRequestsDelete" = "Are you sure you want to delete this message request?";
+"deleteMessageDescriptionEveryone" = "Are you sure you want to delete this message for everyone?";
+"conversationsDeleteDescription" = "Are you sure you want to delete your conversation with <b>{name}</b>? New messages from <b>{name}</b> will start a new conversation.";
+"clearDeviceAndNetworkConfirm" = "Are you sure you want to delete your data from the network? If you continue, you will not be able to restore your messages or contacts.";
+"noteToSelfHideDescription" = "Are you sure you want to hide Note to Self?";
+"communityJoinDescription" = "Are you sure you want to join {community_name}?";
+"communityLeaveDescription" = "Are you sure you want to leave {community_name}?";
+"groupLeaveDescription" = "Are you sure you want to leave {group_name}?";
+"groupLeaveDescriptionAdmin" = "Are you sure you want to leave {group_name}? This will deactivate the group for all members.";
+"urlOpenDescription" = "Are you sure you want to open this URL in your browser?<br/><br/>{url}";
+"recoveryPasswordHidePermanentlyDescription2" = "Are you sure you want to permanently hide your recovery password on this device? This cannot be undone.";
+"blockUnblockDescription" = "Are you sure you want to unblock {name}?";
+"attachment" = "Attachment";
+"attachmentsExpired" = "Attachment expired";
+"audio" = "Audio";
+"authenticateToOpen" = "Authenticate to open {app_name}.";
+"authenticateNotAccessed" = "Authentication could not be accessed.";
+"authenticateFailed" = "Authentication Failed";
+"attachmentsAutoDownloadModalTitle" = "Auto Download";
+"appearanceAutoDarkMode" = "Auto dark-mode";
+"permissionsAutoUpdate" = "Auto Update";
+"attachmentsAutoDownload" = "Auto-download Attachments";
+"permissionsAutoUpdateDescription" = "Automatically check for updates on startup";
+"attachmentsAutoDownloadDescription" = "Automatically download media and files from this chat.";
+"conversationsAutoplayAudioMessage" = "Autoplay Audio Message";
+"conversationsAutoplayAudioMessageDescription" = "Autoplay consecutively sent audio messages";
+"banErrorFailed" = "Ban failed";
+"banUser" = "Ban User";
+"block" = "Block";
+"conversationsBlockedContacts" = "Blocked Contacts";
+"onboardingTosPrivacy" = "By using this service, you agree to our <b>Terms of Service</b> and <b>Privacy Policy</b>";
+"call" = "Call";
+"callsInProgress" = "Call in progress";
+"callsPermissionsRequired" = "Call Permissions Required";
+"callsSettings" = "Calls (Beta)";
+"cameraErrorUnavailable" = "Camera unavailable.";
+"attachmentsErrorNoApp" = "Can\'t find an app to select media.";
+"cancel" = "Cancel";
+"attachmentsErrorTypes" = "Cannot attach images and video with other file types. Try sending other files in a separate message.";
+"updateError" = "Cannot Update";
+"passwordChange" = "Change Password";
+"passwordChangeDescription" = "Change the password required to unlock Session.";
+"nicknameDescription" = "Choose a nickname for {name}. This will appear to you in your one-to-one and group conversations.";
+"appearanceThemesClassicDark" = "Classic Dark";
+"appearanceThemesClassicLight" = "Classic Light";
+"clear" = "Clear";
+"clearAll" = "Clear All";
+"attachmentsClearAll" = "Clear All Attachments";
+"clearDataAll" = "Clear All Data";
+"clearMessages" = "Clear All Messages";
+"sessionClearData" = "Clear Data";
+"clearDevice" = "Clear Device";
+"clearDeviceAndNetwork" = "Clear device and network";
+"clearDeviceOnly" = "Clear device only";
+"clearMessagesForEveryone" = "Clear for everyone";
+"clearMessagesForMe" = "Clear for me";
+"attachmentsClickToDownload" = "Click to download {file_type}";
+"close" = "Close";
+"closeWindow" = "Close Window";
+"attachmentsCollapseOptions" = "Collapse attachment options";
+"attachmentsCollecting" = "Collecting attachments...";
+"communityError" = "Community Error";
+"communityInvitation" = "Community Invitation";
+"communityUrl" = "Community URL";
+"passwordConfirm" = "Confirm password";
+"callsConnecting" = "Connecting...";
+"contactContacts" = "Contacts";
+"theContinue" = "Continue";
+"conversationsDeleted" = "Conversation deleted";
+"sessionConversations" = "Conversations";
+"copied" = "Copied";
+"copy" = "Copy";
+"accountIDCopy" = "Copy Account ID";
+"communityUrlCopy" = "Copy Community URL";
+"errorCopyAndQuit" = "Copy Error and Quit";
+"messageCopy" = "Copy message";
+"urlCopy" = "Copy URL";
+"groupErrorJoin" = "Couldn\'t join group";
+"groupErrorLeave" = "Couldn\'t leave group";
+"create" = "Create";
+"onboardingAccountCreate" = "Create account";
+"groupCreate" = "Create Group";
+"passwordCreate" = "Create your password";
+"onboardingBubbleCreatingAnAccountIsEasy" = "Creating an account is instant, free, and anonymous ";
+"cut" = "Cut";
+"clearDataError" = "Data Not Deleted";
+"clearDataErrorDescription2" = "Data not deleted by {count} Service Nodes. Service Node IDs: {service_node_id}.";
+"clearDataErrorDescription1" = "Data not deleted by 1 Service Node. Service Node ID: {service_node_id}.";
+"errorDatabase" = "Database Error";
+"decline" = "Decline";
+"theDefault" = "Default";
+"delete" = "Delete";
+"contactDelete" = "Delete Contact";
+"conversationsDelete" = "Delete Conversation";
+"groupDelete" = "Delete Group";
+"deleteMessage" = "Delete Message";
+"deleteMessages" = "Delete Messages";
+"conversationsMessageTrimmingTrimCommunitiesDescription" = "Delete messages from Community conversations older than 6 months, and where there are over 2,000 messages.";
+"disappearingMessagesDeleteType" = "Delete Type";
+"deleting" = "Deleting";
+"onionRoutingPathDestination" = "Destination";
+"disappearingMessagesDisappear" = "Disappear After {disappearing_messages_type} - {time}";
+"disappearingMessagesDisappearAfterRead" = "Disappear After Read";
+"disappearingMessagesDisappearAfterSend" = "Disappear After Send";
+"disappearingMessages" = "Disappearing Messages";
+"dismiss" = "Dismiss";
+"linkPreviewsFirstDescription" = "Display previews for URLs you send and receive. This can be useful, however {app_name} must contact linked websites to generate previews. You can always turn off link previews in {app_name}\'s settings.";
+"done" = "Done";
+"download" = "Download";
+"downloading" = "Downloading...";
+"draft" = "Draft";
+"attachmentsDuration" = "Duration:";
+"edit" = "Edit";
+"groupEdit" = "Edit Group";
+"emojiAndSymbols" = "Emoji & Symbols";
+"enable" = "Enable";
+"linkPreviewsEnable" = "Enable Link Previews";
+"conversationsSpellCheckDescription" = "Enable spell check when typing messages";
+"callsVoiceAndVideoToggleDescription" = "Enables voice and video calls to and from other users";
+"displayNameEnter" = "Enter your display name";
+"groupDescriptionEnter" = "Enter a group description";
+"accountIdEnter" = "Enter Account ID";
+"accountIdOrOnsEnter" = "Enter Account ID or ONS";
+"communityEnterUrl" = "Enter Community URL";
+"groupNameEnter" = "Enter a group name";
+"nicknameEnter" = "Enter nickname";
+"accountIdEnterYourFriends" = "Enter your friend\'s Account ID or ONS";
+"recoveryPasswordEnter" = "Enter your recovery password";
+"onionRoutingPathEntryNode" = "Entry Node";
+"theError" = "Error";
+"attachmentsErrorSending" = "Error sending file.";
+"helpReportABugExportLogs" = "Export Logs";
+"groupInviteFailedUser" = "Failed to invite {name} to {group_name}";
+"groupInviteFailedTwo" = "Failed to invite {name} and {other_name} to {group_name}";
+"groupInviteFailedMore" = "Failed to invite {name} and {count} others to {group_name}";
+"groupLeaveErrorFailed" = "Failed to leave {group_name}.";
+"adminPromotionFailedDescription" = "Failed to promote {name} in {group_name}";
+"adminPromotionFailedDescriptionMore" = "Failed to promote {name} and {other_name} in {group_name}";
+"adminPromotionFailedDescriptionMany" = "Failed to promote {name} and {count} others in {group_name}";
+"adminRemoveFailed" = "Failed to remove {name} as Admin.";
+"messageStatusFailedToSend" = "Failed to send";
+"passwordFailed" = "Failed to set password";
+"messageStatusFailedToSync" = "Failed to sync";
+"helpFAQ" = "FAQ";
+"notificationsFastMode" = "Fast Mode";
+"file" = "File";
+"attachmentsFileId" = "File ID:";
+"attachmentsFileSize" = "File Size:";
+"attachmentsFileType" = "File Type:";
+"files" = "Files";
+"attachmentsErrorSize" = "Files must be less than 10Mb";
+"callsCannotStart" = "You cannot start a new call. Finish your current call first.";
+"qrYoursDescription" = "Friends can message you by scanning your QR code.";
+"from" = "From:";
+"gif" = "GIF";
+"notificationsGoToAndroidSettings" = "Go to Android notification settings";
+"notificationsGoToDevice" = "Go to device notification settings";
+"updateReleaseNotes" = "Go to Release Notes";
+"supportGoTo" = "Go to Support Page";
+"cameraGrantAccess" = "Grant Camera Access";
+"groupDisplayPictureUpdated" = "Group display picture updated.";
+"groupInviteSuccessful" = "Group invite successful";
+"groupMembers" = "Group Members";
+"groupName" = "Group Name";
+"groupNameNew" = "Group name is now {group_name}. ";
+"groupNameUpdated" = "Group name updated.";
+"groupUpdated" = "Group updated";
+"groupAddMemberMaximum" = "Groups have a maximum of 100 members";
+"groupLegacyBanner" = "Groups have been upgraded, create a new group to upgrade. Old group functionality will be degraded from {date}.";
+"sessionHelp" = "Help";
+"helpHelpUsTranslateSession" = "Help us translate {app_name}";
+"hide" = "Hide";
+"appearanceHideMenuBar" = "Hide Menu Bar";
+"noteToSelfHide" = "Hide Note to Self";
+"hideOthers" = "Hide Others";
+"recoveryPasswordHideRecoveryPassword" = "Hide Recovery Password";
+"recoveryPasswordHidePermanently" = "Hide Recovery Password Permanently";
+"onboardingHitThePlusButton" = "Hit the plus button to start a chat, create a group, or join an official community!";
+"appearancePreview1" = "How are you?";
+"onboardingAccountExists" = "I have an account";
+"appearancePreview3" = "I\'m doing great, thanks.";
+"appearancePreview2" = "I\'m good thanks, you?";
+"incognitoKeyboard" = "Incognito Keyboard";
+"callsIncoming" = "Incoming call from {name}";
+"passwordIncorrect" = "Incorrect password";
+"recoveryPasswordErrorTitle" = "Incorrect Recovery Password";
+"info" = "Info";
+"invalidShortcut" = "Invalid shortcut";
+"communityEnterUrlErrorInvalid" = "Invalid URL";
+"membersInviteTitle" = "Invite";
+"accountIdOrOnsInvite" = "Invite Account ID or ONS";
+"sessionInviteAFriend" = "Invite a Friend";
+"groupInviteFailed" = "Invite failed";
+"membersInvite" = "Invite Contacts";
+"groupInviteSent" = "Invite sent";
+"displayNameDescription" = "It can be your real name, an alias, or anything else you like — and you can change it at any time.";
+"join" = "Join";
+"communityJoin" = "Join Community";
+"communityJoined" = "Joined Community";
+"permissionsKeepInSystemTray" = "Keep in System Tray";
+"later" = "Later";
+"learnMore" = "Learn More";
+"leave" = "Leave";
+"communityLeave" = "Leave Community";
+"groupLeave" = "Leave Group";
+"notificationsLedColor" = "LED color";
+"linkPreviews" = "Link Previews";
+"recoveryPasswordDescription" = "Use your recovery password to load your account on new devices. <br/><br/>Your account cannot be recovered without your recovery password. Make sure it\'s stored somewhere safe and secure — and don\'t share it with anyone.";
+"attachmentsLoadingNewer" = "Loading Newer Media...";
+"attachmentsLoadingOlder" = "Loading Older Media...";
+"loadAccountProgressMessage" = "Loading your account";
+"lockApp" = "Lock App";
+"lockAppStatus" = "Lock status";
+"messageMarkRead" = "Mark read";
+"messageMarkUnread" = "Mark unread";
+"followSystemSettings" = "Follow system settings";
+"max" = "Max";
+"media" = "Media";
+"attachmentsMediaSaved" = "Media saved by {name}";
+"notificationsMentionsOnly" = "Mentions Only";
+"message" = "Message";
+"deleteMessageDeleted" = "Message deleted";
+"messageErrorDelivery" = "Message delivery failed";
+"messageInfo" = "Message Info";
+"messageErrorLimit" = "Message limit reached";
+"notificationsMessage" = "Message notifications";
+"sessionMessageRequests" = "Message Requests";
+"conversationsMessageTrimming" = "Message Trimming";
+"messages" = "Messages";
+"deleteMessagesDeleted" = "Messages deleted";
+"disappearingMessagesDisappearAfterReadDescription" = "Messages delete after they have been read.";
+"disappearingMessagesDisappearAfterSendDescription" = "Messages delete after they have been sent.";
+"permissionsMicrophone" = "Microphone";
+"permissionsMicrophoneAccessRequired" = "Microphone Access Required";
+"minimize" = "Minimize";
+"callsMissedCallFrom" = "Missed call from {name}";
+"notificationsMostRecent" = "Most recent from {name}";
+"attachmentsMoveAndScale" = "Move and Scale";
+"notificationsMute" = "Mute";
+"attachmentsNa" = "N/A";
+"notificationsContentShowNameAndContent" = "Name and Content";
+"notificationsContentShowNameOnly" = "Name Only";
+"conversationsNew" = "New Conversation";
+"messageNew" = "New Message";
+"messageNewMessages" = "New Messages";
+"next" = "Next";
+"no" = "No";
+"audioNoInput" = "No audio input found";
+"audioNoOutput" = "No audio output found";
+"blockBlockedNone" = "No blocked contacts";
+"cameraErrorNotFound" = "No camera found";
+"notificationsContentShowNoNameOrContent" = "No Name or Content";
+"messageRequestsNonePending" = "No pending message requests";
+"searchMatchesNoneSpecific" = "No results found for {query}";
+"searchMatchesNone" = "No results found.";
+"noSuggestions" = "No Suggestions";
+"notNow" = "Not now";
+"noteToSelf" = "Note to Self";
+"notificationsContent" = "Notification Content";
+"notificationsStrategy" = "Notification Strategy";
+"notificationsStyle" = "Notification Style";
+"sessionNotifications" = "Notifications";
+"appearanceThemesOceanDark" = "Ocean Dark";
+"appearanceThemesOceanLight" = "Ocean Light";
+"off" = "Off";
+"waitOneMoment" = "One moment please..";
+"disappearingMessagesOnlyAdmins" = "Only group admins can change this setting.";
+"communityErrorDescription" = "Oops, an error occurred. Please try again later.";
+"open" = "Open";
+"urlOpen" = "Open URL";
+"databaseOptimizing" = "Optimizing Database";
+"communityJoinOfficial" = "Or join one of these...";
+"messageErrorOriginal" = "Original message not found";
+"other" = "Other";
+"passwordErrorLength" = "Password must be between 6 and 64 characters long";
+"passwordError" = "Password must only contain letters, numbers and symbols";
+"passwordErrorMatch" = "Passwords do not match";
+"paste" = "Paste";
+"onionRoutingPath" = "Path";
+"recoveryPasswordHideRecoveryPasswordDescription" = "Permanently hide your recover password on this device.";
+"permissionsRequired" = "Permission required";
+"sessionPermissions" = "Permissions";
+"photo" = "Photo";
+"displayNameNew" = "Pick a new display name";
+"displayNamePick" = "Pick your display name";
+"pin" = "Pin ";
+"pinConversation" = "Pin Conversation";
+"communityEnterUrlErrorInvalidDescription" = "Please check the Community URL and try again.";
+"recoveryPasswordErrorMessageGeneric" = "Please check your recovery password and try again.";
+"groupNameEnterPlease" = "Please enter a group name.";
+"groupNameEnterShorter" = "Please enter a shorter group name.";
+"passwordEnterCurrent" = "Please enter your current password.";
+"passwordEnterNew" = "Please enter your new password";
+"searchEnter" = "Please enter your search.";
+"displayNameErrorDescription" = "Please pick a display name";
+"displayNameErrorDescriptionShorter" = "Please pick a shorter display name";
+"groupCreateErrorNoMembers" = "Please pick at least one other group member.";
+"attachmentsErrorSeparate" = "Please send files as separate messages.";
+"preview" = "Preview";
+"linkPreviewsErrorUnsecure" = "Preview not loaded for unsecure link";
+"appearancePrimaryColor" = "Primary Color";
+"sessionPrivacy" = "Privacy";
+"onboardingBubblePrivacyInYourPocket" = "Privacy in your pocket.";
+"profile" = "Profile";
+"lockAppQuickResponse" = "Quick response unavailable when {app_name} is locked!";
+"read" = "Read";
+"readReceipts" = "Read Receipts";
+"received" = "Received:";
+"messageErrorOld" = "Received a message encrypted using an old version of {app_name} that is no longer supported. Please ask the sender to update to the most recent version and resend the message.";
+"recommended" = "Recommended";
+"callsReconnecting" = "Reconnecting…";
+"sessionRecoveryPassword" = "Recovery Password";
+"redo" = "Redo";
+"remove" = "Remove";
+"adminRemove" = "Remove Admins";
+"adminRemoveAsAdmin" = "Remove as Admin";
+"groupRemoveMessages" = "Remove user and their messages";
+"groupRemoveUsersMessages" = "Remove users and their messages";
+"passwordRemove" = "Remove Password";
+"passwordRemoveDescription" = "Remove the password required to unlock Session.";
+"groupRemoveUserOnly" = "Remove user ";
+"groupRemoveUsersOnly" = "Remove users";
+"reply" = "Reply";
+"messageReplyingTo" = "Replying to";
+"helpReportABug" = "Report a bug";
+"incognitoKeyboardDescription" = "Request incognito mode if available. Depending on the keyboard you are using, your keyboard may ignore this request.";
+"screenshotNotificationsDescription" = "Require a notification when a contact takes a screenshot of a one-to-one chat.";
+"lockAppDescriptionAndroid" = "Require fingerprint, PIN, pattern or password to unlock Session.";
+"passwordDescription" = "Require password to unlock Session.";
+"lockAppDescriptionIos" = "Require Touch ID, Face ID or your passcode to unlock {app_name}.";
+"resend" = "Resend";
+"attachmentsResolution" = "Resolution:";
+"restart" = "Restart";
+"retry" = "Retry";
+"callsRinging" = "Ringing...";
+"save" = "Save";
+"helpReportABugExportLogsSaveToDesktopDescription" = "Save this file to your desktop, then share it with {app_name} developers.";
+"helpReportABugExportLogsSaveToDesktop" = "Save to desktop";
+"saved" = "Saved";
+"savedMessages" = "Saved messages";
+"saving" = "Saving...";
+"qrScan" = "Scan QR Code";
+"screenSecurity" = "Screen Security";
+"screenshotNotifications" = "Screenshot Notifications";
+"search" = "Search";
+"searchContacts" = "Search Contacts";
+"searchConversation" = "Search Conversation";
+"searchMembers" = "Search Members";
+"searchSearching" = "Searching...";
+"typingIndicatorsDescription" = "See and share typing indicators (...)";
+"select" = "Select";
+"selectAll" = "Select All";
+"contactSelect" = "Select Contacts";
+"messageSelect" = "Select Message";
+"send" = "Send";
+"linkPreviewsSend" = "Send Link Previews";
+"conversationsSendWithEnterKey" = "Send with Enter Key";
+"sending" = "Sending";
+"messageRequestGroupInviteDescription" = "Sending a message to this group will automatically accept the group invite.";
+"messageRequestsAcceptDescription" = "Sending a message to this user will automatically accept their message request and reveal your Account ID.";
+"adminSendingPromotion" = "Sending admin promotion";
+"groupInviteSending" = "Sending invite";
+"disappearingMessagesSent" = "Sent";
+"onionRoutingPathServiceNode" = "Service Node";
+"sessionMessenger" = "Session";
+"permissionsKeepInSystemTrayDescription" = "{app_name} continues running in the background when you close the window";
+"updateErrorDescription" = "{app_name} Desktop failed to update. Please go to https://getsession.org/ and install the new version manually, then contact our Help Center to let us know about this problem.";
+"onionRoutingPathDescription" = "{app_name} hides your IP by routing your messages through multiple service nodes in {app_name}\'s decentralized network. This is your current path:";
+"onboardingBubbleSessionIsEngineered" = "{app_name} is engineered to protect your privacy.";
+"lockAppLocked" = "{app_name} is locked";
+"lockAppUnlocked" = "{app_name} is unlocked";
+"cameraGrantAccessQr" = "{app_name} needs camera access to scan QR codes";
+"cameraGrantAccessDenied" = "{app_name} needs camera access to take photos and videos, but it has been permanently denied. Please continue to app settings, select \"Permissions\", and enable \"Camera\".";
+"permissionsMicrophoneAccessRequiredAndroid" = "{app_name} needs microphone access to send audio messages, but it has been permanently denied. Please continue to app settings, select \"Permissions\", and enable \"Microphone\".";
+"cameraGrantAccessStorage" = "{app_name} needs storage access to send photos and videos.";
+"updateSession" = "{app_name} Update";
+"notificationsSlowModeDescription" = "{app_name} will occasionally check for new messages in the background.";
+"set" = "Set";
+"displayNameSet" = "Set Display Name";
+"profileDisplayPictureSet" = "Set Display Picture";
+"groupInformationSet" = "Set Group Information";
+"groupSetDisplayPicture" = "Set Group Display Picture";
+"nicknameSet" = "Set Nickname";
+"passwordSet" = "Set Password";
+"sessionSettings" = "Settings";
+"share" = "Share";
+"membersInviteSend" = "Send Invite";
+"membersInviteSendMultiple" = "Send Invites";
+"membersInviteShareMessageHistory" = "Share message history";
+"membersInviteShareNewMessagesOnly" = "Share new messages only";
+"helpReportABugDescription" = "Share some details to help us resolve your issue. Export your logs, then upload the file through {app_name}\'s Help Desk.";
+"shareToSession" = "Share to {app_name}";
+"show" = "Show";
+"showAll" = "Show All";
+"linkPreviewsDescription" = "Show link previews for supported URLs.";
+"readReceiptsDescription" = "Show read receipts for all messages you send and receive.";
+"contactShowUserDetails" = "Show User Details";
+"messageVoiceSlideToCancel" = "Slide to Cancel";
+"notificationsSlowMode" = "Slow Mode";
+"recoveryPasswordErrorMessageIncorrect" = "Some of the words in your Recovery Password are incorrect. Please check and try again.";
+"notificationsSound" = "Sound";
+"notificationsSoundDescription" = "Sound when App is open";
+"conversationsSpellCheck" = "Spell Check";
+"messageNewDescription" = "Start a new conversation by entering someone\'s Account ID or scanning their QR code.";
+"dictationStart" = "Start Dictation...";
+"stickers" = "Stickers";
+"helpSupport" = "Support";
+"messageStatusSyncing" = "Syncing";
+"attachmentsTapToDownload" = "Tap to download {file_type}";
+"lockAppUnlock" = "Tap to unlock";
+"conversationsSendWithEnterKeyDescription" = "Tapping the Enter Key will send message instead of starting a new line.";
+"notificationsContentDescription" = "The information shown in notifications.";
+"qrNotAccountId" = "This QR code does not contain an Account ID";
+"qrNotRecoveryPassword" = "This QR code does not contain a Recovery Password";
+"recoveryPasswordErrorMessageShort" = "The Recovery Password you entered is not long enough. Please check and try again.";
+"updateDownloaded" = "The update has been downloaded. Restart {app_name} to apply the updates.";
+"appearanceThemes" = "Themes";
+"adminRemoveCommunityNone" = "There are no Admins in this Community.";
+"conversationsEmpty" = "There are no messages in {conversation_name}.";
+"groupMembersNone" = "There are no other members in this group.";
+"onboardingMessageNotificationExplaination" = "There are two ways {app_name} can notify you of new messages.";
+"updateNewVersionDescription" = "There is a new version of {app_name} available. Would you like to download the update?";
+"accountIdErrorInvalid" = "This Account ID is invalid. Please check and try again.";
+"waitFewMinutes" = "This can take a few minutes.";
+"attachmentsErrorNotSupported" = "This file type is not supported.";
+"recoveryPasswordWarningSendDescription" = "This is your recovery password. If you send it to someone they\'ll have full access to your account.";
+"messageEmpty" = "This message is empty.";
+"attachmentsThisMonth" = "This Month";
+"disappearingMessagesDescription" = "This setting applies to everyone in this conversation.";
+"urlOpenBrowswer" = "This will open in your browser.";
+"clearDataAllDescription" = "This will permanently delete your messages and contacts. Would you like to clear this device only, or delete your data from the network as well?";
+"disappearingMessagesTimer" = "Timer";
+"recoveryPasswordExplanation" = "To load your account, enter your recovery password.";
+"developerToolsToggle" = "Toggle Developer Tools";
+"fullScreenToggle" = "Toggle Full Screen";
+"authenticateFailedTooManyAttempts" = "Too many failed authentication attempts. Please try again later.";
+"conversationsMessageTrimmingTrimCommunities" = "Trim Communities";
+"tryAgain" = "Try Again";
+"typingIndicators" = "Typing Indicators";
+"linkPreviewsErrorLoad" = "Unable to load link preview";
+"attachmentsErrorOpen" = "Unable to open file.";
+"audioUnableToPlay" = "Unable to play audio file.";
+"videoErrorPlay" = "Unable to play video.";
+"audioUnableToRecord" = "Unable to record audio.";
+"attachmentsImageErrorMetadata" = "Unable to remove metadata from file.";
+"attachmentsSaveError" = "Unable to save file.";
+"attachmentsErrorNumber" = "Unable to send more than 32 image and video files at once.";
+"banUnbanErrorFailed" = "Unban failed";
+"banUnbanUser" = "Unban User";
+"blockUnblock" = "Unblock";
+"blockBlockedDescription" = "Unblock this contact to send a message.";
+"undo" = "Undo";
+"onionRoutingPathUnknownCountry" = "Unknown Country";
+"attachmentsAlbumUnnamed" = "Unnamed Album";
+"pinUnpin" = "Unpin";
+"pinUnpinConversation" = "Unpin Conversation";
+"messageUnread" = "Unread messages";
+"uploading" = "Uploading...";
+"useFastMode" = "Use Fast Mode";
+"banUserBanned" = "User banned";
+"updateVersion" = "Version {version}";
+"notificationsVibrate" = "Vibrate";
+"video" = "Video";
+"view" = "View";
+"recoveryPasswordView" = "View Password";
+"qrView" = "View QR";
+"callsVoiceAndVideo" = "Voice and Video Calls";
+"callsVoiceAndVideoBeta" = "Voice and Video Calls (Beta)";
+"callsNotificationsRequired" = "Voice and Video Calls require notifications to be enabled in your device system settings. ";
+"messageVoice" = "Voice Message";
+"warning" = "Warning";
+"onsErrorNotRecognized" = "We couldn\'t recognise this ONS. Please check and try again.";
+"displayNameErrorNew" = "We were unable to load your display name. Please enter a new display name to continue.";
+"onsErrorUnableToSearch" = "We were unable to search for this ONS. Please try again later.";
+"helpWedLoveYourFeedback" = "We\'d love your feedback";
+"onboardingBubbleWelcomeToSession" = "Welcome to {app_name}";
+"window" = "Window";
+"recoveryPasswordHidePermanentlyDescription1" = "Without your recovery password, you cannot load your account on new devices. We strongly recommend you save your recovery password in a safe and secure place before continuing.";
+"attachmentsAutoDownloadModalDescription" = "Would you like to automatically download all files from <b>{conversation_name}</b>?";
+"helpReportABugExportLogsDescription" = "Export your logs, then upload the file through {app_name}\'s Help Desk.";
+"groupRemoveMoreDescription" = "Would you like to remove {name} and {count} others from {group_name}?";
+"groupRemoveTwoDescription" = "Would you like to remove {name} and {other_name} from {group_name}?";
+"groupRemoveDescription" = "Would you like to remove {name} from {group_name}?";
+"membersInviteShareTwoDescription" = "Would you like to share group message history with <b>{name}</b> and <b>{othername}</b>?";
+"membersInviteShareMoreDescription" = "Would you like to share group message history with <b>{name}</b> and <b>{count} others</b>?";
+"membersInviteShareDescription" = "Would you like to share group message history with <b>{name}</b>?";
+"yes" = "Yes";
+"you" = "You";
+"communityJoinedAlready" = "You are already a member of this community.";
+"groupOnlyAdmin" = "You are the only admin in <b>{group_name}</b>. Group members and settings cannot be changed without an admin.";
+"callsYouCalled" = "You called {name}";
+"permissionsMicrophoneAccessRequiredDesktop" = "You can enable microphone access in Session\'s privacy settings";
+"callsPermissionsRequiredDescription" = "You can enable the \"Voice and Video Calls\" permission in Privacy Settings.";
+"onboardingBubbleNoPhoneNumber" = "You don\'t even need a phone number to sign up.";
+"contactNone" = "You don\'t have any contacts";
+"conversationsNone" = "You don\'t have any conversations yet";
+"attachmentsFilesEmpty" = "You don\'t have any files in this conversation.";
+"attachmentsMediaEmpty" = "You don\'t have any media in this conversation.";
+"messageRequestsNew" = "You have a new message request";
+"messageRequestYouHaveAccepted" = "You have accepted the message request from <b>{name}</b>.";
+"messageRequestGroupInvite" = "<b>{name}</b> invited you to join <b>{group_name}</b>.";
+"groupNoMessages" = "You have no messages from <b>{group_name}</b>. Send a message to start the conversation!";
+"noteToSelfEmpty" = "You have no messages in Note to Self.";
+"groupMemberYouLeft" = "<b>You</b> left the group.";
+"notificationsIosRestart" = "You may have received messages while your {device} was restarting.";
+"callsYouMissedCallPermissions" = "You missed a call from <b>{name}</b> because you haven\'t enabled <b>Voice and Video Calls</b> in Privacy Settings.";
+"callsMissed" = "Missed Call";
+"lockAppEnablePasscode" = "You must enable a passcode in your iOS Settings in order to use Screen Lock.";
+"settingsRestartDescription" = "You must restart {app_name} to apply your new settings.";
+"disappearingMessagesSetYou" = "<b>You</b> set messages to disappear {time} after they have been {disappearing_messages_type}.";
+"disappearingMessagesTurnedOffYou" = "<b>You</b> turned <b>off</b> disappearing messages. Messages you send will no longer appear.";
+"disappearingMessagesUpdatedYou" = "<b>You</b> updated disappearing message settings.";
+"groupInviteYou" = "<b>You</b> were invited to join the group.";
+"groupRemovedYou" = "You were removed from <b>{group_name}</b>.";
+"groupPromotedYou" = "<b>You</b> were promoted to Admin.";
+"messageRequestPendingDescription" = "You will be able to send voice messages and attachments once the recipient has approved this message request.";
+"linkPreviewsSendModalDescription" = "You will not have full metadata protection when sending link previews.";
+"notificationsFastModeDescriptionIos" = "You\'ll be notified of new messages reliably and immediately using Apple\'s notification Servers.";
+"notificationsFastModeDescriptionAndroid" = "You\'ll be notified of new messages reliably and immediately using Google\'s notification Servers.";
+"messageNewYouveGotMany" = "You\'ve got {count} new messages.";
+"messageNewYouveGotA" = "You\'ve got a new message";
+"accountIdYours" = "Your Account ID";
+"passwordCurrentIncorrect" = "Your current password is incorrect.";
+"callsVoiceAndVideoModalDescription" = "Your IP is visible to your call partner and an Oxen Foundation server while using beta calls.";
+"messageRequestsAccepted" = "Your message request has been accepted.";
+"messageRequestPending" = "Your message request is currently pending.";
+"passwordChangedDescription" = "Your password has been changed. Please keep it safe.";
+"passwordRemovedDescription" = "Your password has been removed.";
+"passwordSetDescription" = "Your password has been set. Please keep it safe.";
+"appearanceZoom" = "Zoom";
+"appearanceZoomIn" = "Zoom In";
+"appearanceZoomOut" = "Zoom Out";
+"groupMemberLeftTwo" = "<b>{name}</b> and <b>{othername}</b> left the group.";
+"groupMemberLeftMore" = "<b>{name}</b> and <b>{count} others</b> left the group.";
+"attachmentsDownload" = "Download Attachment";
+"urlOpenBrowser" = "This will open in your browser.";
+"resolving" = "Resolving...";
+"disappearingMessagesLegacy" = "{name} is using an outdated client. Disappearing messages may not work as expected.";
+"showLess" = "Show Less";
+"membersActive" = "{count} active members";
+"disappearingMessagesTypeSent" = "sent";
+"disappearingMessagesTypeRead" = "read";
+"messageRequestsTurnedOff" = "<b>{name}</b> has message requests from Community conversations turned off, so you cannot send them a message.";
+"messageRequestsCommunities" = "Community Message Requests";
+"messageReqeuestsCommunitiesDescription" = "Allow message requests from Community conversations.";
+"emojiReactsCoolDown" = "Slow down! You've sent too many emoji reacts. Try again soon.";
+"disappearingMessagesDescription1" = "This setting applies to messages you send in this conversation.";
+"disappearingMessagesFollowSetting" = "Follow Setting";
+"disappearingMessagesFollowSettingOn" = "Set your messages to disappear <b>{time}</b> after they have been <b>{disappearing_messages_type}</b>?";
+"disappearingMessagesFollowSettingOff" = "Messages you send will no longer disappear. Are you sure you want to turn <b>off</b> disappearing messages?";
+"groupInviteVersion" = "Users must have version {version} or higher to receive invitations";
+"blockBlockedUser" = "Blocked {name}";
+"blockUnblockedUser" = "Unblocked {name}";
+"contentDescriptionCamera" = "Camera";
+"contentDescriptionMessageComposition" = "Message composition";
+"communityLeaveError" = "Failed to leave {community_name}";
+"contentDescriptionMediaMessage" = "Media message";
+"attachmentsErrorLoad" = "Error attaching file";
+"document" = "Document";
+"unknown" = "Unknown";
+"databaseErrorUpdate" = "Your app database is incompatible with this version of Session. Restore your account to generate a new database and continue using Session.<br/><br/>Warning: Restoring will result in the loss of all messages, attachments, and account data older than two weeks.";
+"okay" = "Okay";
+"emojiReactsHoverName" = "{name} reacted with {emoji}";
+"conversationsAudioMessages" = "Audio Messages";
+"emojiCategorySmileys" = "Smileys & People";
+"emojiCategorySymbols" = "Symbols";
+"emojiCategoryTravel" = "Travel & Places";
+"emojiCategoryActivities" = "Activities";
+"emojiCategoryAnimals" = "Animals & Nature";
+"emojiCategoryFlags" = "Flags";
+"emojiCategoryFood" = "Food & Drink";
+"emojiCategoryObjects" = "Objects";
+"notificationsMuted" = "Muted";
+"none" = "None";
+"qrCode" = "QR Code";
+"groupError" = "Group Error";
+"groupErrorCreate" = "Failed to create group. Please check your internet connection and try again.";
+"resync" = "Resync";
+"emojiCategoryRecentlyUsed" = "Recently Used";
+"permissionsLibrary" = "{app_name} needs library access to continue. You can enable access in the iOS settings.";
+"linkPreviewsTurnedOff" = "Link Previews Are Off";
+"linkPreviewsTurnedOffDescription" = "{app_name} must contact linked websites to generate previews of links you send and receive.<br/><br/>You can turn them on in {app_name}'s settings.";
+"groupUnknown" = "Unknown Group";
+"notificationsMuteUnmute" = "Unmute";
+"giphyWarning" = "Giphy";
+"giphyWarningDescription" = "{app_name} will connect to Giphy to provide search results. You will not have full metedata protection when sending GIFs.";
+"leaving" = "Leaving...";
+"andMore" = "+{count}";
+"quit" = "Quit Session";
+"databaseErrorTimeout" = "We\'ve noticed {app_name} is taking a long time to start.<br/><br/>You can continue to wait, export your device logs to share for troubleshooting, or try restarting Session.";
+"databaseErrorGeneric" = "A database error occurred.<br/><br/>You can export your application logs to share for troubleshooting or you can try to restore your device.<br/><br/>Warning: Restoring will result in loss of all messages, attachments, and account data older than two weeks.";
+"profileDisplayPictureSizeError" = "Please pick a smaller file.";
+"shareExtensionDatabaseError" = "There is an issue opening the database. Please restart the app and try again.";
+"attachmentsLoadingNewerFiles" = "Loading Newer Files...";
+"attachmentsLoadingOlderFiles" = "Loading Older Files...";
+"callsErrorStart" = "Failed to start call";
+"callsErrorAnswer" = "Failed to answer call";
+"image" = "Image";
+"errorConnection" = "Please check your internet connection and try again.";
+"sent" = "Sent:";
+"communityUnknown" = "Unknown Community";
+"accountIdShare" = "Hey, I've been using {app_name} to chat with complete privacy and security. Come join me! My Account ID is<br/><br/>{account_id}<br/><br/>Download it at {download_url}";
+"onboardingRecoveryPassword" = "Enter your recovery password to load your account. If you haven't saved it, you can find it in your app settings.";
+"attachmentsNotification" = "{emoji} Attachment";
+"communityJoinError" = "Failed to join {community_name}";
+"profileErrorUpdate" = "Failed to update profile.";
+"profileDisplayPictureRemoveError" = "Failed to remove display picture.";
+"callsIncomingUnknown" = "Incoming call";
+"onboardingTos" = "Terms of Service";
+"onboardingPrivacy" = "Privacy Policy";
+"recoveryPasswordBannerTittle" = "Save your recovery password";
+"recoveryPasswordBannerDescription" = "Save your recovery password to make sure you don't lose access to your account.";
+"loadAccount" = "Load Account";
+"accountIdYoursDescription" = "This is your Account ID. Other users can scan it to start a conversation with you.";
+"conversationsStart" = "Start Conversation";
+"scan" = "Scan";
+"shareAccountIdDescription" = "Invite your friend to chat with you on Session by sharing your Account ID with them.";
+"blockUnblockNameTwo" = "Are you sure you want to unblock {name} and 1 other?";
+"blockUnblockNameMultiple" = "Are you sure you want to unblock {name} and {count} others?";
+"deleteAfterGroupPR3DeleteMessagesConfirmation" = "Permanently delete the messages in this conversation?"; // TODO: Delete after Groups Post Release Chunk 3
+"deleteAfterLegacyDisappearingMessagesTheyChangedTimer" = "<b>{name}</b> set the disappearing message timer to <b>{time}</b>"; // TODO: Delete after Legacy Disappearing Messages is removed
+"deleteAfterLegacyDisappearingMessagesOriginal" = "Original version of disappearing messages."; // TODO: Delete after Legacy Disappearing Messages is removed
+"deleteAfterLegacyDisappearingMessagesLegacy" = "Legacy"; // TODO: Delete after Legacy Disappearing Messages is removed
+"contentDescriptionStartConversation" = "Create a conversation with a new contact";
+"contentDescriptionChooseConversationType" = "Choose an action to start a conversation";
+"callsEnded" = "Call Ended";
+"deleteMessageConfirm" = "Are you sure you want to delete this message?";
+"deleteMessagesConfirm" = "Are you sure you want to delete these messages?";
+"deleteMessageDeviceOnly" = "Delete on this device only";
+"deleteMessageEveryone" = "Delete for everyone";
+"emojiReactsCountOthers" = "And {count} others have reacted {emoji} to this message.";
+"banDeleteAll" = "Ban and Delete All";
+"loading" = "Loading...";
+"deleteAfterGroupPR1GroupSettings" = "Group Settings"; // TODO: Delete after Groups Post Release Chunk 1
+"deleteAfterGroupPR1MessageSound" = "Message Sound"; // TODO: Delete after Groups Post Release Chunk 1
+"deleteAfterGroupPR1MentionsOnly" = "Notify for Mentions Only"; // TODO: Delete after Groups Post Release Chunk 1
+"deleteAfterGroupPR1MentionsOnlyDescription" = "When enabled, you'll only be notified for messages mentioning you."; // TODO: Delete after Groups Post Release Chunk 1
+"deleteAfterGroupPR1BlockThisUser" = "Block This User"; // TODO: Delete after Groups Post Release Chunk 1
+"deleteAfterGroupPR1BlockUser" = "Block User"; // TODO: Delete after Groups Post Release Chunk 1
+"deleteAfterGroupFirstReleaseConfigOutdated" = "Some of your devices are using outdated versions. Syncing may be unreliable until they are updated."; // TODO: Delete after Groups First Release
+"deleteAfterGroupPR3GroupErrorLeave" = "Can't leave while adding or removing other members."; // TODO: Delete after Groups Post Release Chunk 3
+"permissionsStorageSend" = "{app_name} needs storage access to send photos and videos."; // NSPhotoLibraryUsageDescription
+"permissionsFaceId" = "The screen lock feature on {app_name} uses Face ID."; // NSFaceIDUsageDescription
+"cameraGrantAccessDescription" = "{app_name} needs camera access to take photos and videos, or scan QR codes."; // NSCameraUsageDescription
+"permissionsAppleMusic" = "{app_name} needs to use Apple Music to play media attachments."; // NSAppleMusicUsageDescription
+"permissionsStorageSave" = "{app_name} needs storage access to save attachments and media."; // NSPhotoLibraryAddUsageDescription
+"permissionsMicrophoneAccessRequiredIos" = "{app_name} needs microphone access to make calls and record audio messages."; // NSMicrophoneUsageDescription
+"disappearingMessagesCountdownBigMobile" = "Auto-deletes in {time_large}";
+"disappearingMessagesCountdownBigSmallMobile" = "Auto-deletes in {time_large} {time_small}";

@@ -62,7 +62,7 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
         textView.accessibilityIdentifier = "Text input box"
         textView.isAccessibilityElement = true
 
-        let sendTitle = NSLocalizedString("ATTACHMENT_APPROVAL_SEND_BUTTON", comment: "Label for 'send' button in the 'attachment approval' dialog.")
+        let sendTitle = "send".localized()
         sendButton.setTitle(sendTitle, for: .normal)
         sendButton.addTarget(self, action: #selector(didTapSend), for: .touchUpInside)
 
@@ -143,7 +143,7 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
         let lengthLimitLabel = UILabel()
 
         // Length Limit Label shown when the user inputs too long of a message
-        lengthLimitLabel.text = "ATTACHMENT_APPROVAL_MESSAGE_LENGTH_LIMIT_REACHED".localized()
+        lengthLimitLabel.text = "messageErrorLimit".localized()
         lengthLimitLabel.themeTextColor = .textPrimary
         lengthLimitLabel.textAlignment = .center
 
@@ -169,7 +169,7 @@ class AttachmentTextToolbar: UIView, UITextViewDelegate {
     private lazy var placeholderTextView: UITextView = {
         let placeholderTextView = buildTextView()
 
-        placeholderTextView.text = "Message"
+        placeholderTextView.text = "message".localized()
         placeholderTextView.isEditable = false
 
         return placeholderTextView

@@ -33,17 +33,16 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
                 return
             }
             
-            notificationTitle = String(
-                format: NotificationStrings.incomingGroupMessageTitleFormat,
-                senderName,
-                groupName
-            )
+            notificationTitle = "notificationsIosGroup"
+                .put(key: "name", value: senderName)
+                .put(key: "conversation_name", value: groupName)
+                .localized()
         }
         
         let snippet: String = (interaction.previewText(db)
             .filterForDisplay?
             .replacingMentions(for: thread.id))
-            .defaulting(to: "APN_Message".localized())
+            .defaulting(to: "messageNewYouveGotA".localized())
         
         let userInfo: [String: Any] = [
             NotificationServiceExtension.isFromRemoteKey: true,
@@ -71,18 +70,18 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
         
             case .nameNoPreview:
                 notificationContent.title = notificationTitle
-                notificationContent.body = NotificationStrings.incomingMessageBody
+                notificationContent.body = "messageNewYouveGotA".localized()
                 
             case .noNameNoPreview:
-                notificationContent.title = "Session"
-                notificationContent.body = NotificationStrings.incomingMessageBody
+                notificationContent.title = Singleton.appName
+                notificationContent.body = "messageNewYouveGotA".localized()
         }
         
         // If it's a message request then overwrite the body to be something generic (only show a notification
         // when receiving a new message request if there aren't any others or the user had hidden them)
         if isMessageRequest {
-            notificationContent.title = "Session"
-            notificationContent.body = "MESSAGE_REQUESTS_NOTIFICATION".localized()
+            notificationContent.title = Singleton.appName
+            notificationContent.body = "messageRequestsNew".localized()
         }
         
         // Add request (try to group notifications for interactions from open groups)
@@ -110,10 +109,9 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
                     notificationContent.title :
                     groupName
                 )
-                notificationContent.body = String(
-                    format: NotificationStrings.incomingCollapsedMessagesBody,
-                    "\(numberOfNotifications)"
-                )
+                notificationContent.body = "messageNewYouveGotMany"
+                    .put(key: "count", value: numberOfNotifications)
+                    .localized()
             }
             
             notificationContent.userInfo[NotificationServiceExtension.threadNotificationCounter] = numberOfNotifications
@@ -161,16 +159,15 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
             .map { NSNumber(value: $0) }
             .defaulting(to: NSNumber(value: 0))
         
-        notificationContent.title = "Session"
+        notificationContent.title = Singleton.appName
         notificationContent.body = ""
         
         let senderName: String = Profile.displayName(db, id: interaction.authorId, threadVariant: thread.variant)
         
         if messageInfo.state == .permissionDenied {
-            notificationContent.body = String(
-                format: "modal_call_missed_tips_explanation".localized(),
-                senderName
-            )
+            notificationContent.body = "callsYouMissedCallPermissions"
+                .put(key: "name", value: senderName)
+                .localizedDeformatted()
         }
         
         addNotifcationRequest(
@@ -193,8 +190,11 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
         guard !isMessageRequest else { return }
         
         let senderName: String = Profile.displayName(db, id: reaction.authorId, threadVariant: thread.variant)
-        let notificationTitle = "Session"
-        var notificationBody = String(format: "EMOJI_REACTS_NOTIFICATION".localized(), senderName, reaction.emoji)
+        let notificationTitle = Singleton.appName
+        var notificationBody = "emojiReactsHoverName"
+            .put(key: "name", value: senderName)
+            .put(key: "emoji", value: reaction.emoji)
+            .localized()
         
         // Title & body
         let previewType: Preferences.NotificationPreviewType = db[.preferencesNotificationPreviewType]
@@ -202,7 +202,7 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
         
         switch previewType {
             case .nameAndPreview: break
-            default: notificationBody = NotificationStrings.incomingMessageBody
+            default: notificationBody = "messageNewYouveGotA".localized()
         }
 
         let userInfo: [String: Any] = [
@@ -262,7 +262,7 @@ private extension String {
             var matchEnd = m1.range.location + m1.range.length
             
             if let displayName: String = Profile.displayNameNoFallback(id: publicKey) {
-                result = (result as NSString).replacingCharacters(in: m1.range, with: "@\(displayName)")
+                result = (result as NSString).replacingCharacters(in: m1.range, with: "@\(displayName)") // stringlint:disable
                 mentions.append((range: NSRange(location: m1.range.location, length: displayName.utf16.count + 1), publicKey: publicKey)) // + 1 to include the @
                 matchEnd = m1.range.location + displayName.utf16.count
             }

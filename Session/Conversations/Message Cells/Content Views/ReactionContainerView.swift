@@ -69,7 +69,7 @@ final class ReactionContainerView: UIView {
         textLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         textLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         textLabel.font = .systemFont(ofSize: Values.verySmallFontSize)
-        textLabel.text = "EMOJI_REACTS_SHOW_LESS".localized()
+        textLabel.text = "showLess".localized()
         textLabel.themeTextColor = .textPrimary
         
         let result: UIView = UIView()

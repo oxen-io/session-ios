@@ -46,7 +46,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
 
     private lazy var groupNameTextField: TextField = {
         let result: TextField = TextField(
-            placeholder: "vc_create_closed_group_text_field_hint".localized(),
+            placeholder: "groupNameEnter".localized(),
             usesDefaultHeight: false
         )
         result.textAlignment = .center
@@ -60,7 +60,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
         let result: SessionButton = SessionButton(style: .bordered, size: .medium)
         result.accessibilityLabel = "Add members"
         result.isAccessibilityElement = true
-        result.setTitle("vc_conversation_settings_invite_button_title".localized(), for: .normal)
+        result.setTitle("membersInvite".localized(), for: .normal)
         result.addTarget(self, action: #selector(addMembers), for: UIControl.Event.touchUpInside)
         result.contentEdgeInsets = UIEdgeInsets(top: 0, leading: Values.mediumSpacing, bottom: 0, trailing: Values.mediumSpacing)
         
@@ -98,7 +98,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        setNavBarTitle("EDIT_GROUP_ACTION".localized())
+        setNavBarTitle("groupEdit".localized())
         
         let threadId: String = self.threadId
         
@@ -110,7 +110,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
                 .filter(id: threadId)
                 .asRequest(of: String.self)
                 .fetchOne(db)
-                .defaulting(to: "GROUP_TITLE_FALLBACK".localized())
+                .defaulting(to: "groupUnknown".localized())
             self?.originalName = (self?.name ?? "")
             
             let profileAlias: TypedTableAlias<Profile> = TypedTableAlias()
@@ -173,7 +173,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
         let membersLabel = UILabel()
         membersLabel.font = .systemFont(ofSize: Values.mediumFontSize)
         membersLabel.themeTextColor = .textPrimary
-        membersLabel.text = "GROUP_TITLE_MEMBERS".localized()
+        membersLabel.text = "groupMembers".localized()
         
         addMembersButton.isEnabled = self.hasContactsToAdd
         
@@ -259,7 +259,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
         let profileId: String = self.membersAndZombies[indexPath.row].profileId
         
         let delete: UIContextualAction = UIContextualAction(
-            title: "GROUP_ACTION_REMOVE".localized(),
+            title: "remove".localized(),
             icon: UIImage(named: "icon_bin"),
             themeTintColor: .white,
             themeBackgroundColor: .conversationButton_swipeDestructive,
@@ -347,10 +347,10 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         
         guard !updatedName.isEmpty else {
-            return showError(title: "vc_create_closed_group_group_name_missing_error".localized())
+            return showError(title: "groupNameEnterPlease".localized())
         }
         guard updatedName.utf8CString.count < LibSession.libSessionMaxGroupNameByteLength else {
-            return showError(title: "vc_create_closed_group_group_name_too_long_error".localized())
+            return showError(title: "groupNameEnterShorter".localized())
         }
         
         self.isEditingGroupName = false
@@ -359,7 +359,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
     }
 
     @objc private func addMembers() {
-        let title: String = "vc_conversation_settings_invite_button_title".localized()
+        let title: String = "membersInvite".localized()
         
         let userPublicKey: String = self.userPublicKey
         let userSelectionVC: UserSelectionVC = UserSelectionVC(
@@ -457,12 +457,12 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
             guard self.originalMembersAndZombieIds.removing(userPublicKey) == updatedMemberIds else {
                 return showError(
                     title: "GROUP_UPDATE_ERROR_TITLE".localized(),
-                    message: "GROUP_UPDATE_ERROR_MESSAGE".localized()
+                    message: "deleteAfterGroupPR3GroupErrorLeave".localized()
                 )
             }
         }
         guard updatedMemberIds.count <= 100 else {
-            return showError(title: "vc_create_closed_group_too_many_group_members_error".localized())
+            return showError(title: "groupAddMemberMaximum".localized())
         }
         
         ModalActivityIndicatorViewController.present(fromViewController: navigationController) { _ in
@@ -512,7 +512,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
             info: ConfirmationModal.Info(
                 title: title,
                 body: .text(message),
-                cancelTitle: "BUTTON_OK".localized(),
+                cancelTitle: "okay".localized(),
                 cancelStyle: .alert_text
             )
         )

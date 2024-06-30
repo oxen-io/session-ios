@@ -7,7 +7,6 @@ import Foundation
 enum AppNotificationAction: CaseIterable {
     case markAsRead
     case reply
-    case showThread
 }
 
 extension AppNotificationAction {
@@ -15,7 +14,6 @@ extension AppNotificationAction {
         switch self {
             case .markAsRead: return "Signal.AppNotifications.Action.markAsRead"
             case .reply: return "Signal.AppNotifications.Action.reply"
-            case .showThread: return "Signal.AppNotifications.Action.showThread"
         }
     }
 }

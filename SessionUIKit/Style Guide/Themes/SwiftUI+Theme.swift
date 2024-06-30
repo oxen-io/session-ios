@@ -9,7 +9,7 @@ public extension View {
         )
     }
     
-    func background(themeColor: ThemeValue) -> some View {
+    func backgroundColor(themeColor: ThemeValue) -> some View {
         if #available(iOSApplicationExtension 14.0, *) {
             return self.background(
                 ThemeManager.currentTheme.colorSwiftUI(for: themeColor)?.ignoresSafeArea()
@@ -20,12 +20,28 @@ public extension View {
             )
         }
     }
+    
+    func shadow(themeColor: ThemeValue, opacity: CGFloat, radius: CGFloat, x: CGFloat = 0, y: CGFloat = 0) -> some View {
+        return self.shadow(
+            color: ThemeManager.currentTheme.colorSwiftUI(for: themeColor)?.opacity(opacity) ?? Color(.sRGBLinear, white: 0, opacity: opacity),
+            radius: radius,
+            x: x,
+            y: y
+        )
+    }
 }
 
 public extension Shape {
     func fill(themeColor: ThemeValue) -> some View {
         return self.fill(
             ThemeManager.currentTheme.colorSwiftUI(for: themeColor) ?? Color.primary
+        )
+    }
+    
+    func stroke(themeColor: ThemeValue, lineWidth: CGFloat = 1) -> some View {
+        return self.stroke(
+            ThemeManager.currentTheme.colorSwiftUI(for: themeColor) ?? Color.primary,
+            lineWidth: lineWidth
         )
     }
     

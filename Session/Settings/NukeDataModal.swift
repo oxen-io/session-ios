@@ -28,7 +28,7 @@ final class NukeDataModal: Modal {
     private lazy var titleLabel: UILabel = {
         let result = UILabel()
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
-        result.text = "modal_clear_all_data_title".localized()
+        result.text = "clearDataAll".localized()
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping
@@ -40,7 +40,7 @@ final class NukeDataModal: Modal {
     private lazy var explanationLabel: UILabel = {
         let result = UILabel()
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = "modal_clear_all_data_explanation".localized()
+        result.text = "clearDataAllDescription".localized()
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping
@@ -55,7 +55,7 @@ final class NukeDataModal: Modal {
             radio.update(isSelected: true)
         }
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = "modal_clear_all_data_device_only_button_title".localized()
+        result.text = "clearDeviceOnly".localized()
         result.update(isSelected: true)
         
         return result
@@ -67,14 +67,14 @@ final class NukeDataModal: Modal {
             radio.update(isSelected: true)
         }
         result.font = .systemFont(ofSize: Values.smallFontSize)
-        result.text = "modal_clear_all_data_entire_account_button_title".localized()
+        result.text = "clearDeviceAndNetwork".localized()
         
         return result
     }()
     
     private lazy var clearDataButton: UIButton = {
         let result: UIButton = Modal.createButton(
-            title: "modal_clear_all_data_confirm".localized(),
+            title: "clear".localized(),
             titleColor: .danger
         )
         result.addTarget(self, action: #selector(clearAllData), for: UIControl.Event.touchUpInside)
@@ -137,9 +137,9 @@ final class NukeDataModal: Modal {
         
         let confirmationModal: ConfirmationModal = ConfirmationModal(
             info: ConfirmationModal.Info(
-                title: "modal_clear_all_data_title".localized(),
-                body: .text("modal_clear_all_data_explanation_2".localized()),
-                confirmTitle: "modal_clear_all_data_confirm".localized(),
+                title: "clearDataAll".localized(),
+                body: .text("clearDeviceAndNetworkConfirm".localized()),
+                confirmTitle: "clear".localized(),
                 confirmStyle: .danger,
                 cancelStyle: .alert_text,
                 dismissOnConfirm: false
@@ -162,6 +162,22 @@ final class NukeDataModal: Modal {
                     }
                 )
         }
+    }
+    
+    private func unknownErrorOccured() {
+        let modal: ConfirmationModal = ConfirmationModal(
+            info: ConfirmationModal.Info(
+                title: "clearDataAll".localized(),
+                body: .text("clearDataErrorDescriptionGeneric".localized()),
+                confirmTitle: "clear".localized(),
+                confirmStyle: .danger,
+                cancelStyle: .alert_text,
+                dismissOnConfirm: false
+            ) { [weak self] confirmationModal in
+                self?.clearDeviceOnly()
+            }
+        )
+        present(modal, animated: true)
     }
     
     private func clearEntireAccount(presentedViewController: UIViewController) {
@@ -208,9 +224,9 @@ final class NukeDataModal: Modal {
                                     let modal: ConfirmationModal = ConfirmationModal(
                                         targetView: self?.view,
                                         info: ConfirmationModal.Info(
-                                            title: "ALERT_ERROR_TITLE".localized(),
+                                            title: "clearDataError".localized(),
                                             body: .text(error.localizedDescription),
-                                            cancelTitle: "BUTTON_OK".localized(),
+                                            cancelTitle: "okay".localized(),
                                             cancelStyle: .alert_text
                                         )
                                     )
@@ -224,25 +240,29 @@ final class NukeDataModal: Modal {
                                 .compactMap { ($0.value == false ? $0.key : nil) }
 
                             guard !potentiallyMaliciousSnodes.isEmpty else {
-                                self?.deleteAllLocalData()
+                                self?.unknownErrorOccured()
                                 return
                             }
 
                             let message: String
-
                             if potentiallyMaliciousSnodes.count == 1 {
-                                message = String(format: "dialog_clear_all_data_deletion_failed_1".localized(), potentiallyMaliciousSnodes[0])
+                                message = "clearDataErrorDescription1"
+                                    .put(key: "service_node_id", value: potentiallyMaliciousSnodes[0])
+                                    .localized()
                             }
                             else {
-                                message = String(format: "dialog_clear_all_data_deletion_failed_2".localized(), String(potentiallyMaliciousSnodes.count), potentiallyMaliciousSnodes.joined(separator: ", "))
+                                message = "clearDataErrorDescription2"
+                                    .put(key: "count", value: potentiallyMaliciousSnodes.count)
+                                    .put(key: "service_node_id", value: potentiallyMaliciousSnodes.joined(separator: ", "))
+                                    .localized()
                             }
-
+                            
                             let modal: ConfirmationModal = ConfirmationModal(
                                 targetView: self?.view,
                                 info: ConfirmationModal.Info(
-                                    title: "ALERT_ERROR_TITLE".localized(),
+                                    title: "clearDataError".localized(),
                                     body: .text(message),
-                                    cancelTitle: "BUTTON_OK".localized(),
+                                    cancelTitle: "okay".localized(),
                                     cancelStyle: .alert_text
                                 )
                             )

@@ -28,8 +28,8 @@ public extension VisibleMessage {
             
             var description: String {
                 switch self {
-                    case .react: return "react"
-                    case .remove: return "remove"
+                    case .react: return "react" // stringlint:disable
+                    case .remove: return "remove" // stringlint:disable
                 }
             }
             

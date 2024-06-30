@@ -89,3 +89,114 @@ public struct MaxWidthEqualizer: ViewModifier {
         }
     }
 }
+
+public struct Line: View {
+    let color: ThemeValue
+    
+    public init(color: ThemeValue) {
+        self.color = color
+    }
+    
+    public var body: some View {
+        Rectangle()
+            .fill(themeColor: color)
+            .frame(height: 1)
+    }
+}
+
+struct EdgeBorder: Shape {
+    
+    var width: CGFloat
+    var edges: [Edge]
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for edge in edges {
+            var x: CGFloat {
+                switch edge {
+                case .top, .bottom, .leading: return rect.minX
+                case .trailing: return rect.maxX - width
+                }
+            }
+            
+            var y: CGFloat {
+                switch edge {
+                case .top, .leading, .trailing: return rect.minY
+                case .bottom: return rect.maxY - width
+                }
+            }
+            
+            var w: CGFloat {
+                switch edge {
+                case .top, .bottom: return rect.width
+                case .leading, .trailing: return self.width
+                }
+            }
+            
+            var h: CGFloat {
+                switch edge {
+                case .top, .bottom: return self.width
+                case .leading, .trailing: return rect.height
+                }
+            }
+            path.addPath(Path(CGRect(x: x, y: y, width: w, height: h)))
+        }
+        return path
+    }
+}
+
+extension View {
+    public func border(width: CGFloat, edges: [Edge], color: ThemeValue) -> some View {
+        overlay(
+            EdgeBorder(width: width, edges: edges)
+                .foregroundColor(themeColor: color)
+        )
+    }
+    
+    public func toastView(message: Binding<String?>) -> some View {
+        self.modifier(ToastModifier(message: message))
+    }
+    
+    public func textViewTransparentScrolling() -> some View {
+        if #available(iOS 16.0, *) {
+            return scrollContentBackground(.hidden)
+        } else {
+            return onAppear {
+                UITextView.appearance().backgroundColor = .clear
+            }
+        }
+    }
+    
+    public func transparentListBackground() -> some View {
+        if #available(iOS 16.0, *) {
+            return scrollContentBackground(.hidden)
+        } else {
+            return onAppear {
+                UITableView.appearance().backgroundColor = .clear
+            }
+        }
+    }
+    
+    public func accessibility(_ accessibility: Accessibility) -> some View {
+        if #available(iOSApplicationExtension 14.0, *) {
+            guard let identifier = accessibility.identifier else {
+                return self
+            }
+            return accessibilityIdentifier(identifier).accessibilityLabel(accessibility.label ?? "")
+        } else {
+            return self
+        }
+    }
+}
+
+extension Binding {
+    public func onChange(_ handler: @escaping (Value) -> Void) -> Binding<Value> {
+        Binding(
+            get: { self.wrappedValue },
+            set: { newValue in
+                handler(newValue)
+                self.wrappedValue = newValue
+            }
+        )
+    }
+}

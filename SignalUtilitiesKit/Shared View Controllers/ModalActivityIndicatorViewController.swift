@@ -147,7 +147,7 @@ public class ModalActivityIndicatorViewController: OWSViewController {
 
         if canCancel {
             let cancelButton: SessionButton = SessionButton(style: .destructive, size: .large)
-            cancelButton.setTitle(CommonStrings.cancelButton, for: .normal)
+            cancelButton.setTitle("cancel".localized(), for: .normal)
             cancelButton.addTarget(self, action: #selector(cancelPressed), for: .touchUpInside)
             self.view.addSubview(cancelButton)
             

@@ -12,7 +12,7 @@ extension WebRTCSession: RTCDataChannelDelegate {
         dataChannelConfiguration.isOrdered = true
         dataChannelConfiguration.isNegotiated = true
         dataChannelConfiguration.channelId = 548
-        guard let dataChannel = peerConnection?.dataChannel(forLabel: "CONTROL", configuration: dataChannelConfiguration) else {
+        guard let dataChannel = peerConnection?.dataChannel(forLabel: "CONTROL", configuration: dataChannelConfiguration) else { // stringlint:disable
             SNLog("[Calls] Couldn't create data channel.")
             return nil
         }
@@ -38,10 +38,10 @@ extension WebRTCSession: RTCDataChannelDelegate {
     public func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         if let json = try? JSONSerialization.jsonObject(with: buffer.data, options: [ .fragmentsAllowed ]) as? JSON {
             SNLog("[Calls] Data channel did receive data: \(json)")
-            if let isRemoteVideoEnabled = json["video"] as? Bool {
+            if let isRemoteVideoEnabled = json["video"] as? Bool { // stringlint:disable
                 delegate?.isRemoteVideoDidChange(isEnabled: isRemoteVideoEnabled)
             }
-            if let _ = json["hangup"] {
+            if let _ = json["hangup"] { // stringlint:disable
                 delegate?.didReceiveHangUpSignal()
             }
         }

@@ -125,7 +125,7 @@ public class OWSAudioSession: NSObject {
 
     fileprivate func ensureAudioSessionActivationStateAfterDelay() {
         // Without this delay, we sometimes error when deactivating the audio session with:
-        //     Error Domain=NSOSStatusErrorDomain Code=560030580 “The operation couldn’t be completed. (OSStatus error 560030580.)”
+        //     Error Domain=NSOSStatusErrorDomain Code=560030580 "The operation couldn’t be completed. (OSStatus error 560030580.)"
         // aka "AVAudioSessionErrorCodeIsBusy"
         // FIXME: The code below was causing a bug, and disabling it * seems * fine. Don't feel super confident about it though...
         /*
