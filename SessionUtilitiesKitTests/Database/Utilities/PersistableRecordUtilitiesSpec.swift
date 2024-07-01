@@ -17,7 +17,8 @@ class PersistableRecordUtilitiesSpec: QuickSpec {
             customWriter: customWriter,
             migrationTargets: [
                 TestTarget.self
-            ]
+            ],
+            using: Dependencies()
         )
         
         // MARK: - a PersistableRecord
@@ -269,7 +270,8 @@ class PersistableRecordUtilitiesSpec: QuickSpec {
                     migrator.registerMigration(
                         mockStorage,
                         targetIdentifier: TestAddColumnMigration.target,
-                        migration: TestAddColumnMigration.self
+                        migration: TestAddColumnMigration.self,
+                        using: Dependencies()
                     )
                     
                     expect { try migrator.migrate(customWriter) }
@@ -673,7 +675,7 @@ fileprivate enum TestInsertTestTypeMigration: Migration {
     static let createdOrAlteredTables: [(FetchableRecord & TableRecord).Type] = [TestType.self, MutableTestType.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: TestType.self) { t in
             t.column(.columnA, .text).primaryKey()
         }
@@ -694,7 +696,7 @@ fileprivate enum TestAddColumnMigration: Migration {
     static let createdOrAlteredTables: [(FetchableRecord & TableRecord).Type] = [TestType.self, MutableTestType.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.alter(table: TestType.self) { t in
             t.add(.columnB, .text)
         }

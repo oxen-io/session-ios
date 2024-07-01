@@ -10,8 +10,8 @@ import SignalCoreKit
 public enum Log {
     fileprivate typealias LogInfo = (level: Log.Level, message: String, withPrefixes: Bool, silenceForTests: Bool)
     
-    public enum Level {
-        case trace
+    public enum Level: Comparable {
+        case verbose
         case debug
         case info
         case warn
@@ -116,12 +116,12 @@ public enum Log {
         }
     }
     
-    public static func trace(
+    public static func verbose(
         _ message: String,
         withPrefixes: Bool = true,
         silenceForTests: Bool = false
     ) {
-        custom(.trace, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.verbose, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
     }
     
     public static func debug(
@@ -184,6 +184,7 @@ public enum Log {
 public class Logger {
     private let isRunningTests: Bool = (ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil)
     private let primaryPrefix: String
+    private var level: Log.Level
     private let forceNSLog: Bool
     fileprivate let fileLogger: DDFileLogger
     fileprivate let isSuspended: Atomic<Bool> = Atomic(true)
@@ -191,10 +192,12 @@ public class Logger {
     
     public init(
         primaryPrefix: String,
+        level: Log.Level,
         customDirectory: String? = nil,
         forceNSLog: Bool = false
     ) {
         self.primaryPrefix = primaryPrefix
+        self.level = level
         self.forceNSLog = forceNSLog
         
         switch customDirectory {
@@ -341,6 +344,7 @@ public class Logger {
         silenceForTests: Bool
     ) {
         guard !silenceForTests || !isRunningTests else { return }
+        guard level >= self.level else { return }
         
         // Sort out the prefixes
         let logPrefix: String = {
@@ -367,7 +371,7 @@ public class Logger {
         
         switch level {
             case .off: return
-            case .trace: OWSLogger.verbose(logMessage)
+            case .verbose: OWSLogger.verbose(logMessage)
             case .debug: OWSLogger.debug(logMessage)
             case .info: OWSLogger.info(logMessage)
             case .warn: OWSLogger.warn(logMessage)
@@ -377,11 +381,11 @@ public class Logger {
         
         #if DEBUG
         print(logMessage)
-        #endif
-
+        #else
         if forceNSLog {
             NSLog(message)
         }
+        #endif
     }
 }
 
@@ -416,7 +420,7 @@ private extension DispatchQueue {
     }
 }
 
-// FIXME: Remove this once everything has been updated to use the new `Log.x()` methods
+// FIXME: Remove this once everything has been updated to use the new `Log.x()` methods.
 public func SNLog(_ message: String, forceNSLog: Bool = false) {
     Log.info(message)
 }

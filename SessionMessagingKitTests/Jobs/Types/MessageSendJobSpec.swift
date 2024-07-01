@@ -23,21 +23,6 @@ class MessageSendJobSpec: QuickSpec {
             byteCount: 200
         )
         @TestState var interactionAttachment: InteractionAttachment!
-        @TestState var mockStorage: Storage! = SynchronousStorage(
-            customWriter: try! DatabaseQueue(),
-            migrationTargets: [
-                SNUtilitiesKit.self,
-                SNMessagingKit.self
-            ],
-            initialData: { db in
-                try SessionThread.fetchOrCreate(
-                    db,
-                    id: "Test1",
-                    variant: .contact,
-                    shouldBeVisible: true
-                )
-            }
-        )
         @TestState var mockJobRunner: MockJobRunner! = MockJobRunner(
             initialSetup: { jobRunner in
                 jobRunner
@@ -62,10 +47,31 @@ class MessageSendJobSpec: QuickSpec {
             }
         )
         @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
+            storage: nil,
             jobRunner: mockJobRunner,
             dateNow: Date(timeIntervalSince1970: 1234567890)
         )
+        @TestState var mockStorage: Storage! = {
+            let result = SynchronousStorage(
+                customWriter: try! DatabaseQueue(),
+                migrationTargets: [
+                    SNUtilitiesKit.self,
+                    SNMessagingKit.self
+                ],
+                initialData: { db in
+                    try SessionThread.fetchOrCreate(
+                        db,
+                        id: "Test1",
+                        variant: .contact,
+                        shouldBeVisible: true
+                    )
+                },
+                using: dependencies
+            )
+            dependencies.storage = result
+            
+            return result
+        }()
         
         // MARK: - a MessageSendJob
         describe("a MessageSendJob") {
@@ -381,7 +387,7 @@ class MessageSendJobSpec: QuickSpec {
                                             shouldSkipLaunchBecomeActive: false,
                                             interactionId: 100,
                                             details: AttachmentUploadJob.Details(
-                                                messageSendJobId: 1,
+                                                messageSendJobId: 10,
                                                 attachmentId: "200"
                                             )
                                         ),
@@ -402,7 +408,7 @@ class MessageSendJobSpec: QuickSpec {
                             )
                             
                             expect(mockStorage.read { db in try JobDependencies.fetchOne(db) })
-                                .to(equal(JobDependencies(jobId: 9, dependantId: 1000)))
+                                .to(equal(JobDependencies(jobId: 10, dependantId: 1000)))
                         }
                     }
                 }

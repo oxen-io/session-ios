@@ -331,9 +331,15 @@ internal extension LibSession {
                     // Download the profile picture if needed (this can be triggered within
                     // database reads/writes so dispatch the download to a separate queue to
                     // prevent blocking)
+                    //
+                    // Note: Only trigger the avatar download if we are in the main app (don't
+                    // want the extensions to trigger this as it can clog up their networking)
                     if
-                        oldAvatarUrl != (updatedProfile.profilePictureUrl ?? "") ||
-                        oldAvatarKey != (updatedProfile.profileEncryptionKey ?? Data(repeating: 0, count: ProfileManager.avatarAES256KeyByteLength))
+                        Singleton.hasAppContext &&
+                        Singleton.appContext.isMainApp && (
+                            oldAvatarUrl != (updatedProfile.profilePictureUrl ?? "") ||
+                            oldAvatarKey != (updatedProfile.profileEncryptionKey ?? Data(repeating: 0, count: ProfileManager.avatarAES256KeyByteLength))
+                        )
                     {
                         DispatchQueue.global(qos: .background).async {
                             ProfileManager.downloadAvatar(for: updatedProfile)

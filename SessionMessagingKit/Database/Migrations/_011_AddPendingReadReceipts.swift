@@ -15,7 +15,7 @@ enum _011_AddPendingReadReceipts: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [PendingReadReceipt.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: PendingReadReceipt.self) { t in
             t.column(.threadId, .text)
                 .notNull()

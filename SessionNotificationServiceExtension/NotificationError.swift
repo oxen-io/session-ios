@@ -17,8 +17,8 @@ enum NotificationError: Error, CustomStringConvertible {
             case .processing(let result): return "Failed to process notification (\(result)) (NotificationError.processing)."
             case .messageProcessing: return "Failed to process message (NotificationError.messageProcessing)."
             case .ignorableMessage: return "Ignorable message (NotificationError.ignorableMessage)."
-            case .messageHandling(let error): return "Failed to handle message (\(error)) (NotificationError.messageHandling)."
-            case .other(let error): return "Unknown error occurred: \(error) (NotificationError.other)."
+            case .messageHandling(let error): return "Failed to handle message (\("\(error)".noPeriod)) (NotificationError.messageHandling)."
+            case .other(let error): return "Unknown error occurred: \("\(error)".noPeriod)) (NotificationError.other)."
         }
     }
 }

@@ -38,21 +38,27 @@ class JobRunnerSpec: QuickSpec {
             interactionId: nil,
             details: nil
         )
-        @TestState var mockStorage: Storage! = SynchronousStorage(
-            customWriter: try! DatabaseQueue(),
-            migrationTargets: [
-                SNUtilitiesKit.self
-            ],
-            initialData: { db in
-                // Migrations add jobs which we don't want so delete them
-                try Job.deleteAll(db)
-            }
-        )
         @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
+            storage: nil,
             dateNow: Date(timeIntervalSince1970: 0),
             forceSynchronous: true
         )
+        @TestState var mockStorage: Storage! = {
+            let result = SynchronousStorage(
+                customWriter: try! DatabaseQueue(),
+                migrationTargets: [
+                    SNUtilitiesKit.self
+                ],
+                initialData: { db in
+                    // Migrations add jobs which we don't want so delete them
+                    try Job.deleteAll(db)
+                },
+                using: dependencies
+            )
+            dependencies.storage = result
+            
+            return result
+        }()
         @TestState var jobRunner: JobRunnerType! = {
             let result = JobRunner(isTestingJobRunner: true, using: dependencies)
             result.setExecutor(TestJob.self, for: .messageSend)

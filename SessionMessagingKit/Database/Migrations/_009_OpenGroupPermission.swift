@@ -13,7 +13,7 @@ enum _009_OpenGroupPermission: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [OpenGroup.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: GRDB.Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.alter(table: OpenGroup.self) { t in
             t.add(.permissions, .integer)
                 .defaults(to: OpenGroup.Permissions.all)

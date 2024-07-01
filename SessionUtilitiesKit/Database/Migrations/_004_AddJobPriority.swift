@@ -12,7 +12,7 @@ enum _004_AddJobPriority: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Job.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Add `priority` to the job table
         try db.alter(table: Job.self) { t in
             t.add(.priority, .integer).defaults(to: 0)

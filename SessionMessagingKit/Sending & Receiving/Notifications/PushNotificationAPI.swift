@@ -382,7 +382,7 @@ public enum PushNotificationAPI {
     
     public static func processNotification(
         notificationContent: UNNotificationContent,
-        dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) -> (data: Data?, metadata: NotificationMetadata, result: ProcessResult) {
         // Make sure the notification is from the updated push server
         guard notificationContent.userInfo["spns"] != nil else {

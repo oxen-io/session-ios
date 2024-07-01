@@ -9,6 +9,10 @@ public enum General {
     public class Cache: GeneralCacheType {
         public var encodedPublicKey: String? = nil
         public var recentReactionTimestamps: [Int64] = []
+        
+        public func clearCachedUserPublicKey() {
+            encodedPublicKey = nil
+        }
     }
 }
 
@@ -55,4 +59,6 @@ public protocol ImmutableGeneralCacheType: ImmutableCacheType {
 public protocol GeneralCacheType: ImmutableGeneralCacheType, MutableCacheType {
     var encodedPublicKey: String? { get set }
     var recentReactionTimestamps: [Int64] { get set }
+    
+    func clearCachedUserPublicKey()
 }

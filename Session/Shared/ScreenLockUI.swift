@@ -88,17 +88,17 @@ class ScreenLockUI {
     private var desiredUIState: ScreenLockViewController.State {
         if isScreenLockLocked {
             if appIsInactiveOrBackground {
-                Log.trace("desiredUIState: screen protection 1.")
+                Log.verbose("desiredUIState: screen protection 1.")
                 return .protection
             }
             
-            Log.trace("desiredUIState: screen lock 2.")
+            Log.verbose("desiredUIState: screen lock 2.")
             return (isShowingScreenLockUI ? .protection : .lock)
         }
 
         if !self.appIsInactiveOrBackground {
             // App is inactive or background.
-            Log.trace("desiredUIState: none 3.");
+            Log.verbose("desiredUIState: none 3.");
             return .none;
         }
         
@@ -106,7 +106,7 @@ class ScreenLockUI {
             return .none;
         }
         
-        Log.trace("desiredUIState: screen protection 4.")
+        Log.verbose("desiredUIState: screen protection 4.")
         return .protection;
     }
     
@@ -181,17 +181,17 @@ class ScreenLockUI {
             //
             // We don't need to try to lock the screen lock;
             // It will be initialized by `setupWithRootWindow`.
-            Log.trace("tryToActivateScreenLockUponBecomingActive NO 0")
+            Log.verbose("tryToActivateScreenLockUponBecomingActive NO 0")
             return
         }
         guard Storage.shared[.isScreenLockEnabled] else {
             // Screen lock is not enabled.
-            Log.trace("tryToActivateScreenLockUponBecomingActive NO 1")
+            Log.verbose("tryToActivateScreenLockUponBecomingActive NO 1")
             return;
         }
         guard !isScreenLockLocked else {
             // Screen lock is already activated.
-            Log.trace("tryToActivateScreenLockUponBecomingActive NO 2")
+            Log.verbose("tryToActivateScreenLockUponBecomingActive NO 2")
             return;
         }
         
@@ -211,7 +211,7 @@ class ScreenLockUI {
         }
         
         let desiredUIState: ScreenLockViewController.State = self.desiredUIState
-        Log.trace("ensureUI: \(desiredUIState)")
+        Log.verbose("ensureUI: \(desiredUIState)")
         
         // Show the "iOS auth UI to unlock" if necessary.
         if desiredUIState == .lock && !didLastUnlockAttemptFail {
@@ -368,7 +368,7 @@ class ScreenLockUI {
             //
             // We don't need to try to lock the screen lock;
             // It will be initialized by `setupWithRootWindow`.
-            Log.trace("clockDidChange 0")
+            Log.verbose("clockDidChange 0")
             return;
         }
         

@@ -17,7 +17,7 @@ enum _001_InitialSetupMigration: Migration {
     ]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: LegacySnode.self) { t in
             t.deprecatedColumn(name: "public_ip", .text)
             t.deprecatedColumn(name: "storage_port", .integer)

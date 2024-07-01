@@ -16,7 +16,7 @@ enum _017_RebuildFTSIfNeeded_2_4_5: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         func ftsIsValid(_ db: Database, _ tableName: String) -> Bool {
             return (
                 ((try? db.tableExists(tableName)) == true) &&            // Table itself

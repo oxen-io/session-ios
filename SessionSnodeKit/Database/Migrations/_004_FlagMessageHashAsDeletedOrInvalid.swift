@@ -16,7 +16,7 @@ enum _004_FlagMessageHashAsDeletedOrInvalid: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [SnodeReceivedMessageInfo.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.alter(table: SnodeReceivedMessageInfo.self) { t in
             t.add(.wasDeletedOrInvalid, .boolean)
                 .indexed()                                 // Faster querying

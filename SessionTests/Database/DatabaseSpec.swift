@@ -19,7 +19,12 @@ class DatabaseSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         @TestState var dependencies: Dependencies! = Dependencies()
-        @TestState var mockStorage: Storage! = SynchronousStorage(customWriter: try! DatabaseQueue())
+        @TestState var mockStorage: Storage! = {
+            let result = SynchronousStorage(customWriter: try! DatabaseQueue(), using: dependencies)
+            dependencies.storage = result
+            
+            return result
+        }()
         @TestState var initialResult: Result<Void, Error>! = nil
         @TestState var finalResult: Result<Void, Error>! = nil
         
@@ -52,7 +57,7 @@ class DatabaseSpec: QuickSpec {
             beforeEach {
                 // FIXME: These should be mocked out instead of set this way
                 dependencies.caches.mutate(cache: .general) { $0.encodedPublicKey = "05\(TestConstants.publicKey)" }
-                LibSession.clearMemoryState()
+                LibSession.clearMemoryState(using: dependencies)
             }
             
             // MARK: -- can be created from an empty state
@@ -66,8 +71,11 @@ class DatabaseSpec: QuickSpec {
                     ],
                     async: false,
                     onProgressUpdate: nil,
-                    onMigrationRequirement: { _, _ in },
-                    onComplete: { result, _ in initialResult = result }
+                    onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                        MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                    },
+                    onComplete: { result, _ in initialResult = result },
+                    using: dependencies
                 )
                 
                 expect(initialResult).to(beSuccess())
@@ -79,8 +87,11 @@ class DatabaseSpec: QuickSpec {
                     sortedMigrations: allMigrations,
                     async: false,
                     onProgressUpdate: nil,
-                    onMigrationRequirement: { _, _ in },
-                    onComplete: { result, _ in initialResult = result }
+                    onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                        MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                    },
+                    onComplete: { result, _ in initialResult = result },
+                    using: dependencies
                 )
                 expect(initialResult).to(beSuccess())
                 
@@ -102,8 +113,11 @@ class DatabaseSpec: QuickSpec {
                     sortedMigrations: allMigrations,
                     async: false,
                     onProgressUpdate: nil,
-                    onMigrationRequirement: { _, _ in },
-                    onComplete: { result, _ in initialResult = result }
+                    onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                        MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                    },
+                    onComplete: { result, _ in initialResult = result },
+                    using: dependencies
                 )
                 expect(initialResult).to(beSuccess())
                 
@@ -126,8 +140,11 @@ class DatabaseSpec: QuickSpec {
                         sortedMigrations: test.initialMigrations,
                         async: false,
                         onProgressUpdate: nil,
-                        onMigrationRequirement: { _, _ in },
-                        onComplete: { result, _ in initialResult = result }
+                        onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                            MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                        },
+                        onComplete: { result, _ in initialResult = result },
+                        using: dependencies
                     )
                     expect(initialResult).to(beSuccess())
                     
@@ -139,8 +156,11 @@ class DatabaseSpec: QuickSpec {
                         sortedMigrations: test.migrationsToTest,
                         async: false,
                         onProgressUpdate: nil,
-                        onMigrationRequirement: { _, _ in },
-                        onComplete: { result, _ in finalResult = result }
+                        onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                            MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                        },
+                        onComplete: { result, _ in finalResult = result },
+                        using: dependencies
                     )
                     expect(finalResult).to(beSuccess())
                     
@@ -243,6 +263,22 @@ private class MigrationTest {
             }
             .values
             .filter { table in !droppedTables.contains(ObjectIdentifier(table)) }
+    }
+    
+    static func handleRequirements(_ db: Database, requirement: MigrationRequirement, using dependencies: Dependencies) {
+        switch requirement {
+            case .libSessionStateLoaded:
+                guard Identity.userExists(db) else { return }
+                
+                // After the migrations have run but before the migration completion we load the
+                // SessionUtil state
+                LibSession.loadState(
+                    db,
+                    userPublicKey: getUserHexEncodedPublicKey(db, using: dependencies),
+                    ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey,
+                    using: dependencies
+                )
+        }
     }
     
     // MARK: - Mock Data

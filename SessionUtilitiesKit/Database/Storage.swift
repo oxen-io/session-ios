@@ -57,7 +57,7 @@ open class Storage {
     internal var testDbWriter: DatabaseWriter? { dbWriter }
     private var unprocessedMigrationRequirements: Atomic<[MigrationRequirement]> = Atomic(MigrationRequirement.allCases)
     private var migrationProgressUpdater: Atomic<((String, CGFloat) -> ())>?
-    private var migrationRequirementProcesser: Atomic<(Database?, MigrationRequirement) -> ()>?
+    private var migrationRequirementProcesser: Atomic<(Database, MigrationRequirement) -> ()>?
     
     // MARK: - Initialization
     
@@ -169,15 +169,17 @@ open class Storage {
         migrationTargets: [MigratableTarget.Type],
         async: Bool = true,
         onProgressUpdate: ((CGFloat, TimeInterval) -> ())?,
-        onMigrationRequirement: @escaping (Database?, MigrationRequirement) -> (),
-        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> ()
+        onMigrationRequirement: @escaping (Database, MigrationRequirement) -> (),
+        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         perform(
             sortedMigrations: Storage.sortedMigrationInfo(migrationTargets: migrationTargets),
             async: async,
             onProgressUpdate: onProgressUpdate,
             onMigrationRequirement: onMigrationRequirement,
-            onComplete: onComplete
+            onComplete: onComplete,
+            using: dependencies
         )
     }
     
@@ -185,8 +187,9 @@ open class Storage {
         sortedMigrations: [KeyedMigration],
         async: Bool,
         onProgressUpdate: ((CGFloat, TimeInterval) -> ())?,
-        onMigrationRequirement: @escaping (Database?, MigrationRequirement) -> (),
-        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> ()
+        onMigrationRequirement: @escaping (Database, MigrationRequirement) -> (),
+        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         guard isValid, let dbWriter: DatabaseWriter = dbWriter else {
             let error: Error = (startupError ?? StorageError.startupFailed)
@@ -198,7 +201,7 @@ open class Storage {
         // Setup and run any required migrations
         var migrator: DatabaseMigrator = DatabaseMigrator()
         sortedMigrations.forEach { _, identifier, migration in
-            migrator.registerMigration(self, targetIdentifier: identifier, migration: migration)
+            migrator.registerMigration(self, targetIdentifier: identifier, migration: migration, using: dependencies)
         }
         
         // Determine which migrations need to be performed and gather the relevant settings needed to
@@ -242,7 +245,7 @@ open class Storage {
         let migrationCompleted: (Swift.Result<Void, Error>) -> () = { [weak self] result in
             // Process any unprocessed requirements which need to be processed before completion
             // then clear out the state
-            let requirementProcessor: ((Database?, MigrationRequirement) -> ())? = self?.migrationRequirementProcesser?.wrappedValue
+            let requirementProcessor: ((Database, MigrationRequirement) -> ())? = self?.migrationRequirementProcesser?.wrappedValue
             let remainingMigrationRequirements: [MigrationRequirement] = (self?.unprocessedMigrationRequirements.wrappedValue
                 .filter { $0.shouldProcessAtCompletionIfNotRequired })
                 .defaulting(to: [])
@@ -428,7 +431,7 @@ open class Storage {
         Storage.shared.dbWriter = nil
         
         deleteDatabaseFiles()
-        try? deleteDbKeys()
+        do { try deleteDbKeys() } catch { Log.warn("Failed to delete database keys.") }
     }
     
     public static func reconfigureDatabase() {
@@ -444,9 +447,9 @@ open class Storage {
     }
     
     private static func deleteDatabaseFiles() {
-        OWSFileSystem.deleteFile(databasePath)
-        OWSFileSystem.deleteFile(databasePathShm)
-        OWSFileSystem.deleteFile(databasePathWal)
+        if !OWSFileSystem.deleteFile(databasePath) { Log.warn("Failed to delete database.") }
+        if !OWSFileSystem.deleteFile(databasePathShm) { Log.warn("Failed to delete database-shm.") }
+        if !OWSFileSystem.deleteFile(databasePathWal) { Log.warn("Failed to delete database-wal.") }
     }
     
     private static func deleteDbKeys() throws {

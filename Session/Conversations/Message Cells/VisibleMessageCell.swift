@@ -1120,7 +1120,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                 currentUserPublicKey: cellViewModel.currentUserPublicKey,
                 currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
                 currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
-                isOutgoingMessage: isOutgoing,
+                location: (isOutgoing ? .outgoingMessage : .incomingMessage),
                 textColor: actualTextColor,
                 theme: theme,
                 primaryColor: primaryColor,

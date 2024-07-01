@@ -11,6 +11,9 @@ import SignalCoreKit
 
 final class ShareNavController: UINavigationController, ShareViewDelegate {
     public static var attachmentPrepPublisher: AnyPublisher<[SignalAttachment], Error>?
+    
+    /// The `ShareNavController` is initialized from a storyboard so we need to manually initialize this
+    private let dependencies: Dependencies = Dependencies()
     private let versionMigrationsComplete: Atomic<Bool> = Atomic(false)
     private var fileLogger: DDFileLogger?
     
@@ -54,6 +57,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
             appSpecificBlock: {
                 Log.setup(with: Logger(
                     primaryPrefix: "SessionShareExtension",                                              // stringlint:disable
+                    level: .info,
                     customDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/ShareExtension" // stringlint:disable
                 ))
                 
@@ -80,7 +84,8 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
                             self?.versionMigrationsDidComplete(needsConfigSync: needsConfigSync)
                         }
                 }
-            }
+            },
+            using: dependencies
         )
 
         // We don't need to use "screen protection" in the SAE.

@@ -162,7 +162,13 @@ struct QuoteView_SwiftUI: View {
                             currentUserPublicKey: info.currentUserPublicKey,
                             currentUserBlinded15PublicKey: info.currentUserBlinded15PublicKey,
                             currentUserBlinded25PublicKey: info.currentUserBlinded25PublicKey,
-                            isOutgoingMessage: (info.direction == .outgoing),
+                            location: {
+                                switch (info.mode, info.direction) {
+                                    case (.draft, _): return .quoteDraft
+                                    case (_, .outgoing): return .outgoingQuote
+                                    case (_, .incoming): return .incomingQuote
+                                }
+                            }(),
                             textColor: textColor,
                             theme: ThemeManager.currentTheme,
                             primaryColor: ThemeManager.primaryColor,

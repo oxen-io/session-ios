@@ -77,6 +77,14 @@ public extension String {
 
 // MARK: - Formatting
 
+public extension String {
+    var noPeriod: String {
+        guard self.hasSuffix(".") && !self.hasSuffix("...") else { return self }
+        
+        return String(self.prefix(count - 1))
+    }
+}
+
 public extension String.StringInterpolation {
     mutating func appendInterpolation(plural value: Int) {
         appendInterpolation(value == 1 ? "" : "s") // stringlint:disable

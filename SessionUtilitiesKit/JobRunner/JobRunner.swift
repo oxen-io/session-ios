@@ -20,7 +20,10 @@ public protocol JobRunnerType {
     func appDidFinishLaunching(using dependencies: Dependencies)
     func appDidBecomeActive(using dependencies: Dependencies)
     func startNonBlockingQueues(using dependencies: Dependencies)
-    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, using dependencies: Dependencies, onComplete: (() -> ())?)
+    
+    /// Stops and clears any pending jobs except for the specified variant, the `onComplete` closure will be called once complete providing a flag indicating whether any additionak
+    /// processing was needed before the closure was called (if not then the closure will be called synchronously)
+    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, using dependencies: Dependencies, onComplete: ((Bool) -> ())?)
     
     // MARK: - Job Scheduling
     
@@ -79,8 +82,8 @@ public extension JobRunnerType {
             .contains(where: { $0.detailsData == detailsData })
     }
     
-    func stopAndClearPendingJobs(exceptForVariant: Job.Variant? = nil, using dependencies: Dependencies, onComplete: (() -> ())? = nil) {
-        stopAndClearPendingJobs(exceptForVariant: exceptForVariant, using: dependencies, onComplete: onComplete)
+    func stopAndClearPendingJobs(using dependencies: Dependencies) {
+        stopAndClearPendingJobs(exceptForVariant: nil, using: dependencies, onComplete: nil)
     }
     
     // MARK: -- Job Scheduling
@@ -577,7 +580,7 @@ public final class JobRunner: JobRunnerType {
     public func stopAndClearPendingJobs(
         exceptForVariant: Job.Variant?,
         using dependencies: Dependencies,
-        onComplete: (() -> ())?
+        onComplete: ((Bool) -> ())?
     ) {
         // Inform the JobRunner that it can't start any queues (this is to prevent queues from
         // rescheduling themselves while in the background, when the app restarts or becomes active
@@ -602,7 +605,7 @@ public final class JobRunner: JobRunnerType {
             let queue: JobQueue = queues.wrappedValue[exceptForVariant],
             queue.isRunning.wrappedValue == true
         else {
-            onComplete?()
+            onComplete?(false)
             return
         }
         
@@ -619,7 +622,7 @@ public final class JobRunner: JobRunnerType {
                 }
                 guard state != .success else { return }
                 
-                onComplete?()
+                onComplete?(true)
                 queue?.onQueueDrained = oldQueueDrained
                 queue?.stopAndClearPendingJobs()
             }
@@ -629,7 +632,7 @@ public final class JobRunner: JobRunnerType {
         queue.onQueueDrained = { [weak self, weak queue] in
             oldQueueDrained?()
             queue?.onQueueDrained = oldQueueDrained
-            onComplete?()
+            onComplete?(true)
             
             self?.shutdownBackgroundTask.mutate { $0 = nil }
         }
@@ -1633,7 +1636,7 @@ public final class JobQueue: Hashable {
         // immediately (in this case we don't trigger any job callbacks because the
         // job isn't actually done, it's going to try again immediately)
         if self.type == .blocking && job.shouldBlock {
-            SNLog("[JobRunner] \(queueContext) \(job.variant) job failed due to error: \(error ?? JobRunnerError.unknown); retrying immediately")
+            SNLog("[JobRunner] \(queueContext) \(job.variant) job failed due to error: \("\(error ?? JobRunnerError.unknown)".noPeriod); retrying immediately")
             
             // If it was a possible deferral loop then we don't actually want to
             // retry the job (even if it's a blocking one, this gives a small chance
@@ -1887,7 +1890,7 @@ public extension JobRunner {
     static func stopAndClearPendingJobs(
         exceptForVariant: Job.Variant? = nil,
         using dependencies: Dependencies,
-        onComplete: (() -> ())? = nil
+        onComplete: ((Bool) -> ())? = nil
     ) { 
         instance.stopAndClearPendingJobs(exceptForVariant: exceptForVariant, using: dependencies, onComplete: onComplete)
     }

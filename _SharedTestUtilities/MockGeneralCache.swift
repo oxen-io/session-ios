@@ -13,4 +13,8 @@ class MockGeneralCache: Mock<GeneralCacheType>, GeneralCacheType {
         get { return (accept() as? [Int64] ?? []) }
         set { accept(args: [newValue]) }
     }
+    
+    func clearCachedUserPublicKey() {
+        accept()
+    }
 }

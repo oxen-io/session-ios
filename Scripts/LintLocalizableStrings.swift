@@ -38,7 +38,7 @@ extension ProjectState {
         .contains("print(", caseSensitive: false),
         .contains("SNLog(", caseSensitive: false),
         .contains("Log.setup(", caseSensitive: false),
-        .contains("Log.trace(", caseSensitive: false),
+        .contains("Log.verbose(", caseSensitive: false),
         .contains("Log.debug(", caseSensitive: false),
         .contains("Log.info(", caseSensitive: false),
         .contains("Log.warn(", caseSensitive: false),

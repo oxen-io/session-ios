@@ -193,7 +193,13 @@ final class QuoteView: UIView {
                         currentUserPublicKey: currentUserPublicKey,
                         currentUserBlinded15PublicKey: currentUserBlinded15PublicKey,
                         currentUserBlinded25PublicKey: currentUserBlinded25PublicKey,
-                        isOutgoingMessage: (direction == .outgoing),
+                        location: {
+                            switch (mode, direction) {
+                                case (.draft, _): return .quoteDraft
+                                case (_, .outgoing): return .outgoingQuote
+                                case (_, .incoming): return .incomingQuote
+                            }
+                        }(),
                         textColor: textColor,
                         theme: theme,
                         primaryColor: primaryColor,

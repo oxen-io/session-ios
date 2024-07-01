@@ -210,7 +210,7 @@ public struct ProfileManager {
         let filePath: String = ProfileManager.profileAvatarFilepath(filename: fileName)
         var backgroundTask: OWSBackgroundTask? = OWSBackgroundTask(label: funcName)
         
-        Log.trace("downloading profile avatar: \(profile.id)")
+        Log.verbose("downloading profile avatar: \(profile.id)")
         currentAvatarDownloads.mutate { $0.insert(profile.id) }
         
         LibSession
@@ -578,7 +578,8 @@ public struct ProfileManager {
         }
         
         // Download the profile picture if needed
-        guard avatarNeedsDownload else { return }
+        // FIXME: We don't want to trigger the download within the notification extension, as part of the groups rebuild this has been moved into a Job which won't be run so this logic can be removed
+        guard avatarNeedsDownload && Singleton.hasAppContext && Singleton.appContext.isMainApp else { return }
         
         let dedupeIdentifier: String = "AvatarDownload-\(publicKey)-\(targetAvatarUrl ?? "remove")" // stringlint:disable
         

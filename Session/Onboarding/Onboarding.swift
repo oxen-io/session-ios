@@ -116,14 +116,15 @@ enum Onboarding {
             UserDefaults.standard[.hasSyncedInitialConfiguration] = false
         }
         
-        func preregister(with seed: Data, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) {
+        func preregister(with seed: Data, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair, using dependencies: Dependencies) {
             let x25519PublicKey = x25519KeyPair.hexEncodedPublicKey
             
             // Create the initial shared util state (won't have been created on
             // launch due to lack of ed25519 key)
             LibSession.loadState(
                 userPublicKey: x25519PublicKey,
-                ed25519SecretKey: ed25519KeyPair.secretKey
+                ed25519SecretKey: ed25519KeyPair.secretKey,
+                using: dependencies
             )
             
             // Store the user identity information

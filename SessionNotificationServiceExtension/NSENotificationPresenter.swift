@@ -15,6 +15,7 @@ public class NSENotificationPresenter: NSObject, NotificationsProtocol {
         
         // Ensure we should be showing a notification for the thread
         guard thread.shouldShowNotification(db, for: interaction, isMessageRequest: isMessageRequest) else {
+            Log.info("Ignoring notification because thread reported that we shouldn't show it.")
             return
         }
         

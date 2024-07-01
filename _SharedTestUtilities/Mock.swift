@@ -60,6 +60,11 @@ public class Mock<T> {
     // MARK: - Convenience
     
     private func summary(for argument: Any) -> String {
+        if
+            let customDescribable: CustomArgSummaryDescribable = argument as? CustomArgSummaryDescribable,
+            let customArgSummaryDescribable: String = customDescribable.customArgSummaryDescribable
+        { return customArgSummaryDescribable }
+        
         switch argument {
             case let string as String: return string
             case let array as [Any]: return "[\(array.map { summary(for: $0) }.joined(separator: ", "))]"
@@ -215,4 +220,10 @@ internal class FunctionConsumer: MockFunctionHandler {
         
         return expectation
     }
+}
+
+// MARK: - CustomArgSummaryDescribable
+
+protocol CustomArgSummaryDescribable {
+    var customArgSummaryDescribable: String? { get }
 }

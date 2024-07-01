@@ -14,7 +14,7 @@ enum _008_EmojiReacts: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Reaction.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: Reaction.self) { t in
             t.column(.interactionId, .numeric)
                 .notNull()

@@ -135,21 +135,12 @@ fileprivate class TransactionHandler: TransactionObserver {
             }
         }
         catch {
-            SNLog("[Database] afterNextTransactionNested onCommit failed")
+            Log.warn("[Database] afterNextTransactionNested onCommit failed")
         }
     }
     
     func databaseDidRollback(_ db: Database) {
         TransactionHandler.registeredHandlers.mutate { $0.remove(identifier) }
-        
-        do {
-            try db.inTransaction {
-                onRollback(db)
-                return .commit
-            }
-        }
-        catch {
-            SNLog("[Database] afterNextTransactionNested onRollback failed")
-        }
+        onRollback(db)
     }
 }

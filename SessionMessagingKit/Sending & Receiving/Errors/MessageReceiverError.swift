@@ -19,7 +19,6 @@ public enum MessageReceiverError: LocalizedError {
     case noThread
     case selfSend
     case decryptionFailed
-    case invalidGroupPublicKey
     case noGroupKeyPair
     case invalidConfigMessageHandling
     case requiredThreadNotInConfig
@@ -68,7 +67,6 @@ public enum MessageReceiverError: LocalizedError {
             case .decryptionFailed: return "Decryption failed."
             
             // Shared sender keys
-            case .invalidGroupPublicKey: return "Invalid group public key."
             case .noGroupKeyPair: return "Missing group key pair."
                 
             case .invalidConfigMessageHandling: return "Invalid handling of a config message."

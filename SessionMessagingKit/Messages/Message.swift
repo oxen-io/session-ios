@@ -371,7 +371,7 @@ public extension Message {
         _ db: Database,
         data: Data,
         metadata: PushNotificationAPI.NotificationMetadata,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws -> ProcessedMessage? {
         return try processRawReceivedMessage(
             db,

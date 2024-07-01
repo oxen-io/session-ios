@@ -196,7 +196,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
             let dependencies: Dependencies = Dependencies()
             
             // Stop all jobs except for message sending and when completed suspend the database
-            JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) {
+            JobRunner.stopAndClearPendingJobs(exceptForVariant: .messageSend, using: dependencies) { _ in
                 LibSession.suspendNetworkAccess()
                 Storage.suspendDatabaseAccess()
                 Log.flush()

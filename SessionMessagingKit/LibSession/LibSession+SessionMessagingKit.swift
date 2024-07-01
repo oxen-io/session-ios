@@ -51,33 +51,19 @@ public extension LibSession {
     
     // MARK: - Configs
     
-    fileprivate static var configStore: Atomic<[ConfigKey: Atomic<UnsafeMutablePointer<config_object>?>]> = Atomic([:])
-    
+    // FIXME: This is a temporary work-around for fixing the database unit tests (it's done properly in the Groups Rebuild branch but would require too many changes to pull across properly)
     static func config(for variant: ConfigDump.Variant, publicKey: String) -> Atomic<UnsafeMutablePointer<config_object>?> {
-        let key: ConfigKey = ConfigKey(variant: variant, publicKey: publicKey)
-        
-        return (
-            LibSession.configStore.wrappedValue[key] ??
-            Atomic(nil)
-        )
+        return LibSession.dependencies.wrappedValue.caches[.libSession]
+            .config(for: variant, publicKey: publicKey)
     }
     
     // MARK: - Variables
     
+    // FIXME: This is a temporary work-around for fixing the database unit tests (it's done properly in the Groups Rebuild branch but would require too many changes to pull across properly)
+   private static var dependencies: Atomic<Dependencies> = Atomic(Dependencies())
+    
     internal static func syncDedupeId(_ publicKey: String) -> String {
         return "EnqueueConfigurationSyncJob-\(publicKey)"   // stringlint:disable
-    }
-    
-    /// Returns `true` if there is a config which needs to be pushed, but returns `false` if the configs are all up to date or haven't been
-    /// loaded yet (eg. fresh install)
-    static var needsSync: Bool {
-        configStore
-            .wrappedValue
-            .contains { _, atomicConf in
-                guard atomicConf.wrappedValue != nil else { return false }
-                
-                return config_needs_push(atomicConf.wrappedValue)
-            }
     }
     
     static var libSessionVersion: String { String(cString: LIBSESSION_UTIL_VERSION_STR) }
@@ -85,28 +71,38 @@ public extension LibSession {
     
     // MARK: - Loading
     
-    static func clearMemoryState() {
-        LibSession.configStore.mutate { confStore in
-            confStore.removeAll()
-        }
+    static func clearMemoryState(using dependencies: Dependencies? = nil) {
+        // FIXME: Replace this with the proper dependency injection (added in Groups Rebuild)
+        let dependencies: Dependencies = (dependencies ?? LibSession.dependencies.wrappedValue)
+        dependencies.caches.mutate(cache: .libSession) { $0.removeAll() }
     }
     
     static func loadState(
         _ db: Database? = nil,
         userPublicKey: String,
-        ed25519SecretKey: [UInt8]?
+        ed25519SecretKey: [UInt8]?,
+        using dependencies: Dependencies? = nil
     ) {
+        // FIXME: Replace this with the proper dependency injection (added in Groups Rebuild)
+        let dependencies: Dependencies = {
+            guard let dependencies: Dependencies = dependencies else { return LibSession.dependencies.wrappedValue }
+            
+            // Store the provided dependencies so we are using the correct cache when running
+            LibSession.dependencies.mutate { $0 = dependencies }
+            return dependencies
+        }()
+        
         // Ensure we have the ed25519 key and that we haven't already loaded the state before
         // we continue
         guard
             let secretKey: [UInt8] = ed25519SecretKey,
-            LibSession.configStore.wrappedValue.isEmpty
+            dependencies.caches[.libSession].isEmpty
         else { return SNLog("[LibSession] Ignoring loadState for '\(userPublicKey)' due to existing state") }
         
         // If we weren't given a database instance then get one
         guard let db: Database = db else {
             Storage.shared.read { db in
-                LibSession.loadState(db, userPublicKey: userPublicKey, ed25519SecretKey: secretKey)
+                LibSession.loadState(db, userPublicKey: userPublicKey, ed25519SecretKey: secretKey, using: dependencies)
             }
             return
         }
@@ -121,10 +117,12 @@ public extension LibSession {
             .subtracting(existingDumpVariants)
         
         // Create the 'config_object' records for each dump
-        LibSession.configStore.mutate { confStore in
+        dependencies.caches.mutate(cache: .libSession) { cache in
             existingDumps.forEach { dump in
-                confStore[ConfigKey(variant: dump.variant, publicKey: dump.publicKey)] = Atomic(
-                    try? LibSession.loadState(
+                cache.setConfig(
+                    for: dump.variant,
+                    publicKey: dump.publicKey,
+                    to: try? LibSession.loadState(
                         for: dump.variant,
                         secretKey: secretKey,
                         cachedData: dump.data
@@ -133,8 +131,10 @@ public extension LibSession {
             }
             
             missingRequiredVariants.forEach { variant in
-                confStore[ConfigKey(variant: variant, publicKey: userPublicKey)] = Atomic(
-                    try? LibSession.loadState(
+                cache.setConfig(
+                    for: variant,
+                    publicKey: userPublicKey,
+                    to: try? LibSession.loadState(
                         for: variant,
                         secretKey: secretKey,
                         cachedData: nil
@@ -579,4 +579,76 @@ public extension LibSession {
         
         return String(cString: cFullUrl)
     }
+}
+
+// MARK: - SessionUtil Cache
+
+public extension LibSession {
+    class Cache: LibSessionCacheType {
+        public struct Key: Hashable {
+            let variant: ConfigDump.Variant
+            let publicKey: String
+        }
+        
+        private var configStore: [Key: Atomic<UnsafeMutablePointer<config_object>?>] = [:]
+        
+        public var isEmpty: Bool { configStore.isEmpty }
+        
+        /// Returns `true` if there is a config which needs to be pushed, but returns `false` if the configs are all up to date or haven't been
+        /// loaded yet (eg. fresh install)
+        public var needsSync: Bool {
+            configStore.contains { _, atomicConf in
+                guard atomicConf.wrappedValue != nil else { return false }
+                
+                return config_needs_push(atomicConf.wrappedValue)
+            }
+        }
+        
+        // MARK: - Functions
+        
+        public func setConfig(for variant: ConfigDump.Variant, publicKey: String, to config: UnsafeMutablePointer<config_object>?) {
+            configStore[Key(variant: variant, publicKey: publicKey)] = config.map { Atomic($0) }
+        }
+        
+        public func config(
+            for variant: ConfigDump.Variant,
+            publicKey: String
+        ) -> Atomic<UnsafeMutablePointer<config_object>?> {
+            return (
+                configStore[Key(variant: variant, publicKey: publicKey)] ??
+                Atomic(nil)
+            )
+        }
+        
+        public func removeAll() {
+            configStore.removeAll()
+        }
+    }
+}
+
+public extension Cache {
+    static let libSession: CacheInfo.Config<LibSessionCacheType, LibSessionImmutableCacheType> = CacheInfo.create(
+        createInstance: { LibSession.Cache() },
+        mutableInstance: { $0 },
+        immutableInstance: { $0 }
+    )
+}
+
+// MARK: - SessionUtilCacheType
+
+/// This is a read-only version of the Cache designed to avoid unintentionally mutating the instance in a non-thread-safe way
+public protocol LibSessionImmutableCacheType: ImmutableCacheType {
+    var isEmpty: Bool { get }
+    var needsSync: Bool { get }
+    
+    func config(for variant: ConfigDump.Variant, publicKey: String) -> Atomic<UnsafeMutablePointer<config_object>?>
+}
+
+public protocol LibSessionCacheType: LibSessionImmutableCacheType, MutableCacheType {
+    var isEmpty: Bool { get }
+    var needsSync: Bool { get }
+    
+    func setConfig(for variant: ConfigDump.Variant, publicKey: String, to config: UnsafeMutablePointer<config_object>?)
+    func config(for variant: ConfigDump.Variant, publicKey: String) -> Atomic<UnsafeMutablePointer<config_object>?>
+    func removeAll()
 }

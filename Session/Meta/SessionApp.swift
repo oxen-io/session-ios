@@ -17,11 +17,7 @@ public struct SessionApp {
             .defaulting(to: "")
         let appVersion: String? = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
             .map { "App: \($0)\(buildNumber)" }
-        #if DEBUG
         let commitInfo: String? = (Bundle.main.infoDictionary?["GitCommitHash"] as? String).map { "Commit: \($0)" }
-        #else
-        let commitInfo: String? = nil
-        #endif
         
         let versionInfo: [String] = [
             "iOS \(UIDevice.current.systemVersion)",
@@ -119,9 +115,11 @@ public struct SessionApp {
         ProfileManager.resetProfileStorage()
         Attachment.resetAttachmentStorage()
         AppEnvironment.shared.notificationPresenter.clearAllNotifications()
+        
+        onReset?()
+        Log.info("Data Reset Complete.")
         Log.flush()
 
-        onReset?()
         exit(0)
     }
     

@@ -22,7 +22,7 @@ enum _013_SessionUtilChanges: Migration {
     ]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Add `markedAsUnread` to the thread table
         try db.alter(table: SessionThread.self) { t in
             t.add(.markedAsUnread, .boolean)

@@ -16,35 +16,6 @@ class OpenGroupAPISpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var mockStorage: Storage! = SynchronousStorage(
-            customWriter: try! DatabaseQueue(),
-            migrationTargets: [
-                SNUtilitiesKit.self,
-                SNMessagingKit.self
-            ],
-            initialData: { db in
-                try Identity(variant: .x25519PublicKey, data: Data.data(fromHex: TestConstants.publicKey)!).insert(db)
-                try Identity(variant: .x25519PrivateKey, data: Data.data(fromHex: TestConstants.privateKey)!).insert(db)
-                try Identity(variant: .ed25519PublicKey, data: Data.data(fromHex: TestConstants.edPublicKey)!).insert(db)
-                try Identity(variant: .ed25519SecretKey, data: Data.data(fromHex: TestConstants.edSecretKey)!).insert(db)
-                
-                try OpenGroup(
-                    server: "testServer",
-                    roomToken: "testRoom",
-                    publicKey: TestConstants.publicKey,
-                    isActive: true,
-                    name: "Test",
-                    roomDescription: nil,
-                    imageId: nil,
-                    userCount: 0,
-                    infoUpdates: 0,
-                    sequenceNumber: 0,
-                    inboxLatestMessageId: 0,
-                    outboxLatestMessageId: 0
-                ).insert(db)
-                try Capability(openGroupServer: "testserver", variant: .sogs, isMissing: false).insert(db)
-            }
-        )
         @TestState var mockNetwork: MockNetwork! = MockNetwork()
         @TestState var mockCrypto: MockCrypto! = MockCrypto(
             initialSetup: { crypto in
@@ -90,11 +61,46 @@ class OpenGroupAPISpec: QuickSpec {
             }
         )
         @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
+            storage: nil,
             network: mockNetwork,
             crypto: mockCrypto,
             dateNow: Date(timeIntervalSince1970: 1234567890)
         )
+        @TestState var mockStorage: Storage! = {
+            let result = SynchronousStorage(
+                customWriter: try! DatabaseQueue(),
+                migrationTargets: [
+                    SNUtilitiesKit.self,
+                    SNMessagingKit.self
+                ],
+                initialData: { db in
+                    try Identity(variant: .x25519PublicKey, data: Data.data(fromHex: TestConstants.publicKey)!).insert(db)
+                    try Identity(variant: .x25519PrivateKey, data: Data.data(fromHex: TestConstants.privateKey)!).insert(db)
+                    try Identity(variant: .ed25519PublicKey, data: Data.data(fromHex: TestConstants.edPublicKey)!).insert(db)
+                    try Identity(variant: .ed25519SecretKey, data: Data.data(fromHex: TestConstants.edSecretKey)!).insert(db)
+                    
+                    try OpenGroup(
+                        server: "testServer",
+                        roomToken: "testRoom",
+                        publicKey: TestConstants.publicKey,
+                        isActive: true,
+                        name: "Test",
+                        roomDescription: nil,
+                        imageId: nil,
+                        userCount: 0,
+                        infoUpdates: 0,
+                        sequenceNumber: 0,
+                        inboxLatestMessageId: 0,
+                        outboxLatestMessageId: 0
+                    ).insert(db)
+                    try Capability(openGroupServer: "testserver", variant: .sogs, isMissing: false).insert(db)
+                },
+                using: dependencies
+            )
+            dependencies.storage = result
+            
+            return result
+        }()
         @TestState var disposables: [AnyCancellable]! = []
         @TestState var error: Error?
         

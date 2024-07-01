@@ -14,7 +14,7 @@ enum _001_InitialSetupMigration: Migration {
     ]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(table: Identity.self) { t in
             t.column(.variant, .text)
                 .notNull()

@@ -529,6 +529,9 @@
 		FD1D732A2A85AA2000E3F410 /* Setting+Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1D73292A85AA2000E3F410 /* Setting+Utilities.swift */; };
 		FD1D732E2A86114600E3F410 /* _015_BlockCommunityMessageRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1D732D2A86114600E3F410 /* _015_BlockCommunityMessageRequests.swift */; };
 		FD1F9C9F2A862BE60050F671 /* MigrationRequirement.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1F9C9E2A862BE60050F671 /* MigrationRequirement.swift */; };
+		FD22724B2C326E75004D8A6C /* CustomArgSummaryDescribable+SMK.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD22724A2C326E75004D8A6C /* CustomArgSummaryDescribable+SMK.swift */; };
+		FD22724E2C327BA5004D8A6C /* SSKMockedExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD22724D2C327BA5004D8A6C /* SSKMockedExtensions.swift */; };
+		FD22724F2C327BCA004D8A6C /* SSKMockedExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD22724D2C327BA5004D8A6C /* SSKMockedExtensions.swift */; };
 		FD23CE1B2A651E6D0000B97C /* Network.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD23CE1A2A651E6D0000B97C /* Network.swift */; };
 		FD23CE1F2A65269C0000B97C /* Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD23CE1E2A65269C0000B97C /* Crypto.swift */; };
 		FD23CE222A661D000000B97C /* OpenGroupAPI+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD23CE212A661D000000B97C /* OpenGroupAPI+Crypto.swift */; };
@@ -1746,6 +1749,8 @@
 		FD1D73292A85AA2000E3F410 /* Setting+Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Setting+Utilities.swift"; sourceTree = "<group>"; };
 		FD1D732D2A86114600E3F410 /* _015_BlockCommunityMessageRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = _015_BlockCommunityMessageRequests.swift; sourceTree = "<group>"; };
 		FD1F9C9E2A862BE60050F671 /* MigrationRequirement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationRequirement.swift; sourceTree = "<group>"; };
+		FD22724A2C326E75004D8A6C /* CustomArgSummaryDescribable+SMK.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CustomArgSummaryDescribable+SMK.swift"; sourceTree = "<group>"; };
+		FD22724D2C327BA5004D8A6C /* SSKMockedExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSKMockedExtensions.swift; sourceTree = "<group>"; };
 		FD23CE1A2A651E6D0000B97C /* Network.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network.swift; sourceTree = "<group>"; };
 		FD23CE1E2A65269C0000B97C /* Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Crypto.swift; sourceTree = "<group>"; };
 		FD23CE212A661D000000B97C /* OpenGroupAPI+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenGroupAPI+Crypto.swift"; sourceTree = "<group>"; };
@@ -3865,6 +3870,14 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
+		FD22724C2C327B97004D8A6C /* _TestUtilities */ = {
+			isa = PBXGroup;
+			children = (
+				FD22724D2C327BA5004D8A6C /* SSKMockedExtensions.swift */,
+			);
+			path = _TestUtilities;
+			sourceTree = "<group>";
+		};
 		FD23CE202A661CE80000B97C /* Crypto */ = {
 			isa = PBXGroup;
 			children = (
@@ -4112,6 +4125,7 @@
 		FD7C37AF2BBB8B1E009DEEA7 /* SessionSnodeKitTests */ = {
 			isa = PBXGroup;
 			children = (
+				FD22724C2C327B97004D8A6C /* _TestUtilities */,
 				FD7C37BC2BBB8BB1009DEEA7 /* Models */,
 			);
 			path = SessionSnodeKitTests;
@@ -4393,6 +4407,7 @@
 		FDC4389B27BA01E300C60D73 /* _TestUtilities */ = {
 			isa = PBXGroup;
 			children = (
+				FD22724A2C326E75004D8A6C /* CustomArgSummaryDescribable+SMK.swift */,
 				FDC438BC27BB2AB400C60D73 /* Mockable.swift */,
 				FD078E4C27E17156000769AF /* MockOGMCache.swift */,
 				FDC0F0072C00721A002CBFB9 /* MockOGPoller.swift */,
@@ -6609,6 +6624,7 @@
 				FD7C37BF2BBB8BDF009DEEA7 /* Mock.swift in Sources */,
 				FD7C37C22BBB8BED009DEEA7 /* MockCaches.swift in Sources */,
 				FD7C37C62BBB8C08009DEEA7 /* TestConstants.swift in Sources */,
+				FD22724E2C327BA5004D8A6C /* SSKMockedExtensions.swift in Sources */,
 				FD7C37C82BBB8C11009DEEA7 /* NimbleExtensions.swift in Sources */,
 				FD7C37C52BBB8C01009DEEA7 /* MockJobRunner.swift in Sources */,
 				FD7C37CB2BBB8D36009DEEA7 /* MockUserDefaults.swift in Sources */,
@@ -6666,6 +6682,7 @@
 				FD3C907127E445E500CD579F /* MessageReceiverDecryptionSpec.swift in Sources */,
 				FDC2909627D71252005DAE71 /* SOGSErrorSpec.swift in Sources */,
 				FDC2908727D7047F005DAE71 /* RoomSpec.swift in Sources */,
+				FD22724B2C326E75004D8A6C /* CustomArgSummaryDescribable+SMK.swift in Sources */,
 				FD83B9C727CF3F10005E1583 /* CapabilitiesSpec.swift in Sources */,
 				FDC2909A27D71376005DAE71 /* NonceGeneratorSpec.swift in Sources */,
 				FD2AAAF128ED57B500A49611 /* SynchronousStorage.swift in Sources */,
@@ -6682,6 +6699,7 @@
 				FD23CE2E2A678E1E0000B97C /* MockCaches.swift in Sources */,
 				FD23EA6228ED0B260058676E /* CombineExtensions.swift in Sources */,
 				FD83B9C527CF3E2A005E1583 /* OpenGroupSpec.swift in Sources */,
+				FD22724F2C327BCA004D8A6C /* SSKMockedExtensions.swift in Sources */,
 				FD23CE342A67C4D90000B97C /* MockNetwork.swift in Sources */,
 				FDC2908B27D707F3005DAE71 /* SendMessageRequestSpec.swift in Sources */,
 				FDC290A827D9B46D005DAE71 /* NimbleExtensions.swift in Sources */,
@@ -8042,7 +8060,7 @@
 				CLANG_WARN__ARC_BRIDGE_CAST_NONARC = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 452;
+				CURRENT_PROJECT_VERSION = 459;
 				ENABLE_BITCODE = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -8079,7 +8097,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.6.2;
+				MARKETING_VERSION = 2.6.3;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_CFLAGS = (
 					"-fobjc-arc-exceptions",
@@ -8120,7 +8138,7 @@
 				CLANG_WARN__ARC_BRIDGE_CAST_NONARC = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "iPhone Distribution";
-				CURRENT_PROJECT_VERSION = 452;
+				CURRENT_PROJECT_VERSION = 459;
 				ENABLE_BITCODE = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -8152,7 +8170,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.6.2;
+				MARKETING_VERSION = 2.6.3;
 				ONLY_ACTIVE_ARCH = NO;
 				OTHER_CFLAGS = (
 					"-DNS_BLOCK_ASSERTIONS=1",

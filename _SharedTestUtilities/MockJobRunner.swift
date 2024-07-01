@@ -32,9 +32,9 @@ class MockJobRunner: Mock<JobRunnerType>, JobRunnerType {
     func appDidBecomeActive(using dependencies: Dependencies) {}
     func startNonBlockingQueues(using dependencies: Dependencies) {}
     
-    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, onComplete: (() -> ())?) {
+    func stopAndClearPendingJobs(exceptForVariant: Job.Variant?, using dependencies: Dependencies, onComplete: ((Bool) -> ())?) {
         accept(args: [exceptForVariant, onComplete])
-        onComplete?()
+        onComplete?(false)
     }
     
     // MARK: - Job Scheduling

@@ -14,7 +14,8 @@ public enum AppSetup {
         retrySetupIfDatabaseInvalid: Bool = false,
         appSpecificBlock: @escaping () -> (),
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
-        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> ()
+        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         // If we've already run the app setup then only continue under certain circumstances
         guard !AppSetup.hasRun.wrappedValue else {
@@ -28,7 +29,8 @@ public enum AppSetup {
                         retrySetupIfDatabaseInvalid: false, // Don't want to get stuck in a loop
                         appSpecificBlock: appSpecificBlock,
                         migrationProgressChanged: migrationProgressChanged,
-                        migrationsCompletion: migrationsCompletion
+                        migrationsCompletion: migrationsCompletion,
+                        using: dependencies
                     )
                     
                 default:
@@ -73,7 +75,8 @@ public enum AppSetup {
             runPostSetupMigrations(
                 backgroundTask: backgroundTask,
                 migrationProgressChanged: migrationProgressChanged,
-                migrationsCompletion: migrationsCompletion
+                migrationsCompletion: migrationsCompletion,
+                using: dependencies
             )
             
             // The 'if' is only there to prevent the "variable never read" warning from showing
@@ -84,7 +87,8 @@ public enum AppSetup {
     public static func runPostSetupMigrations(
         backgroundTask: OWSBackgroundTask? = nil,
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
-        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> ()
+        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         var backgroundTask: OWSBackgroundTask? = (backgroundTask ?? OWSBackgroundTask(labelStr: #function))
         
@@ -106,18 +110,20 @@ public enum AppSetup {
                         LibSession.loadState(
                             db,
                             userPublicKey: getUserHexEncodedPublicKey(db),
-                            ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey
+                            ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey,
+                            using: dependencies
                         )
                 }
             },
             onComplete: { result, needsConfigSync in
                 // The 'needsConfigSync' flag should be based on whether either a migration or the
                 // configs need to be sync'ed
-                migrationsCompletion(result, (needsConfigSync || LibSession.needsSync))
+                migrationsCompletion(result, (needsConfigSync || dependencies.caches[.libSession].needsSync))
                 
                 // The 'if' is only there to prevent the "variable never read" warning from showing
                 if backgroundTask != nil { backgroundTask = nil }
-            }
+            },
+            using: dependencies
         )
     }
 }

@@ -15,7 +15,7 @@ enum _001_ThemePreferences: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Determine if the user was matching the system setting (previously the absence of this value
         // indicated that the app should match the system setting)
         let isExistingUser: Bool = Identity.userExists(db)
