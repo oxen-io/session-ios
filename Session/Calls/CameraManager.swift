@@ -21,7 +21,7 @@ final class CameraManager : NSObject {
     private var videoInput: AVCaptureDeviceInput?
     
     func prepare() {
-        print("[Calls] Preparing camera.")
+        Log.debug("[CameraManager] Preparing camera.")
         addNewVideoIO(position: .front)
     }
     
@@ -41,7 +41,7 @@ final class CameraManager : NSObject {
             connection.automaticallyAdjustsVideoMirroring = false
             connection.isVideoMirrored = (position == .front)
         } else {
-            SNLog("Couldn't add video data output to capture session.")
+            Log.info("[CameraManager] Couldn't add video data output to capture session.")
         }
     }
     
@@ -50,7 +50,7 @@ final class CameraManager : NSObject {
         
         // Note: The 'startRunning' task is blocking so we want to do it on a non-main thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            print("[Calls] Starting camera.")
+            Log.debug("[CameraManager] Starting camera.")
             self?.isCapturing = true
             self?.captureSession.startRunning()
         }
@@ -61,7 +61,7 @@ final class CameraManager : NSObject {
         
         // Note: The 'stopRunning' task is blocking so we want to do it on a non-main thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            print("[Calls] Stopping camera.")
+            Log.debug("[CameraManager] Stopping camera.")
             self?.isCapturing = false
             self?.captureSession.stopRunning()
         }
@@ -91,6 +91,6 @@ extension CameraManager : AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
     }
     
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        print("[Calls] Frame dropped.")
+        Log.debug("[CameraManager] Frame dropped.")
     }
 }

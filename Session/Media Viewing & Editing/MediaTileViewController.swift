@@ -6,7 +6,6 @@ import GRDB
 import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public class MediaTileViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
@@ -45,7 +44,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     }
 
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
     
     deinit {
@@ -138,12 +137,12 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         )
 
         view.addSubview(self.collectionView)
-        collectionView.autoPin(toEdgesOf: view)
+        collectionView.pin(to: view)
         
         view.addSubview(self.footerBar)
-        footerBar.autoPinWidthToSuperview()
-        footerBar.autoSetDimension(.height, toSize: MediaTileViewController.footerBarHeight)
-        self.footerBarBottomConstraint = footerBar.autoPinEdge(toSuperviewEdge: .bottom, withInset: -MediaTileViewController.footerBarHeight)
+        footerBar.set(.width, to: .width, of: view)
+        footerBar.set(.height, to: MediaTileViewController.footerBarHeight)
+        footerBarBottomConstraint = footerBar.pin(.bottom, to: .bottom, of: view, withInset: -MediaTileViewController.footerBarHeight)
 
         self.updateSelectButton(updatedData: self.viewModel.galleryData, inBatchSelectMode: false)
         self.mediaTileViewLayout.invalidateLayout()
@@ -211,7 +210,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         // If we have a focused item then we want to scroll to it
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return }
         
-        Logger.debug("scrolling to focused item at indexPath: \(focusedIndexPath)")
+        Log.debug("[MediaTileViewController] Scrolling to focused item at indexPath: \(focusedIndexPath)")
         
         // Note: For some reason 'scrollToItem' doesn't always work properly so we need to manually
         // calculate what the offset should be to do the initial scroll
@@ -637,11 +636,12 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
 
     @objc func didTapSelect(_ sender: Any) {
         isInBatchSelectMode = true
-
+        
         // show toolbar
+        let view: UIView = self.view
         UIView.animate(withDuration: 0.1, delay: 0, options: .curveEaseInOut, animations: { [weak self] in
             self?.footerBarBottomConstraint?.isActive = false
-            self?.footerBarBottomConstraint = self?.footerBar.autoPinEdge(toSuperviewSafeArea: .bottom)
+            self?.footerBarBottomConstraint = self?.footerBar.pin(.bottom, to: .bottom, of: view.safeAreaLayoutGuide)
             self?.footerBar.superview?.layoutIfNeeded()
 
             // Ensure toolbar doesn't cover bottom row.
@@ -657,9 +657,10 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         isInBatchSelectMode = false
 
         // hide toolbar
+        let view: UIView = self.view
         UIView.animate(withDuration: 0.1, delay: 0, options: .curveEaseInOut, animations: { [weak self] in
             self?.footerBarBottomConstraint?.isActive = false
-            self?.footerBarBottomConstraint = self?.footerBar.autoPinEdge(toSuperviewEdge: .bottom, withInset: -MediaTileViewController.footerBarHeight)
+            self?.footerBarBottomConstraint = self?.footerBar.pin(.bottom, to: .bottom, of: view, withInset: -MediaTileViewController.footerBarHeight)
             self?.footerBar.superview?.layoutIfNeeded()
 
             // Undo "Ensure toolbar doesn't cover bottom row."
@@ -672,7 +673,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
 
     @objc func didPressDelete(_ sender: Any) {
         guard let indexPaths = collectionView.indexPathsForSelectedItems else {
-            owsFailDebug("indexPaths was unexpectedly nil")
+            Log.error("[MediaTileViewController] indexPaths was unexpectedly nil")
             return
         }
 
@@ -801,7 +802,7 @@ private class MediaGallerySectionHeader: UICollectionReusableView {
 
     @available(*, unavailable, message: "Unimplemented")
     required init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public func configure(title: String) {
@@ -829,12 +830,15 @@ private class MediaGalleryStaticHeader: UICollectionViewCell {
         label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.numberOfLines = 0
-        label.autoPinEdgesToSuperviewMargins(with: UIEdgeInsets(top: 0, leading: Values.largeSpacing, bottom: 0, trailing: Values.largeSpacing))
+        label.pin(.top, toMargin: .top, of: self)
+        label.pin(.leading, toMargin: .leading, of: self, withInset: Values.largeSpacing)
+        label.pin(.trailing, toMargin: .trailing, of: self, withInset: -Values.largeSpacing)
+        label.pin(.bottom, toMargin: .bottom, of: self)
     }
 
     @available(*, unavailable, message: "Unimplemented")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public func configure(title: String) {

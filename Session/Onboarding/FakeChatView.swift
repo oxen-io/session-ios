@@ -116,13 +116,13 @@ final class FakeChatView: UIView {
                     self?.showChatBubble(at: 2)
                     UIView.animate(withDuration: animationDuration) {
                         guard let self = self else { return }
-                        self.scrollView.contentOffset = CGPoint(x: 0, y: self.chatBubbles[0].height() + self.spacing)
+                        self.scrollView.contentOffset = CGPoint(x: 0, y: self.chatBubbles[0].bounds.height + self.spacing)
                     }
                     Timer.scheduledTimer(withTimeInterval: 1.5 * delayBetweenMessages, repeats: false) { _ in
                         self?.showChatBubble(at: 3)
                         UIView.animate(withDuration: animationDuration) {
                             guard let self = self else { return }
-                            self.scrollView.contentOffset = CGPoint(x: 0, y: self.chatBubbles[0].height() + self.spacing + self.chatBubbles[1].height() + self.spacing)
+                            self.scrollView.contentOffset = CGPoint(x: 0, y: self.chatBubbles[0].bounds.height + self.spacing + self.chatBubbles[1].bounds.height + self.spacing)
                         }
                         Timer.scheduledTimer(withTimeInterval: delayBetweenMessages, repeats: false) { _ in
                             self?.showChatBubble(at: 4)

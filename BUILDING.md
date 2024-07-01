@@ -38,15 +38,7 @@ Session requires a number of submodules to build, these can be retrieved by navi
 git submodule update --init --recursive
 ```
 
-## 3. Pods
-
-To build and configure the libraries Session uses, just run:
-
-```
-pod install
-```
-
-## 4. libSession build dependencies
+## 3. libSession build dependencies
 
 The iOS project has a share C++ library called `libSession` which is built as one of the project dependencies, in order for this to compile the following dependencies need to be installed:
 - cmake
@@ -59,12 +51,12 @@ Additionally `xcode-select` needs to be setup correctly (depending on the order 
 
 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
 
-## 5. Xcode
+## 4. Xcode
 
-Open the `Session.xcworkspace` in Xcode.
+Open the `Session.xcodeproj` in Xcode.
 
 ```
-open Session.xcworkspace
+open Session.xcodeproj
 ```
 
 In the TARGETS area of the General tab, change the Team dropdown to
@@ -79,6 +71,15 @@ remain on in order to access the shared data storage.
 Build and Run and you are ready to go!
 
 ## Known issues
+
+### Address & Undefined Behaviour Sanitizer Linker Errors
+It seems that there is an open issue with Swift Package Manager (https://github.com/swiftlang/swift-package-manager/issues/4407) where some packages (in our case `libwebp`) run into issues when the Address Sanitizer or Undefined Behaviour Sanitizer are enabled within the scheme, if you see linker errors like the below when building this is likely the issue and can be resolved by disabling these sanitisers.
+
+In order to still benefit from these settings they are explicitly set as `Other C Flags` for the `SessionUtil` target when building in debug mode to enable better debugging of `libSession`.
+```
+Undefined symbol: ___asan_init
+Undefined symbol: ___ubsan_handle_add_overflow
+```
 
 ### Third-party Installation
 The database for the app is stored within an `App Group` directory which is based on the app identifier, unfortunately the identifier cannot be retrieved at runtime so it's currently hard-coded in the code. In order to be able to run session on a device you will need to update the `UserDefaults.applicationGroup` variable in `SessionUtilitiesKit/General/SNUserDefaults` to match the value provided (You may also need to create the `App Group` on your Apple Developer account).

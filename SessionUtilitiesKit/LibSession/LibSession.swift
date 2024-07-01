@@ -4,7 +4,6 @@
 
 import Foundation
 import SessionUtil
-import SignalCoreKit
 
 // MARK: - LibSession
 
@@ -83,7 +82,7 @@ extension LibSession {
 fileprivate extension Log.Level {
     init(_ level: LOG_LEVEL) {
         switch level {
-            case LOG_LEVEL_TRACE: self = .trace
+            case LOG_LEVEL_TRACE: self = .verbose
             case LOG_LEVEL_DEBUG: self = .debug
             case LOG_LEVEL_INFO: self = .info
             case LOG_LEVEL_WARN: self = .warn

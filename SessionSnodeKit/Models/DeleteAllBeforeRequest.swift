@@ -14,6 +14,21 @@ extension SnodeAPI {
         let beforeMs: UInt64
         let namespace: SnodeAPI.Namespace?
         
+        override var verificationBytes: [UInt8] {
+            /// Ed25519 signature of `("delete_before" || namespace || before)`, signed by
+            /// `pubkey`.  Must be base64 encoded (json) or bytes (OMQ).  `namespace` is the stringified
+            /// version of the given non-default namespace parameter (i.e. "-42" or "all"), or the empty
+            /// string for the default namespace (whether explicitly given or not).
+            SnodeAPI.Endpoint.deleteAllBefore.path.bytes
+                .appending(
+                    contentsOf: (namespace == nil ?
+                        "all" :
+                        namespace?.verificationString
+                    )?.bytes
+                )
+                .appending(contentsOf: "\(beforeMs)".data(using: .ascii)?.bytes)
+        }
+        
         // MARK: - Init
         
         public init(
@@ -50,34 +65,6 @@ extension SnodeAPI {
             }
             
             try super.encode(to: encoder)
-        }
-        
-        // MARK: - Abstract Methods
-        
-        override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("delete_before" || namespace || before)`, signed by
-            /// `pubkey`.  Must be base64 encoded (json) or bytes (OMQ).  `namespace` is the stringified
-            /// version of the given non-default namespace parameter (i.e. "-42" or "all"), or the empty
-            /// string for the default namespace (whether explicitly given or not).
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.deleteAllBefore.path.bytes
-                .appending(
-                    contentsOf: (namespace == nil ?
-                        "all" :
-                        namespace?.verificationString
-                    )?.bytes
-                )
-                .appending(contentsOf: "\(beforeMs)".data(using: .ascii)?.bytes)
-            
-            guard
-                let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
-                    message: verificationBytes,
-                    secretKey: ed25519SecretKey
-                )
-            else {
-                throw SnodeAPIError.signingFailed
-            }
-            
-            return signatureBytes
         }
         
         // MARK: - UpdatableTimestamp

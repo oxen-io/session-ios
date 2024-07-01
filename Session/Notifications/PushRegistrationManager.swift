@@ -6,7 +6,6 @@ import PushKit
 import GRDB
 import SessionMessagingKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public enum PushRegistrationError: Error {
@@ -52,8 +51,6 @@ public enum PushRegistrationError: Error {
     // MARK: - Public interface
 
     public func requestPushTokens() -> AnyPublisher<(pushToken: String, voipToken: String), Error> {
-        Logger.info("")
-        
         return registerUserNotificationSettings()
             .setFailureType(to: Error.self)
             .tryFlatMap { _ -> AnyPublisher<(pushToken: String, voipToken: String), Error> in
@@ -77,7 +74,7 @@ public enum PushRegistrationError: Error {
     // Vanilla push token is obtained from the system via AppDelegate
     public func didReceiveVanillaPushToken(_ tokenData: Data, using dependencies: Dependencies = Dependencies()) {
         guard let vanillaTokenResolver = self.vanillaTokenResolver else {
-            owsFailDebug("publisher completion in \(#function) unexpectedly nil")
+            Log.error("[PushRegistrationManager] Publisher completion in \(#function) unexpectedly nil")
             return
         }
 
@@ -89,7 +86,7 @@ public enum PushRegistrationError: Error {
     // Vanilla push token is obtained from the system via AppDelegate    
     public func didFailToReceiveVanillaPushToken(error: Error, using dependencies: Dependencies = Dependencies()) {
         guard let vanillaTokenResolver = self.vanillaTokenResolver else {
-            owsFailDebug("publisher completion in \(#function) unexpectedly nil")
+            Log.error("[PushRegistrationManager] Publisher completion in \(#function) unexpectedly nil")
             return
         }
 
@@ -224,7 +221,7 @@ public enum PushRegistrationError: Error {
         createVoipRegistryIfNecessary()
         
         guard let voipRegistry: PKPushRegistry = self.voipRegistry else {
-            owsFailDebug("failed to initialize voipRegistry")
+            Log.error("[PushRegistrationManager] Failed to initialize voipRegistry")
             return Fail(
                 error: PushRegistrationError.assertionError(description: "failed to initialize voipRegistry")
             ).eraseToAnyPublisher()
@@ -233,7 +230,7 @@ public enum PushRegistrationError: Error {
         // If we've already completed registering for a voip token, resolve it immediately,
         // rather than waiting for the delegate method to be called.
         if let voipTokenData: Data = voipRegistry.pushToken(for: .voIP) {
-            Logger.info("using pre-registered voIP token")
+            Log.info("[PushRegistrationManager] Using pre-registered voIP token")
             return Just(voipTokenData.toHexString())
                 .setFailureType(to: Error.self)
                 .eraseToAnyPublisher()
@@ -248,7 +245,7 @@ public enum PushRegistrationError: Error {
         
         return publisher
             .map { voipTokenData -> String? in
-                Logger.info("successfully registered for voip push notifications")
+                Log.info("[PushRegistrationManager] Successfully registered for voip push notifications")
                 return voipTokenData?.toHexString()
             }
             .handleEvents(
@@ -263,18 +260,17 @@ public enum PushRegistrationError: Error {
     // MARK: - PKPushRegistryDelegate
     
     public func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
-        Logger.info("")
-        owsAssertDebug(type == .voIP)
-        owsAssertDebug(pushCredentials.type == .voIP)
+        Log.assert(type == .voIP)
+        Log.assert(pushCredentials.type == .voIP)
 
         voipTokenResolver?(Result.success(pushCredentials.token))
     }
     
     // NOTE: This function MUST report an incoming call.
     public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
-        SNLog("[Calls] Receive new voip notification.")
-        owsAssertDebug(Singleton.hasAppContext && Singleton.appContext.isMainApp)
-        owsAssertDebug(type == .voIP)
+        Log.info("[PushRegistrationManager] Receive new voip notification.")
+        Log.assert(Singleton.hasAppContext && Singleton.appContext.isMainApp)
+        Log.assert(type == .voIP)
         let payload = payload.dictionaryPayload
         
         guard

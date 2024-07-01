@@ -10,6 +10,13 @@ extension SnodeAPI {
         
         let subkeyToRevoke: String
         
+        override var verificationBytes: [UInt8] {
+            /// Ed25519 signature of `("revoke_subkey" || subkey)`; this signs the subkey tag,
+            /// using `pubkey` to sign. Must be base64 encoded for json requests; binary for OMQ requests.
+            SnodeAPI.Endpoint.revokeSubaccount.path.bytes
+                .appending(contentsOf: subkeyToRevoke.bytes)
+        }
+        
         // MARK: - Init
         
         public init(
@@ -35,26 +42,6 @@ extension SnodeAPI {
             try container.encode(subkeyToRevoke, forKey: .subkeyToRevoke)
             
             try super.encode(to: encoder)
-        }
-        
-        // MARK: - Abstract Methods
-        
-        override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("revoke_subkey" || subkey)`; this signs the subkey tag,
-            /// using `pubkey` to sign. Must be base64 encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.revokeSubaccount.path.bytes
-                .appending(contentsOf: subkeyToRevoke.bytes)
-            
-            guard
-                let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
-                    message: verificationBytes,
-                    secretKey: ed25519SecretKey
-                )
-            else {
-                throw SnodeAPIError.signingFailed
-            }
-            
-            return signatureBytes
         }
     }
 }

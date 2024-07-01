@@ -36,7 +36,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         let result = UIButton(type: .custom)
         result.setImage(
             UIImage(named: "AnswerCall")?
-                .resizedImage(to: CGSize(width: 24.8, height: 24.8))?
+                .resized(to: CGSize(width: 24.8, height: 24.8))?
                 .withRenderingMode(.alwaysTemplate),
             for: .normal
         )
@@ -54,7 +54,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         let result = UIButton(type: .custom)
         result.setImage(
             UIImage(named: "EndCall")?
-                .resizedImage(to: CGSize(width: 29.6, height: 11.2))?
+                .resized(to: CGSize(width: 29.6, height: 11.2))?
                 .withRenderingMode(.alwaysTemplate),
             for: .normal
         )
@@ -126,7 +126,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         self.addSubview(stackView)
         
         stackView.center(.vertical, in: self)
-        stackView.autoPinWidthToSuperview(withMargin: Values.mediumSpacing)
+        stackView.set(.width, to: .width, of: self, withOffset: Values.mediumSpacing)
     }
     
     private func setUpGestureRecognizers() {
@@ -222,8 +222,8 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         window.addSubview(self)
         
         let topMargin = window.safeAreaInsets.top - Values.smallSpacing
-        self.autoPinWidthToSuperview(withMargin: Values.smallSpacing)
-        self.autoPinEdge(toSuperviewEdge: .top, withInset: topMargin)
+        self.set(.width, to: .width, of: window, withOffset: Values.smallSpacing)
+        self.pin(.top, to: .top, of: window, withInset: topMargin)
         
         UIView.animate(withDuration: 0.5, delay: 0, options: [], animations: {
             self.alpha = 1.0

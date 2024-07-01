@@ -29,8 +29,8 @@ public class GalleryRailCellView: UIView {
     
     let contentContainer: UIView = {
         let view = UIView()
-        view.autoPinToSquareAspectRatio()
         view.clipsToBounds = true
+        view.set(.width, to: .height, of: view)
 
         return view
     }()
@@ -43,7 +43,7 @@ public class GalleryRailCellView: UIView {
         layoutMargins = .zero
         clipsToBounds = false
         addSubview(contentContainer)
-        contentContainer.autoPinEdgesToSuperviewMargins()
+        contentContainer.pin(toMarginsOf: self)
         contentContainer.layer.cornerRadius = 4.8
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(didTap(sender:)))
@@ -73,7 +73,7 @@ public class GalleryRailCellView: UIView {
 
         let itemView = item.buildRailItemView()
         contentContainer.addSubview(itemView)
-        itemView.autoPinEdgesToSuperviewEdges()
+        itemView.pin(to: contentContainer)
     }
 
     // MARK: - Selected
@@ -127,14 +127,14 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         clipsToBounds = false
         
         addSubview(scrollView)
-        scrollView.autoPinEdgesToSuperviewMargins()
+        scrollView.pin(toMarginsOf: self)
         
         scrollView.addSubview(stackClippingView)
         stackClippingView.addSubview(stackView)
         
-        stackClippingView.autoPinEdgesToSuperviewEdges()
-        stackClippingView.autoMatch(.height, to: .height, of: scrollView)
-        stackView.autoPinEdgesToSuperviewEdges()
+        stackClippingView.pin(to: scrollView)
+        stackClippingView.set(.height, to: .height, of: scrollView)
+        stackView.pin(to: stackClippingView)
     }
 
     public required init?(coder aDecoder: NSCoder) {
@@ -148,7 +148,7 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         result.clipsToBounds = false
         result.layoutMargins = .zero
         result.isScrollEnabled = true
-        result.scrollIndicatorInsets = UIEdgeInsets(top: 0, leading: 0, bottom: -10, trailing: 0)
+        result.scrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: -10, right: 0)
         
         return result
     }()

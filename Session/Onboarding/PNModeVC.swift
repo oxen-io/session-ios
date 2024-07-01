@@ -9,6 +9,7 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class PNModeVC: BaseVC, OptionViewDelegate {
+    private let dependencies: Dependencies
     private let flow: Onboarding.Flow
     
     private var optionViews: [OptionView] {
@@ -21,7 +22,8 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
     
     // MARK: - Initialization
     
-    init(flow: Onboarding.Flow) {
+    init(flow: Onboarding.Flow, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.flow = flow
         
         super.init(nibName: nil, bundle: nil)
@@ -167,7 +169,7 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         }
         
         // If we don't have one then show a loading indicator and try to retrieve the existing name
-        ModalActivityIndicatorViewController.present(fromViewController: self) { [weak self, flow = self.flow] viewController in
+        ModalActivityIndicatorViewController.present(fromViewController: self) { [weak self, flow, dependencies] viewController in
             Onboarding.profileNamePublisher
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .timeout(.seconds(15), scheduler: DispatchQueue.main, customError: { NetworkError.timeout })
@@ -185,7 +187,7 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
                         
                         // If we have no display name we need to collect one
                         guard value?.isEmpty == false else {
-                            let displayNameVC: DisplayNameVC = DisplayNameVC(flow: flow)
+                            let displayNameVC: DisplayNameVC = DisplayNameVC(flow: flow, using: dependencies)
                             self?.navigationController?.pushViewController(displayNameVC, animated: true)
                             return
                         }
@@ -205,7 +207,7 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         if useAPNS { SyncPushTokensJob.run(uploadOnlyIfStale: false) }
         
         // Go to the home screen
-        let homeVC: HomeVC = HomeVC()
+        let homeVC: HomeVC = HomeVC(using: dependencies)
         self.navigationController?.setViewControllers([ homeVC ], animated: true)
     }
 }

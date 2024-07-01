@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import SignalCoreKit
 import SessionUtilitiesKit
 
 @objc
@@ -59,7 +58,6 @@ public class OWSProximityMonitoringManagerImpl: NSObject, OWSProximityMonitoring
 
     @objc
     func proximitySensorStateDidChange(notification: Notification) {
-        Logger.debug("")
         // This is crazy, but if we disable `device.isProximityMonitoringEnabled` while
         // `device.proximityState` is true (while the device is held to the ear)
         // then `device.proximityState` remains true, even after we bring the phone
@@ -78,15 +76,15 @@ public class OWSProximityMonitoringManagerImpl: NSObject, OWSProximityMonitoring
         lifetimes = lifetimes.filter { $0.value != nil }
         if lifetimes.isEmpty {
             DispatchQueue.main.async {
-                Logger.debug("disabling proximity monitoring")
+                Log.debug("[ProximityMonitoringManager] Disabling proximity monitoring")
                 self.device.isProximityMonitoringEnabled = false
             }
         } else {
             let lifetimes = self.lifetimes
             DispatchQueue.main.async {
-                Logger.debug("willEnable proximity monitoring for lifetimes: \(lifetimes), proximityState: \(self.device.proximityState)")
+                Log.debug("[ProximityMonitoringManager] willEnable proximity monitoring for lifetimes: \(lifetimes), proximityState: \(self.device.proximityState)")
                 self.device.isProximityMonitoringEnabled = true
-                Logger.debug("didEnable proximity monitoring for lifetimes: \(lifetimes), proximityState: \(self.device.proximityState)")
+                Log.debug("[ProximityMonitoringManager] didEnable proximity monitoring for lifetimes: \(lifetimes), proximityState: \(self.device.proximityState)")
             }
         }
     }

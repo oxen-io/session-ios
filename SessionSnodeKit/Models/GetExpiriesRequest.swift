@@ -12,6 +12,14 @@ extension SnodeAPI {
         /// You may pass a single message id of "all" to retrieve the timestamps of all
         let messageHashes: [String]
         
+        override var verificationBytes: [UInt8] {
+            /// Ed25519 signature of `("get_expiries" || timestamp || messages[0] || ... || messages[N])`
+            /// where `timestamp` is expressed as a string (base10).  The signature must be base64 encoded (json) or bytes (bt).
+            SnodeAPI.Endpoint.getExpiries.path.bytes
+                .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
+                .appending(contentsOf: messageHashes.joined().bytes)
+        }
+        
         // MARK: - Init
         
         public init(
@@ -41,27 +49,6 @@ extension SnodeAPI {
             try container.encode(messageHashes, forKey: .messageHashes)
             
             try super.encode(to: encoder)
-        }
-        
-        // MARK: - Abstract Methods
-        
-        override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("get_expiries" || timestamp || messages[0] || ... || messages[N])`
-            /// where `timestamp` is expressed as a string (base10).  The signature must be base64 encoded (json) or bytes (bt).
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.getExpiries.path.bytes
-                .appending(contentsOf: timestampMs.map { "\($0)" }?.data(using: .ascii)?.bytes)
-                .appending(contentsOf: messageHashes.joined().bytes)
-            
-            guard
-                let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
-                    message: verificationBytes,
-                    secretKey: ed25519SecretKey
-                )
-            else {
-                throw SnodeAPIError.signingFailed
-            }
-            
-            return signatureBytes
         }
     }
 }

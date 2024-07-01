@@ -3,7 +3,6 @@
 import Foundation
 import UIKit
 import SessionUIKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 protocol AttachmentCaptionToolbarDelegate: AnyObject {
@@ -56,10 +55,10 @@ class AttachmentCaptionToolbar: UIView, UITextViewDelegate {
         // Layout
         let kToolbarMargin: CGFloat = 8
 
-        self.textViewHeightConstraint = textView.autoSetDimension(.height, toSize: kMinTextViewHeight)
+        self.textViewHeightConstraint = textView.set(.height, to: kMinTextViewHeight)
 
-        lengthLimitLabel.setContentHuggingHigh()
-        lengthLimitLabel.setCompressionResistanceHigh()
+        lengthLimitLabel.setContentHugging(to: .required)
+        lengthLimitLabel.setCompressionResistance(to: .required)
 
         let contentView = UIStackView(arrangedSubviews: [textContainer, lengthLimitLabel])
         // We have to wrap the toolbar items in a content view because iOS (at least on iOS10.3) assigns the inputAccessoryView.layoutMargins
@@ -69,11 +68,11 @@ class AttachmentCaptionToolbar: UIView, UITextViewDelegate {
         contentView.layoutMargins = UIEdgeInsets(top: kToolbarMargin, left: kToolbarMargin, bottom: kToolbarMargin, right: kToolbarMargin)
         contentView.axis = .vertical
         addSubview(contentView)
-        contentView.autoPinEdgesToSuperviewEdges()
+        contentView.pin(to: self)
     }
 
     required init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - UIView Overrides
@@ -119,7 +118,7 @@ class AttachmentCaptionToolbar: UIView, UITextViewDelegate {
         let textContainer = UIView()
         textContainer.clipsToBounds = true
         textContainer.addSubview(textView)
-        textView.autoPinEdgesToSuperviewEdges()
+        textView.pin(to: textContainer)
         return textContainer
     }()
 
@@ -156,7 +155,7 @@ class AttachmentCaptionToolbar: UIView, UITextViewDelegate {
 
         // After verifying the byte-length is sufficiently small, verify the character count is within bounds.
         guard proposedText.count < kMaxCaptionCharacterCount else {
-            Logger.debug("hit attachment message body character count limit")
+            Log.debug("[AttachmentCaptionToolbar] hit attachment message body character count limit")
 
             self.lengthLimitLabel.isHidden = false
 
@@ -191,7 +190,7 @@ class AttachmentCaptionToolbar: UIView, UITextViewDelegate {
         let newHeight = clampedTextViewHeight(fixedWidth: currentSize.width)
 
         if newHeight != textViewHeight {
-            Logger.debug("TextView height changed: \(textViewHeight) -> \(newHeight)")
+            Log.debug("[AttachmentCaptionToolbar] TextView height changed: \(textViewHeight) -> \(newHeight)")
             textViewHeight = newHeight
             textViewHeightConstraint?.constant = textViewHeight
             invalidateIntrinsicContentSize()
@@ -200,6 +199,6 @@ class AttachmentCaptionToolbar: UIView, UITextViewDelegate {
 
     private func clampedTextViewHeight(fixedWidth: CGFloat) -> CGFloat {
         let contentSize = textView.sizeThatFits(CGSize(width: fixedWidth, height: CGFloat.greatestFiniteMagnitude))
-        return CGFloatClamp(contentSize.height, kMinTextViewHeight, maxTextViewHeight)
+        return contentSize.height.clamp(kMinTextViewHeight, maxTextViewHeight)
     }
 }

@@ -5,7 +5,6 @@ import Combine
 import CoreServices
 import SignalUtilitiesKit
 import SessionUtilitiesKit
-import SignalCoreKit
 
 // There's no UTI type for webp!
 enum GiphyFormat {
@@ -79,7 +78,7 @@ class GiphyRendition: ProxiedContentAssetDescription {
     }
 
     public func log() {
-        Logger.verbose("\t \(format), \(name), \(width), \(height), \(fileSize)")
+        Log.verbose("[GiphyRendition] \t \(format), \(name), \(width), \(height), \(fileSize)")
     }
 }
 
@@ -111,7 +110,7 @@ class GiphyImageInfo: NSObject {
     }
 
     public func log() {
-        Logger.verbose("giphyId: \(giphyId), \(renditions.count)")
+        Log.verbose("[GiphyImageInfo] giphyId: \(giphyId), \(renditions.count)")
         for rendition in renditions {
             rendition.log()
         }
@@ -287,16 +286,16 @@ enum GiphyAPI {
         return urlSession
             .dataTaskPublisher(for: url)
             .mapError { urlError in
-                Logger.error("search request failed: \(urlError)")
+                Log.verbose("[GiphyAPI] Search request failed: \(urlError)")
                 
                 // URLError codes are negative values
                 return NetworkError.unknown
             }
             .map { data, _ in
-                Logger.debug("search request succeeded")
+                Log.verbose("[GiphyAPI] Search request succeeded")
                 
                 guard let imageInfos = self.parseGiphyImages(responseData: data) else {
-                    Logger.error("unable to parse trending images")
+                    Log.error("[GiphyAPI] Unable to parse trending images")
                     return []
                 }
                 
@@ -335,13 +334,13 @@ enum GiphyAPI {
         return urlSession
             .dataTaskPublisher(for: request)
             .mapError { urlError in
-                Logger.error("search request failed: \(urlError)")
+                Log.error("[GiphyAPI] Search request failed: \(urlError)")
                 
                 // URLError codes are negative values
                 return NetworkError.unknown
             }
             .tryMap { data, _ -> [GiphyImageInfo] in
-                Logger.debug("search request succeeded")
+                Log.verbose("[GiphyAPI] Search request succeeded")
                 
                 guard let imageInfos = self.parseGiphyImages(responseData: data) else {
                     throw NetworkError.invalidResponse
@@ -356,16 +355,16 @@ enum GiphyAPI {
 
     private static func parseGiphyImages(responseData: Data?) -> [GiphyImageInfo]? {
         guard let responseData: Data = responseData else {
-            Logger.error("Missing response.")
+            Log.error("[GiphyAPI] Missing response.")
             return nil
         }
         guard let responseDict: [String: Any] = try? JSONSerialization
             .jsonObject(with: responseData, options: [ .fragmentsAllowed ]) as? [String: Any] else {
-            Logger.error("Invalid response.")
+            Log.error("[GiphyAPI] Invalid response.")
             return nil
         }
         guard let imageDicts = responseDict["data"] as? [[String: Any]] else {      // stringlint:disable
-            Logger.error("Invalid response data.")
+            Log.error("[GiphyAPI] Invalid response data.")
             return nil
         }
         return imageDicts.compactMap { imageDict in
@@ -376,21 +375,21 @@ enum GiphyAPI {
     // Giphy API results are often incomplete or malformed, so we need to be defensive.
     private static func parseGiphyImage(imageDict: [String: Any]) -> GiphyImageInfo? {
         guard let giphyId = imageDict["id"] as? String else {      // stringlint:disable
-            Logger.warn("Image dict missing id.")
+            Log.warn("[GiphyAPI] Image dict missing id.")
             return nil
         }
         guard giphyId.count > 0 else {
-            Logger.warn("Image dict has invalid id.")
+            Log.warn("[GiphyAPI] Image dict has invalid id.")
             return nil
         }
         guard let renditionDicts = imageDict["images"] as? [String: Any] else {      // stringlint:disable
-            Logger.warn("Image dict missing renditions.")
+            Log.warn("[GiphyAPI] Image dict missing renditions.")
             return nil
         }
         var renditions = [GiphyRendition]()
         for (renditionName, renditionDict) in renditionDicts {
             guard let renditionDict = renditionDict as? [String: Any] else {
-                Logger.warn("Invalid rendition dict.")
+                Log.warn("[GiphyAPI] Invalid rendition dict.")
                 continue
             }
             guard let rendition = parseGiphyRendition(renditionName: renditionName,
@@ -400,12 +399,12 @@ enum GiphyAPI {
             renditions.append(rendition)
         }
         guard renditions.count > 0 else {
-            Logger.warn("Image has no valid renditions.")
+            Log.warn("[GiphyAPI] Image has no valid renditions.")
             return nil
         }
 
         guard let originalRendition = findOriginalRendition(renditions: renditions) else {
-            Logger.warn("Image has no original rendition.")
+            Log.warn("[GiphyAPI] Image has no original rendition.")
             return nil
         }
 
@@ -442,15 +441,15 @@ enum GiphyAPI {
             return nil
         }
         guard urlString.count > 0 else {
-            Logger.warn("Rendition has invalid url.")
+            Log.warn("[GiphyAPI] Rendition has invalid url.")
             return nil
         }
         guard let url = NSURL(string: urlString) else {
-            Logger.warn("Rendition url could not be parsed.")
+            Log.warn("[GiphyAPI] Rendition url could not be parsed.")
             return nil
         }
         guard let fileExtension = url.pathExtension?.lowercased() else {
-            Logger.warn("Rendition url missing file extension.")
+            Log.warn("[GiphyAPI] Rendition url missing file extension.")
             return nil
         }
         var format = GiphyFormat.gif
@@ -463,7 +462,7 @@ enum GiphyAPI {
         } else if fileExtension == "webp" {     // stringlint:disable
             return nil
         } else {
-            Logger.warn("Invalid file extension: \(fileExtension).")
+            Log.warn("[GiphyAPI] Invalid file extension: \(fileExtension).")
             return nil
         }
 
@@ -488,7 +487,7 @@ enum GiphyAPI {
             return nil
         }
         guard parsedValue > 0 else {
-            Logger.verbose("\(typeName) has non-positive \(key): \(parsedValue).")
+            Log.verbose("[GiphyAPI] \(typeName) has non-positive \(key): \(parsedValue).")
             return nil
         }
         return parsedValue

@@ -2,21 +2,24 @@
 //
 // stringlint:disable
 
-import Foundation
+import UIKit
 import CryptoKit
 import Combine
 import GRDB
-import SignalCoreKit
+
+// MARK: - KeychainStorage
+
+public extension KeychainStorage.DataKey { static let dbCipherKeySpec: Self = "GRDBDatabaseCipherKeySpec" }
+
+// MARK: - Storage
 
 open class Storage {
     public static let queuePrefix: String = "SessionDatabase"
     private static let dbFileName: String = "Session.sqlite"
-    private static let keychainService: String = "TSKeyChainService"
-    private static let dbCipherKeySpecKey: String = "GRDBDatabaseCipherKeySpec"
     private static let kSQLCipherKeySpecLength: Int = 48
     private static let writeWarningThreadshold: TimeInterval = 3
     
-    private static var sharedDatabaseDirectoryPath: String { "\(OWSFileSystem.appSharedDataDirectoryPath())/database" }
+    private static var sharedDatabaseDirectoryPath: String { "\(FileManager.default.appSharedDataDirectoryPath)/database" }
     private static var databasePath: String { "\(Storage.sharedDatabaseDirectoryPath)/\(Storage.dbFileName)" }
     private static var databasePathShm: String { "\(Storage.sharedDatabaseDirectoryPath)/\(Storage.dbFileName)-shm" }
     private static var databasePathWal: String { "\(Storage.sharedDatabaseDirectoryPath)/\(Storage.dbFileName)-wal" }
@@ -57,7 +60,7 @@ open class Storage {
     internal var testDbWriter: DatabaseWriter? { dbWriter }
     private var unprocessedMigrationRequirements: Atomic<[MigrationRequirement]> = Atomic(MigrationRequirement.allCases)
     private var migrationProgressUpdater: Atomic<((String, CGFloat) -> ())>?
-    private var migrationRequirementProcesser: Atomic<(Database?, MigrationRequirement) -> ()>?
+    private var migrationRequirementProcesser: Atomic<(Database, MigrationRequirement) -> ()>?
     
     // MARK: - Initialization
     
@@ -68,8 +71,8 @@ open class Storage {
     private func configureDatabase(customWriter: DatabaseWriter? = nil) {
         // Create the database directory if needed and ensure it's protection level is set before attempting to
         // create the database KeySpec or the database itself
-        OWSFileSystem.ensureDirectoryExists(Storage.sharedDatabaseDirectoryPath)
-        OWSFileSystem.protectFileOrFolder(atPath: Storage.sharedDatabaseDirectoryPath)
+        try? FileSystem.ensureDirectoryExists(at: Storage.sharedDatabaseDirectoryPath)
+        try? FileSystem.protectFileOrFolder(at: Storage.sharedDatabaseDirectoryPath)
         
         // If a custom writer was provided then use that (for unit testing)
         guard customWriter == nil else {
@@ -169,15 +172,17 @@ open class Storage {
         migrationTargets: [MigratableTarget.Type],
         async: Bool = true,
         onProgressUpdate: ((CGFloat, TimeInterval) -> ())?,
-        onMigrationRequirement: @escaping (Database?, MigrationRequirement) -> (),
-        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> ()
+        onMigrationRequirement: @escaping (Database, MigrationRequirement) -> (),
+        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         perform(
             sortedMigrations: Storage.sortedMigrationInfo(migrationTargets: migrationTargets),
             async: async,
             onProgressUpdate: onProgressUpdate,
             onMigrationRequirement: onMigrationRequirement,
-            onComplete: onComplete
+            onComplete: onComplete,
+            using: dependencies
         )
     }
     
@@ -185,8 +190,9 @@ open class Storage {
         sortedMigrations: [KeyedMigration],
         async: Bool,
         onProgressUpdate: ((CGFloat, TimeInterval) -> ())?,
-        onMigrationRequirement: @escaping (Database?, MigrationRequirement) -> (),
-        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> ()
+        onMigrationRequirement: @escaping (Database, MigrationRequirement) -> (),
+        onComplete: @escaping (Swift.Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         guard isValid, let dbWriter: DatabaseWriter = dbWriter else {
             let error: Error = (startupError ?? StorageError.startupFailed)
@@ -198,7 +204,7 @@ open class Storage {
         // Setup and run any required migrations
         var migrator: DatabaseMigrator = DatabaseMigrator()
         sortedMigrations.forEach { _, identifier, migration in
-            migrator.registerMigration(self, targetIdentifier: identifier, migration: migration)
+            migrator.registerMigration(self, targetIdentifier: identifier, migration: migration, using: dependencies)
         }
         
         // Determine which migrations need to be performed and gather the relevant settings needed to
@@ -242,7 +248,7 @@ open class Storage {
         let migrationCompleted: (Swift.Result<Void, Error>) -> () = { [weak self] result in
             // Process any unprocessed requirements which need to be processed before completion
             // then clear out the state
-            let requirementProcessor: ((Database?, MigrationRequirement) -> ())? = self?.migrationRequirementProcesser?.wrappedValue
+            let requirementProcessor: ((Database, MigrationRequirement) -> ())? = self?.migrationRequirementProcesser?.wrappedValue
             let remainingMigrationRequirements: [MigrationRequirement] = (self?.unprocessedMigrationRequirements.wrappedValue
                 .filter { $0.shouldProcessAtCompletionIfNotRequired })
                 .defaulting(to: [])
@@ -336,7 +342,7 @@ open class Storage {
     // MARK: - Security
     
     private static func getDatabaseCipherKeySpec() throws -> Data {
-        return try SSKDefaultKeychainStorage.shared.data(forService: keychainService, key: dbCipherKeySpecKey)
+        return try Singleton.keychain.data(forKey: .dbCipherKeySpec)
     }
     
     @discardableResult private static func getOrGenerateDatabaseKeySpec() throws -> Data {
@@ -366,7 +372,7 @@ open class Storage {
                         var keySpec: Data = try Randomness.generateRandomBytes(numberBytes: kSQLCipherKeySpecLength)
                         defer { keySpec.resetBytes(in: 0..<keySpec.count) } // Reset content immediately after use
                         
-                        try SSKDefaultKeychainStorage.shared.set(data: keySpec, service: keychainService, key: dbCipherKeySpecKey)
+                        try Singleton.keychain.set(data: keySpec, forKey: .dbCipherKeySpec)
                         return keySpec
                     }
                     catch {
@@ -444,13 +450,13 @@ open class Storage {
     }
     
     private static func deleteDatabaseFiles() {
-        OWSFileSystem.deleteFile(databasePath)
-        OWSFileSystem.deleteFile(databasePathShm)
-        OWSFileSystem.deleteFile(databasePathWal)
+        try? FileSystem.deleteFile(at: databasePath)
+        try? FileSystem.deleteFile(at: databasePathShm)
+        try? FileSystem.deleteFile(at: databasePathWal)
     }
     
     private static func deleteDbKeys() throws {
-        try SSKDefaultKeychainStorage.shared.remove(service: keychainService, key: dbCipherKeySpecKey)
+        try Singleton.keychain.remove(key: .dbCipherKeySpec)
     }
     
     // MARK: - Logging Functions

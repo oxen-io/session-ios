@@ -2,7 +2,6 @@
 
 import Foundation
 import Combine
-import Sodium
 import GRDB
 import SessionUtilitiesKit
 import SessionMessagingKit
@@ -92,7 +91,7 @@ enum Onboarding {
         /// account (eg. returning from the PN setting screen to the seed entry screen when linking a device)
         func unregister(using dependencies: Dependencies = Dependencies()) {
             // Clear the in-memory state from LibSession
-            LibSession.clearMemoryState()
+            LibSession.clearMemoryState(using: dependencies)
             
             // Clear any data which gets set during Onboarding
             Storage.shared.write { db in
@@ -116,14 +115,15 @@ enum Onboarding {
             UserDefaults.standard[.hasSyncedInitialConfiguration] = false
         }
         
-        func preregister(with seed: Data, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) {
+        func preregister(with seed: Data, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair, using dependencies: Dependencies) {
             let x25519PublicKey = x25519KeyPair.hexEncodedPublicKey
             
             // Create the initial shared util state (won't have been created on
             // launch due to lack of ed25519 key)
             LibSession.loadState(
                 userPublicKey: x25519PublicKey,
-                ed25519SecretKey: ed25519KeyPair.secretKey
+                ed25519SecretKey: ed25519KeyPair.secretKey,
+                using: dependencies
             )
             
             // Store the user identity information

@@ -123,7 +123,7 @@ internal extension LibSession {
                 switch info.variant {
                     case .contact:
                         // FIXME: libSession V1 doesn't sync volatileThreadInfo for blinded message requests
-                        guard SessionId(from: info.threadId)?.prefix == .standard else { return false }
+                        guard (try? SessionId(from: info.threadId))?.prefix == .standard else { return false }
                         
                         return true
                         

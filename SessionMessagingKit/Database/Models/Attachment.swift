@@ -5,7 +5,6 @@ import AVFAudio
 import AVFoundation
 import Combine
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 import SessionUIKit
@@ -165,11 +164,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         self.width = width
         self.height = height
         self.duration = duration
-        self.isVisualMedia = (isVisualMedia ?? (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        ))
+        self.isVisualMedia = (isVisualMedia ?? MimeTypeUtil.isVisualMedia(contentType))
         self.isValid = isValid
         self.encryptionKey = encryptionKey
         self.digest = digest
@@ -181,14 +176,14 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         id: String = UUID().uuidString,
         variant: Variant = .standard,
         contentType: String,
-        dataSource: DataSource,
+        dataSource: any DataSource,
         sourceFilename: String? = nil,
         caption: String? = nil
     ) {
         guard let originalFilePath: String = Attachment.originalFilePath(id: id, mimeType: contentType, sourceFilename: sourceFilename) else {
             return nil
         }
-        guard dataSource.write(toPath: originalFilePath) else { return nil }
+        guard case .success = Result(try dataSource.write(to: originalFilePath)) else { return nil }
         
         let imageSize: CGSize? = Attachment.imageSize(
             contentType: contentType,
@@ -205,7 +200,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         self.variant = variant
         self.state = .uploading
         self.contentType = contentType
-        self.byteCount = dataSource.dataLength()
+        self.byteCount = UInt(dataSource.dataLength)
         self.creationTimestamp = nil
         self.sourceFilename = sourceFilename
         self.downloadUrl = nil
@@ -213,11 +208,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         self.width = imageSize.map { UInt(floor($0.width)) }
         self.height = imageSize.map { UInt(floor($0.height)) }
         self.duration = duration
-        self.isVisualMedia = (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        )
+        self.isVisualMedia = MimeTypeUtil.isVisualMedia(contentType)
         self.isValid = isValid
         self.encryptionKey = nil
         self.digest = nil
@@ -266,9 +257,9 @@ extension Attachment: CustomStringConvertible {
     public static func description(for descriptionInfo: DescriptionInfo, count: Int) -> String {
         // We only support multi-attachment sending of images so we can just default to the image attachment
         // if there were multiple attachments
-        guard count == 1 else { return "\(emoji(for: OWSMimeTypeImageJpeg)) \("ATTACHMENT".localized())" }
+        guard count == 1 else { return "\(emoji(for: MimeTypeUtil.MimeType.imageJpeg)) \("ATTACHMENT".localized())" }
         
-        if MIMETypeUtil.isAudio(descriptionInfo.contentType) {
+        if MimeTypeUtil.isAudio(descriptionInfo.contentType) {
             // a missing filename is the legacy way to determine if an audio attachment is
             // a voice note vs. other arbitrary audio attachments.
             if
@@ -284,16 +275,16 @@ extension Attachment: CustomStringConvertible {
     }
     
     public static func emoji(for contentType: String) -> String {
-        if MIMETypeUtil.isImage(contentType) {
+        if MimeTypeUtil.isImage(contentType) {
             return "📷"     // stringlint:disable
         }
-        else if MIMETypeUtil.isVideo(contentType) {
+        else if MimeTypeUtil.isVideo(contentType) {
             return "🎥"     // stringlint:disable
         }
-        else if MIMETypeUtil.isAudio(contentType) {
+        else if MimeTypeUtil.isAudio(contentType) {
             return "🎧"     // stringlint:disable
         }
-        else if MIMETypeUtil.isAnimated(contentType) {
+        else if MimeTypeUtil.isAnimated(contentType) {
             return "🎡"     // stringlint:disable
         }
         
@@ -343,11 +334,7 @@ extension Attachment {
         }()
         // Regenerate this just in case we added support since the attachment was inserted into
         // the database (eg. manually downloaded in a later update)
-        let isVisualMedia: Bool = (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        )
+        let isVisualMedia: Bool = MimeTypeUtil.isVisualMedia(contentType)
         let attachmentResolution: CGSize? = {
             if let width: UInt = self.width, let height: UInt = self.height, width > 0, height > 0 {
                 return CGSize(width: Int(width), height: Int(height))
@@ -376,9 +363,7 @@ extension Attachment {
             isVisualMedia: (
                 // Regenerate this just in case we added support since the attachment was inserted into
                 // the database (eg. manually downloaded in a later update)
-                MIMETypeUtil.isImage(contentType) ||
-                MIMETypeUtil.isVideo(contentType) ||
-                MIMETypeUtil.isAnimated(contentType)
+                MimeTypeUtil.isVisualMedia(contentType)
             ),
             isValid: isValid,
             encryptionKey: (encryptionKey ?? self.encryptionKey),
@@ -396,9 +381,9 @@ extension Attachment {
             guard
                 let fileName: String = filename,
                 let fileExtension: String = URL(string: fileName)?.pathExtension
-            else { return OWSMimeTypeApplicationOctetStream }
-            
-            return (MIMETypeUtil.mimeType(forFileExtension: fileExtension) ?? OWSMimeTypeApplicationOctetStream)
+            else { return MimeTypeUtil.MimeType.applicationOctetStream }
+
+            return (MimeTypeUtil.mimeType(for: fileExtension) ?? MimeTypeUtil.MimeType.applicationOctetStream)
         }
         
         self.id = UUID().uuidString
@@ -424,11 +409,7 @@ extension Attachment {
         self.width = (proto.hasWidth && proto.width > 0 ? UInt(proto.width) : nil)
         self.height = (proto.hasHeight && proto.height > 0 ? UInt(proto.height) : nil)
         self.duration = nil         // Needs to be downloaded to be set
-        self.isVisualMedia = (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        )
+        self.isVisualMedia = MimeTypeUtil.isVisualMedia(contentType)
         self.isValid = false        // Needs to be downloaded to be set
         self.encryptionKey = proto.key
         self.digest = proto.digest
@@ -603,14 +584,14 @@ extension Attachment {
     }()
     
     private static var sharedDataAttachmentsDirPath: String = {
-        URL(fileURLWithPath: OWSFileSystem.appSharedDataDirectoryPath())
+        URL(fileURLWithPath: FileManager.default.appSharedDataDirectoryPath)
             .appendingPathComponent("Attachments")
             .path
     }()
     
     internal static var attachmentsFolder: String = {
         let attachmentsFolder: String = sharedDataAttachmentsDirPath
-        OWSFileSystem.ensureDirectoryExists(attachmentsFolder)
+        try? FileSystem.ensureDirectoryExists(at: attachmentsFolder)
         
         return attachmentsFolder
     }()
@@ -620,11 +601,11 @@ extension Attachment {
     }
     
     public static func originalFilePath(id: String, mimeType: String, sourceFilename: String?) -> String? {
-        return MIMETypeUtil.filePath(
-            forAttachment: id,
-            ofMIMEType: mimeType,
+        return MimeTypeUtil.filePath(
+            for: id,
+            ofMimeType: mimeType,
             sourceFilename: sourceFilename,
-            inFolder: Attachment.attachmentsFolder
+            in: Attachment.attachmentsFolder
         )
     }
     
@@ -636,23 +617,23 @@ extension Attachment {
     }
     
     internal static func imageSize(contentType: String, originalFilePath: String) -> CGSize? {
-        let isVideo: Bool = MIMETypeUtil.isVideo(contentType)
-        let isImage: Bool = MIMETypeUtil.isImage(contentType)
-        let isAnimated: Bool = MIMETypeUtil.isAnimated(contentType)
+        let isVideo: Bool = MimeTypeUtil.isVideo(contentType)
+        let isImage: Bool = MimeTypeUtil.isImage(contentType)
+        let isAnimated: Bool = MimeTypeUtil.isAnimated(contentType)
         
         guard isVideo || isImage || isAnimated else { return nil }
         
         if isVideo {
-            guard OWSMediaUtils.isValidVideo(path: originalFilePath) else { return nil }
+            guard MediaUtils.isValidVideo(path: originalFilePath) else { return nil }
             
             return Attachment.videoStillImage(filePath: originalFilePath)?.size
         }
         
-        return NSData.imageSize(forFilePath: originalFilePath, mimeType: contentType)
+        return Data.imageSize(for: originalFilePath, mimeType: contentType)
     }
     
     public static func videoStillImage(filePath: String) -> UIImage? {
-        return try? OWSMediaUtils.thumbnail(
+        return try? MediaUtils.thumbnail(
             forVideoAtPath: filePath,
             maxDimension: CGFloat(Attachment.thumbnailDimensionLarge)
         )
@@ -673,7 +654,7 @@ extension Attachment {
         let targetPath: String = (constructedFilePath ?? originalFilePath)
         
         // Process audio attachments
-        if MIMETypeUtil.isAudio(contentType) {
+        if MimeTypeUtil.isAudio(contentType) {
             do {
                 let audioPlayer: AVAudioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: targetPath))
                 
@@ -691,15 +672,15 @@ extension Attachment {
         }
         
         // Process image attachments
-        if MIMETypeUtil.isImage(contentType) || MIMETypeUtil.isAnimated(contentType) {
+        if MimeTypeUtil.isImage(contentType) || MimeTypeUtil.isAnimated(contentType) {
             return (
-                NSData.ows_isValidImage(atPath: targetPath, mimeType: contentType),
+                Data.isValidImage(at: targetPath, mimeType: contentType),
                 nil
             )
         }
         
         // Process video attachments
-        if MIMETypeUtil.isVideo(contentType) {
+        if MimeTypeUtil.isVideo(contentType) {
             let asset: AVURLAsset = AVURLAsset(url: URL(fileURLWithPath: targetPath), options: nil)
             let durationSeconds: TimeInterval = (
                 // According to the CMTime docs "value/timescale = seconds"
@@ -707,7 +688,7 @@ extension Attachment {
             )
             
             return (
-                OWSMediaUtils.isValidVideo(path: targetPath),
+                MediaUtils.isValidVideo(path: targetPath),
                 durationSeconds
             )
         }
@@ -753,7 +734,7 @@ extension Attachment {
     var thumbnailsDirPath: String {
         // Thumbnails are written to the caches directory, so that iOS can
         // remove them if necessary
-        return "\(OWSFileSystem.cachesDirectoryPath())/\(id)-thumbnails"
+        return "\(FileSystem.cachesDirectoryPath)/\(id)-thumbnails"
     }
     
     var legacyThumbnailPath: String? {
@@ -782,12 +763,12 @@ extension Attachment {
         return UIImage(contentsOfFile: originalFilePath)
     }
     
-    public var isImage: Bool { MIMETypeUtil.isImage(contentType) }
-    public var isVideo: Bool { MIMETypeUtil.isVideo(contentType) }
-    public var isAnimated: Bool { MIMETypeUtil.isAnimated(contentType) }
-    public var isAudio: Bool { MIMETypeUtil.isAudio(contentType) }
-    public var isText: Bool { MIMETypeUtil.isText(contentType) }
-    public var isMicrosoftDoc: Bool { MIMETypeUtil.isMicrosoftDoc(contentType) }
+    public var isImage: Bool { MimeTypeUtil.isImage(contentType) }
+    public var isVideo: Bool { MimeTypeUtil.isVideo(contentType) }
+    public var isAnimated: Bool { MimeTypeUtil.isAnimated(contentType) }
+    public var isAudio: Bool { MimeTypeUtil.isAudio(contentType) }
+    public var isText: Bool { MimeTypeUtil.isText(contentType) }
+    public var isMicrosoftDoc: Bool { MimeTypeUtil.isMicrosoftDoc(contentType) }
     
     public var documentFileName: String {
         if let sourceFilename: String = sourceFilename { return sourceFilename }
@@ -908,7 +889,7 @@ extension Attachment {
             self.isValid,
             let thumbnailPath: String = Attachment.originalFilePath(
                 id: cloneId,
-                mimeType: OWSMimeTypeImageJpeg,
+                mimeType: MimeTypeUtil.MimeType.imageJpeg,
                 sourceFilename: thumbnailName
             )
         else {
@@ -953,7 +934,7 @@ extension Attachment {
         // Need to retrieve the size of the thumbnail as it maintains it's aspect ratio
         let thumbnailSize: CGSize = Attachment
             .imageSize(
-                contentType: OWSMimeTypeImageJpeg,
+                contentType: MimeTypeUtil.MimeType.imageJpeg,
                 originalFilePath: thumbnailPath
             )
             .defaulting(
@@ -968,7 +949,7 @@ extension Attachment {
             id: cloneId,
             variant: .standard,
             state: .downloaded,
-            contentType: OWSMimeTypeImageJpeg,
+            contentType: MimeTypeUtil.MimeType.imageJpeg,
             byteCount: UInt(thumbnailData.count),
             sourceFilename: thumbnailName,
             localRelativeFilePath: Attachment.localRelativeFilePath(from: thumbnailPath),
@@ -1105,17 +1086,23 @@ extension Attachment {
                     }
                 }
                 
-                var encryptionKey: NSData = NSData()
-                var digest: NSData = NSData()
+                var encryptionKey: Data?
+                var digest: Data?
                 
                 // Encrypt the attachment if needed
                 if destination.shouldEncrypt {
-                    guard let ciphertext = Cryptography.encryptAttachmentData(data, shouldPad: true, outKey: &encryptionKey, outDigest: &digest) else {
-                        SNLog("Couldn't encrypt attachment.")
+                    guard
+                        let result: (ciphertext: Data, encryptionKey: Data, digest: Data) = dependencies.crypto.generate(
+                            .encryptAttachment(plaintext: data, using: dependencies)
+                        )
+                    else {
+                        Log.error("[Attachment] Couldn't encrypt attachment.")
                         throw AttachmentError.encryptionFailed
                     }
                     
-                    data = ciphertext
+                    data = result.ciphertext
+                    encryptionKey = result.encryptionKey
+                    digest = result.digest
                 }
                 
                 // Check the file size
@@ -1144,7 +1131,7 @@ extension Attachment {
                             )
                         
                         default:
-                            return (.fileServer, nil, encryptionKey as Data, digest as Data)
+                            return (.fileServer, nil, encryptionKey, digest)
                     }
                 }
             }

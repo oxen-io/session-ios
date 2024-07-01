@@ -7,7 +7,6 @@ import YYImage
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionMessagingKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public enum MediaGalleryOption {
@@ -46,7 +45,7 @@ class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
         result.addTarget(self, action: #selector(playVideo), for: .touchUpInside)
         result.alpha = 0
         
-        let playButtonSize: CGFloat = ScaleFromIPhone5(70)
+        let playButtonSize: CGFloat = Values.scaleFromIPhone5(70)
         result.set(.width, to: playButtonSize)
         result.set(.height, to: playButtonSize)
         

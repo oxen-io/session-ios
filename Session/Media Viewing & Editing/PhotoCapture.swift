@@ -8,7 +8,6 @@ import AVFoundation
 import CoreServices
 import SessionMessagingKit
 import SessionUtilitiesKit
-import SignalCoreKit
 
 protocol PhotoCaptureDelegate: AnyObject {
     func photoCapture(_ photoCapture: PhotoCapture, didFinishProcessingAttachment attachment: SignalAttachment)
@@ -66,7 +65,7 @@ class PhotoCapture: NSObject {
             session.addInput(audioDeviceInput)
             self.audioDeviceInput = audioDeviceInput
         } else {
-            owsFailDebug("Could not add audio device input to the session")
+            Log.error("[PhotoCapture] Could not add audio device input to the session")
         }
     }
 
@@ -77,7 +76,7 @@ class PhotoCapture: NSObject {
         defer { self.session.commitConfiguration() }
 
         guard let audioDeviceInput = self.audioDeviceInput else {
-            owsFailDebug("audioDevice was unexpectedly nil")
+            Log.error("[PhotoCapture] audioDevice was unexpectedly nil")
             return
         }
         session.removeInput(audioDeviceInput)
@@ -147,11 +146,11 @@ class PhotoCapture: NSObject {
     }
 
     func assertIsOnSessionQueue() {
-        assertOnQueue(sessionQueue)
+        dispatchPrecondition(condition: .onQueue(sessionQueue))
     }
 
     func switchCamera() -> AnyPublisher<Void, Error> {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         desiredPosition = {
             switch desiredPosition {
@@ -204,15 +203,15 @@ class PhotoCapture: NSObject {
                 receiveOutput: { [weak self] _ in
                     switch self?.captureOutput.flashMode {
                         case .auto:
-                            Logger.debug("new flashMode: on")
+                            Log.debug("[PhotoCapture] new flashMode: on")
                             self?.captureOutput.flashMode = .on
                             
                         case .on:
-                            Logger.debug("new flashMode: off")
+                            Log.debug("[PhotoCapture] new flashMode: off")
                             self?.captureOutput.flashMode = .off
                             
                         case .off:
-                            Logger.debug("new flashMode: auto")
+                            Log.debug("[PhotoCapture] new flashMode: auto")
                             self?.captureOutput.flashMode = .auto
                             
                         default: break
@@ -228,7 +227,7 @@ class PhotoCapture: NSObject {
                monitorSubjectAreaChange: Bool) {
         sessionQueue.async {
             guard let device = self.captureDevice else {
-                owsFailDebug("device was unexpectedly nil")
+                Log.error("[PhotoCapture] device was unexpectedly nil")
                 return
             }
             do {
@@ -249,7 +248,7 @@ class PhotoCapture: NSObject {
                 device.isSubjectAreaChangeMonitoringEnabled = monitorSubjectAreaChange
                 device.unlockForConfiguration()
             } catch {
-                owsFailDebug("error: \(error)")
+                Log.error("[PhotoCapture] error: \(error)")
             }
         }
     }
@@ -274,12 +273,12 @@ class PhotoCapture: NSObject {
         assert(alpha >= 0 && alpha <= 1)
         sessionQueue.async {
             guard let captureDevice = self.captureDevice else {
-                owsFailDebug("captureDevice was unexpectedly nil")
+                Log.error("[PhotoCapture] captureDevice was unexpectedly nil")
                 return
             }
 
             // we might want this to be non-linear
-            let scale = CGFloatLerp(self.minimumZoom, self.maximumZoom, alpha)
+            let scale = alpha.lerp(self.minimumZoom, self.maximumZoom)
             let zoomFactor = self.clampZoom(scale, device: captureDevice)
             self.updateZoom(factor: zoomFactor)
         }
@@ -288,7 +287,7 @@ class PhotoCapture: NSObject {
     func updateZoom(scaleFromPreviousZoomFactor scale: CGFloat) {
         sessionQueue.async {
             guard let captureDevice = self.captureDevice else {
-                owsFailDebug("captureDevice was unexpectedly nil")
+                Log.error("[PhotoCapture] captureDevice was unexpectedly nil")
                 return
             }
 
@@ -300,13 +299,13 @@ class PhotoCapture: NSObject {
     func completeZoom(scaleFromPreviousZoomFactor scale: CGFloat) {
         sessionQueue.async {
             guard let captureDevice = self.captureDevice else {
-                owsFailDebug("captureDevice was unexpectedly nil")
+                Log.error("[PhotoCapture] captureDevice was unexpectedly nil")
                 return
             }
 
             let zoomFactor = self.clampZoom(scale * self.previousZoomFactor, device: captureDevice)
 
-            Logger.debug("ended with scaleFactor: \(zoomFactor)")
+            Log.debug("[PhotoCapture] ended with scaleFactor: \(zoomFactor)")
 
             self.previousZoomFactor = zoomFactor
             self.updateZoom(factor: zoomFactor)
@@ -317,7 +316,7 @@ class PhotoCapture: NSObject {
         assertIsOnSessionQueue()
 
         guard let captureDevice = self.captureDevice else {
-            owsFailDebug("captureDevice was unexpectedly nil")
+            Log.error("[PhotoCapture] captureDevice was unexpectedly nil")
             return
         }
 
@@ -326,7 +325,7 @@ class PhotoCapture: NSObject {
             captureDevice.videoZoomFactor = factor
             captureDevice.unlockForConfiguration()
         } catch {
-            owsFailDebug("error: \(error)")
+            Log.error("[PhotoCapture] error: \(error)")
         }
     }
 
@@ -340,7 +339,6 @@ extension PhotoCapture: CaptureButtonDelegate {
     // MARK: - Photo
 
     func didTapCaptureButton(_ captureButton: CaptureButton) {
-        Logger.verbose("")
         sessionQueue.async {
             self.captureOutput.takePhoto(delegate: self)
         }
@@ -349,10 +347,8 @@ extension PhotoCapture: CaptureButtonDelegate {
     // MARK: - Video
 
     func didBeginLongPressCaptureButton(_ captureButton: CaptureButton) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
-        Logger.verbose("")
-        
         sessionQueue.async { [weak self] in    // Must run this on a specific queue to prevent crashes
             guard let strongSelf = self else { return }
             
@@ -373,19 +369,17 @@ extension PhotoCapture: CaptureButtonDelegate {
     }
 
     func didCompleteLongPressCaptureButton(_ captureButton: CaptureButton) {
-        Logger.verbose("")
         sessionQueue.async {
             self.captureOutput.completeVideo(delegate: self)
             self.stopAudioCapture()
         }
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         // immediately inform UI that capture is stopping
         delegate?.photoCaptureDidCompleteVideo(self)
     }
 
     func didCancelLongPressCaptureButton(_ captureButton: CaptureButton) {
-        Logger.verbose("")
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         sessionQueue.async {
             self.stopAudioCapture()
         }
@@ -397,7 +391,7 @@ extension PhotoCapture: CaptureButtonDelegate {
     }
 
     func longPressCaptureButton(_ captureButton: CaptureButton, didUpdateZoomAlpha zoomAlpha: CGFloat) {
-        Logger.verbose("zoomAlpha: \(zoomAlpha)")
+        Log.verbose("[PhotoCapture] zoomAlpha: \(zoomAlpha)")
         updateZoom(alpha: zoomAlpha)
     }
 }
@@ -413,8 +407,7 @@ extension PhotoCapture: CaptureOutputDelegate {
     // MARK: - Photo
 
     func captureOutputDidFinishProcessing(photoData: Data?, error: Error?) {
-        Logger.verbose("")
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         if let error = error {
             delegate?.photoCapture(self, processingDidError: error)
@@ -422,14 +415,12 @@ extension PhotoCapture: CaptureOutputDelegate {
         }
 
         guard let photoData = photoData else {
-            owsFailDebug("photoData was unexpectedly nil")
+            Log.error("[PhotoCapture] photoData was unexpectedly nil")
             delegate?.photoCapture(self, processingDidError: PhotoCaptureError.captureFailed)
-
             return
         }
 
-        let dataSource = DataSourceValue.dataSource(with: photoData, utiType: kUTTypeJPEG as String)
-
+        let dataSource = DataSourceValue(data: photoData, utiType: kUTTypeJPEG as String)
         let attachment = SignalAttachment.attachment(dataSource: dataSource, dataUTI: kUTTypeJPEG as String, imageQuality: .medium)
         delegate?.photoCapture(self, didFinishProcessingAttachment: attachment)
     }
@@ -437,24 +428,21 @@ extension PhotoCapture: CaptureOutputDelegate {
     // MARK: - Movie
 
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        Logger.verbose("")
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        Logger.verbose("")
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         if let error = error {
             guard didSucceedDespiteError(error) else {
                 delegate?.photoCapture(self, processingDidError: error)
                 return
             }
-            Logger.info("Ignoring error, since capture succeeded.")
+            Log.debug("[PhotoCapture] Ignoring error, since capture succeeded.")
         }
 
-        let dataSource = DataSourcePath.dataSource(with: outputFileURL, shouldDeleteOnDeallocation: true)
-
+        let dataSource = DataSourcePath(fileUrl: outputFileURL, shouldDeleteOnDeinit: true)
         let attachment = SignalAttachment.attachment(dataSource: dataSource, dataUTI: kUTTypeMPEG4 as String)
         delegate?.photoCapture(self, didFinishProcessingAttachment: attachment)
     }
@@ -523,18 +511,18 @@ class CaptureOutput {
         delegate.assertIsOnSessionQueue()
 
         guard let photoOutput = photoOutput else {
-            owsFailDebug("photoOutput was unexpectedly nil")
+            Log.error("[CaptureOutput] photoOutput was unexpectedly nil")
             return
         }
 
         guard let photoVideoConnection = photoOutput.connection(with: .video) else {
-            owsFailDebug("photoVideoConnection was unexpectedly nil")
+            Log.error("[CaptureOutput] photoVideoConnection was unexpectedly nil")
             return
         }
 
         let videoOrientation = delegate.captureOrientation
         photoVideoConnection.videoOrientation = videoOrientation
-        Logger.verbose("videoOrientation: \(videoOrientation)")
+        Log.verbose("[CaptureOutput] videoOrientation: \(videoOrientation)")
 
         return imageOutput.takePhoto(delegate: delegate)
     }
@@ -544,14 +532,14 @@ class CaptureOutput {
     func beginVideo(delegate: CaptureOutputDelegate) {
         delegate.assertIsOnSessionQueue()
         guard let videoConnection = movieOutput.connection(with: .video) else {
-            owsFailDebug("movieOutputConnection was unexpectedly nil")
+            Log.error("[CaptureOutput] movieOutputConnection was unexpectedly nil")
             return
         }
 
         let videoOrientation = delegate.captureOrientation
         videoConnection.videoOrientation = videoOrientation
 
-        let outputFilePath = OWSFileSystem.temporaryFilePath(withFileExtension: "mp4")
+        let outputFilePath = FileSystem.temporaryFilePath(fileExtension: "mp4")
         movieOutput.startRecording(to: URL(fileURLWithPath: outputFilePath), recordingDelegate: delegate)
     }
 
@@ -563,7 +551,7 @@ class CaptureOutput {
     func cancelVideo(delegate: CaptureOutputDelegate) {
         delegate.assertIsOnSessionQueue()
         // There's currently no user-visible way to cancel, if so, we may need to do some cleanup here.
-        owsFailDebug("video was unexpectedly canceled.")
+        Log.error("[CaptureOutput] video was unexpectedly canceled.")
     }
 }
 
@@ -625,7 +613,7 @@ class PhotoCaptureOutputAdaptee: NSObject, ImageCaptureOutput {
             var data = photo.fileDataRepresentation()!
             // Call normalized here to fix the orientation
             if let srcImage = UIImage(data: data) {
-                data = srcImage.normalized().jpegData(compressionQuality: 1.0)!
+                data = srcImage.normalizedImage().jpegData(compressionQuality: 1.0)!
             }
             DispatchQueue.main.async {
                 self.delegate?.captureOutputDidFinishProcessing(photoData: data, error: error)
@@ -651,13 +639,13 @@ class StillImageCaptureOutput: ImageCaptureOutput {
 
     func takePhoto(delegate: CaptureOutputDelegate) {
         guard let videoConnection = stillImageOutput.connection(with: .video) else {
-            owsFailDebug("videoConnection was unexpectedly nil")
+            Log.error("[StillImageCaptureOutput] videoConnection was unexpectedly nil")
             return
         }
 
         stillImageOutput.captureStillImageAsynchronously(from: videoConnection) { [weak delegate] (sampleBuffer, error) in
             guard let sampleBuffer = sampleBuffer else {
-                owsFailDebug("sampleBuffer was unexpectedly nil")
+                Log.error("[StillImageCaptureOutput] sampleBuffer was unexpectedly nil")
                 return
             }
 
@@ -671,7 +659,7 @@ class StillImageCaptureOutput: ImageCaptureOutput {
     func videoDevice(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
         let captureDevices = AVCaptureDevice.devices()
         guard let device = (captureDevices.first { $0.hasMediaType(.video) && $0.position == position }) else {
-            Logger.debug("unable to find desired position: \(position)")
+            Log.debug("[StillImageCaptureOutput] unable to find desired position: \(position)")
             return captureDevices.first
         }
 

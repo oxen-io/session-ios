@@ -21,7 +21,7 @@ public extension Data {
 
     func removingIdPrefixIfNeeded() -> Data {
         var result = self
-        if result.count == 33 && SessionId.Prefix(from: result.toHexString()) != nil { result.removeFirst() }
+        if result.count == 33 && (try? SessionId.Prefix(from: result.toHexString())) != nil { result.removeFirst() }
         return result
     }
     
@@ -46,7 +46,7 @@ public extension Data {
     
     @objc func removingIdPrefixIfNeeded() -> NSData {
         var result = self as Data
-        if result.count == 33 && SessionId.Prefix(from: result.toHexString()) != nil { result.removeFirst() }
+        if result.count == 33 && (try? SessionId.Prefix(from: result.toHexString())) != nil { result.removeFirst() }
         return result as NSData
     }
 }

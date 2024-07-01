@@ -2,7 +2,6 @@
 
 import UIKit
 import SessionUIKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public protocol ImageEditorCropViewControllerDelegate: AnyObject {
@@ -49,7 +48,7 @@ class ImageEditorCropViewController: OWSViewController {
 
         @available(*, unavailable, message: "use other init() instead.")
         required public init?(coder aDecoder: NSCoder) {
-            notImplemented()
+            fatalError("init(coder:) has not been implemented")
         }
     }
 
@@ -76,7 +75,7 @@ class ImageEditorCropViewController: OWSViewController {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - View Lifecycle
@@ -114,7 +113,8 @@ class ImageEditorCropViewController: OWSViewController {
 
         // MARK: - Canvas & Wrapper
 
-        let wrapperView = UIView.container()
+        let wrapperView = UIView()
+        wrapperView.layoutMargins = .zero
         wrapperView.themeBackgroundColor = .clear
         wrapperView.isOpaque = false
 
@@ -142,7 +142,7 @@ class ImageEditorCropViewController: OWSViewController {
             strongSelf.updateContent()
         }
         clipView.addSubview(croppedContentView)
-        croppedContentView.autoPinEdgesToSuperviewEdges()
+        croppedContentView.pin(to: clipView)
 
         uncroppedImageLayer.contents = previewImage.cgImage
         uncroppedImageLayer.contentsScale = previewImage.scale
@@ -155,7 +155,7 @@ class ImageEditorCropViewController: OWSViewController {
         uncroppedContentView.isOpaque = false
         uncroppedContentView.layer.addSublayer(uncroppedImageLayer)
         wrapperView.addSubview(uncroppedContentView)
-        uncroppedContentView.autoPin(toEdgesOf: croppedContentView)
+        uncroppedContentView.pin(to: croppedContentView)
 
         // MARK: - Footer
 
@@ -183,33 +183,33 @@ class ImageEditorCropViewController: OWSViewController {
         stackView.layoutMargins = UIEdgeInsets(top: 8, left: imageMargin, bottom: 8, right: imageMargin)
         stackView.isLayoutMarginsRelativeArrangement = true
         self.view.addSubview(stackView)
-        stackView.autoPinEdgesToSuperviewEdges()
+        stackView.pin(to: self.view)
 
         // MARK: - Crop View
 
         // Add crop view last so that it appears in front of the content.
 
-        cropView.setContentHuggingLow()
-        cropView.setCompressionResistanceLow()
+        cropView.setContentHugging(to: .defaultLow)
+        cropView.setCompressionResistance(to: .defaultLow)
         view.addSubview(cropView)
         for cropCornerView in cropCornerViews {
             cropView.addSubview(cropCornerView)
 
             switch cropCornerView.cropRegion {
             case .topLeft, .bottomLeft:
-                cropCornerView.autoPinEdge(toSuperviewEdge: .left)
+                cropCornerView.pin(.left, to: .left, of: cropView)
             case .topRight, .bottomRight:
-                cropCornerView.autoPinEdge(toSuperviewEdge: .right)
+                cropCornerView.pin(.right, to: .right, of: cropView)
             default:
-                owsFailDebug("Invalid crop region: \(String(describing: cropRegion))")
+                Log.error("[ImageEditorCropViewController] Invalid crop region: \(String(describing: cropRegion))")
             }
             switch cropCornerView.cropRegion {
             case .topLeft, .topRight:
-                cropCornerView.autoPinEdge(toSuperviewEdge: .top)
+                cropCornerView.pin(.top, to: .top, of: cropView)
             case .bottomLeft, .bottomRight:
-                cropCornerView.autoPinEdge(toSuperviewEdge: .bottom)
+                cropCornerView.pin(.bottom, to: .bottom, of: cropView)
             default:
-                owsFailDebug("Invalid crop region: \(String(describing: cropRegion))")
+                Log.error("[ImageEditorCropViewController] Invalid crop region: \(String(describing: cropRegion))")
             }
         }
 
@@ -238,7 +238,7 @@ class ImageEditorCropViewController: OWSViewController {
 
     private func updateCropLockButton() {
         guard let cropLockButton = cropLockButton else {
-            owsFailDebug("Missing cropLockButton")
+            Log.error("[ImageEditorCropViewController] Missing cropLockButton")
             return
         }
         cropLockButton.setImage(imageName: (isCropLocked
@@ -273,8 +273,8 @@ class ImageEditorCropViewController: OWSViewController {
 
         // TODO: Tune the size.
         let cornerSize = CGSize(
-            width: min(clipView.width() * 0.5, ImageEditorCropViewController.desiredCornerSize),
-            height: min(clipView.height() * 0.5, ImageEditorCropViewController.desiredCornerSize)
+            width: min(clipView.bounds.width * 0.5, ImageEditorCropViewController.desiredCornerSize),
+            height: min(clipView.bounds.height * 0.5, ImageEditorCropViewController.desiredCornerSize)
         )
         self.cornerSize = cornerSize
         for cropCornerView in cropCornerViews {
@@ -328,7 +328,7 @@ class ImageEditorCropViewController: OWSViewController {
                         CGPoint(x: shapeFrame.width, y: cornerThickness)
                         ])
                 default:
-                    owsFailDebug("Invalid crop region: \(cropCornerView.cropRegion)")
+                    Log.error("[ImageEditorCropViewController] Invalid crop region: \(cropCornerView.cropRegion)")
                 }
 
                 shapeLayer.path = bezierPath.cgPath
@@ -343,11 +343,14 @@ class ImageEditorCropViewController: OWSViewController {
         cropViewConstraints.removeAll()
 
         // TODO: Tune the size.
-        let cornerSize = CGSize(width: min(clipView.width() * 0.5, ImageEditorCropViewController.desiredCornerSize),
-                                height: min(clipView.height() * 0.5, ImageEditorCropViewController.desiredCornerSize))
+        let cornerSize = CGSize(
+            width: min(clipView.bounds.width * 0.5, ImageEditorCropViewController.desiredCornerSize),
+            height: min(clipView.bounds.height * 0.5, ImageEditorCropViewController.desiredCornerSize)
+        )
         self.cornerSize = cornerSize
         for cropCornerView in cropCornerViews {
-            cropViewConstraints.append(contentsOf: cropCornerView.autoSetDimensions(to: cornerSize))
+            cropViewConstraints.append(cropCornerView.set(.width, to: cornerSize.width))
+            cropViewConstraints.append(cropCornerView.set(.height, to: cornerSize.height))
         }
 
         if !isCropGestureActive {
@@ -356,9 +359,7 @@ class ImageEditorCropViewController: OWSViewController {
     }
 
     internal func updateContent() {
-        AssertIsOnMainThread()
-
-        Logger.verbose("")
+        Log.assertOnMainThread()
 
         let viewSize = croppedContentView.bounds.size
         guard viewSize.width > 0,
@@ -430,9 +431,9 @@ class ImageEditorCropViewController: OWSViewController {
         // is that the translation is applied last, so it's trivial to convert
         // translations from view coordinates to transform translation.
         // Our (view bounds == canvas bounds) so no need to convert.
-        let translation = newLocationView.minus(oldLocationView)
+        let translation = newLocationView.subtracting(oldLocationView)
         let translationUnit = translation.toUnitCoordinates(viewSize: viewBounds.size, shouldClamp: false)
-        let newUnitTranslation = oldTransform.unitTranslation.plus(translationUnit)
+        let newUnitTranslation = oldTransform.unitTranslation.adding(translationUnit)
         return newUnitTranslation
     }
 
@@ -440,9 +441,7 @@ class ImageEditorCropViewController: OWSViewController {
 
     @objc
     public func handlePinchGesture(_ gestureRecognizer: ImageEditorPinchGestureRecognizer) {
-        AssertIsOnMainThread()
-
-        Logger.verbose("")
+        Log.assertOnMainThread()
 
         // We could undo an in-progress pinch if the gesture is cancelled, but it seems gratuitous.
 
@@ -451,29 +450,35 @@ class ImageEditorCropViewController: OWSViewController {
             gestureStartTransform = transform
         case .changed, .ended:
             guard let gestureStartTransform = gestureStartTransform else {
-                owsFailDebug("Missing pinchTransform.")
+                Log.error("[ImageEditorCropViewController] Missing pinchTransform.")
                 return
             }
 
-            let newUnitTranslation = ImageEditorCropViewController.unitTranslation(oldLocationView: gestureRecognizer.pinchStateStart.centroid,
-                                                                                   newLocationView: gestureRecognizer.pinchStateLast.centroid,
-                                                                                   viewBounds: clipView.bounds,
-                                                                                   oldTransform: gestureStartTransform)
+            let newUnitTranslation = ImageEditorCropViewController.unitTranslation(
+                oldLocationView: gestureRecognizer.pinchStateStart.centroid,
+                newLocationView: gestureRecognizer.pinchStateLast.centroid,
+                viewBounds: clipView.bounds,
+                oldTransform: gestureStartTransform
+            )
 
             let newRotationRadians = gestureStartTransform.rotationRadians + gestureRecognizer.pinchStateLast.angleRadians - gestureRecognizer.pinchStateStart.angleRadians
 
             // NOTE: We use max(1, ...) to avoid divide-by-zero.
             //
             // TODO: The clamp limits are wrong.
-            let newScaling = CGFloatClamp(gestureStartTransform.scaling * gestureRecognizer.pinchStateLast.distance / max(1.0, gestureRecognizer.pinchStateStart.distance),
-                                          ImageEditorTextItem.kMinScaling,
-                                          ImageEditorTextItem.kMaxScaling)
+            let newScaling =
+                (gestureStartTransform.scaling * gestureRecognizer.pinchStateLast.distance / max(1.0, gestureRecognizer.pinchStateStart.distance))
+                .clamp(ImageEditorTextItem.kMinScaling, ImageEditorTextItem.kMaxScaling)
 
-            updateTransform(ImageEditorTransform(outputSizePixels: gestureStartTransform.outputSizePixels,
-                                             unitTranslation: newUnitTranslation,
-                                             rotationRadians: newRotationRadians,
-                                             scaling: newScaling,
-                                             isFlipped: gestureStartTransform.isFlipped).normalize(srcImageSizePixels: model.srcImageSizePixels))
+            updateTransform(
+                ImageEditorTransform(
+                    outputSizePixels: gestureStartTransform.outputSizePixels,
+                    unitTranslation: newUnitTranslation,
+                    rotationRadians: newRotationRadians,
+                    scaling: newScaling,
+                    isFlipped: gestureStartTransform.isFlipped
+                ).normalize(srcImageSizePixels: model.srcImageSizePixels)
+            )
         default:
             break
         }
@@ -489,16 +494,14 @@ class ImageEditorCropViewController: OWSViewController {
 
     @objc
     public func handlePanGesture(_ gestureRecognizer: ImageEditorPanGestureRecognizer) {
-        AssertIsOnMainThread()
-
-        Logger.verbose("")
-
+        Log.assertOnMainThread()
+        
         // We could undo an in-progress pinch if the gesture is cancelled, but it seems gratuitous.
 
         // Handle the GR if necessary.
         switch gestureRecognizer.state {
         case .began:
-            Logger.verbose("began: \(transform.unitTranslation)")
+            Log.verbose("[ImageEditorCropViewController] began: \(transform.unitTranslation)")
             gestureStartTransform = transform
             // Pans that start near the crop rectangle should be treated as crop gestures.
             panCropRegion = cropRegion(forGestureRecognizer: gestureRecognizer)
@@ -532,20 +535,17 @@ class ImageEditorCropViewController: OWSViewController {
         }
     }
 
-    private func handleCropPanGesture(_ gestureRecognizer: ImageEditorPanGestureRecognizer,
-                                      panCropRegion: CropRegion) {
-        AssertIsOnMainThread()
-
-        Logger.verbose("")
+    private func handleCropPanGesture(_ gestureRecognizer: ImageEditorPanGestureRecognizer, panCropRegion: CropRegion) {
+        Log.assertOnMainThread()
 
         guard let locationStart = gestureRecognizer.locationFirst else {
-            owsFailDebug("Missing locationStart.")
+            Log.error("[ImageEditorCropViewController] Missing locationStart.")
             return
         }
         let locationNow = gestureRecognizer.location(in: self.clipView)
 
         // Crop pan gesture
-        let locationDelta = CGPointSubtract(locationNow, locationStart)
+        let locationDelta = locationNow.subtracting(locationStart)
 
         let cropRectangleStart = clipView.bounds
         var cropRectangleNow = cropRectangleStart
@@ -638,8 +638,10 @@ class ImageEditorCropViewController: OWSViewController {
 
         // TODO: The output size should be rounded, although this can
         //       cause crop to be slightly not WYSIWYG.
-        let croppedOutputSizePixels = CGSizeRound(CGSize(width: transform.outputSizePixels.width * cropRect.width / clipView.width(),
-                                                         height: transform.outputSizePixels.height * cropRect.height / clipView.height()))
+        let croppedOutputSizePixels = CGSize(
+            width: transform.outputSizePixels.width * cropRect.width / clipView.bounds.width,
+            height: transform.outputSizePixels.height * cropRect.height / clipView.bounds.height
+        ).rounded()
 
         // We need to update the transform's unitTranslation and scaling properties
         // to reflect the crop.
@@ -676,35 +678,42 @@ class ImageEditorCropViewController: OWSViewController {
         // system of the crop rectangle).  Note that a CALayer's tranform
         // is applied using its "anchor point", the center of the layer.
         // so we translate before and after the projection to be consistent.
-        let oldImageCenterView = oldImageFrameCanvas.center.minus(viewBounds.center).applying(oldAffineTransform).plus(viewBounds.center)
+        let oldImageCenterView = oldImageFrameCanvas.center
+            .subtracting(viewBounds.center)
+            .applying(oldAffineTransform)
+            .adding(viewBounds.center)
         // We transform the "image content center" into the unit coordinates
         // of the crop rectangle.
         let newImageCenterUnit = oldImageCenterView.toUnitCoordinates(viewBounds: cropRect, shouldClamp: false)
         // The transform's "unit translation" represents a deviation from
         // the center of the output canvas, so we need to subtract the
         // unit midpoint.
-        let unitTranslation = newImageCenterUnit.minus(CGPoint.unitMidpoint)
+        let unitTranslation = newImageCenterUnit.subtracting(CGPoint(x: 0.5, y: 0.5))
 
         // Clear the panCropRegion now so that the crop bounds are updated
         // immediately.
         panCropRegion = nil
 
-        updateTransform(ImageEditorTransform(outputSizePixels: croppedOutputSizePixels,
-                                              unitTranslation: unitTranslation,
-                                              rotationRadians: transform.rotationRadians,
-                                              scaling: scaling,
-                                              isFlipped: transform.isFlipped).normalize(srcImageSizePixels: model.srcImageSizePixels))
+        updateTransform(
+            ImageEditorTransform(
+                outputSizePixels: croppedOutputSizePixels,
+                unitTranslation: unitTranslation,
+                rotationRadians: transform.rotationRadians,
+                scaling: scaling,
+                isFlipped: transform.isFlipped
+            ).normalize(srcImageSizePixels: model.srcImageSizePixels)
+        )
     }
 
     private func handleNormalPanGesture(_ gestureRecognizer: ImageEditorPanGestureRecognizer) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         guard let gestureStartTransform = gestureStartTransform else {
-            owsFailDebug("Missing pinchTransform.")
+            Log.error("[ImageEditorCropViewController] Missing pinchTransform.")
             return
         }
         guard let oldLocationView = gestureRecognizer.locationFirst else {
-            owsFailDebug("Missing locationStart.")
+            Log.error("[ImageEditorCropViewController] Missing locationStart.")
             return
         }
 
@@ -723,15 +732,15 @@ class ImageEditorCropViewController: OWSViewController {
 
     private func cropRegion(forGestureRecognizer gestureRecognizer: ImageEditorPanGestureRecognizer) -> CropRegion? {
         guard let location = gestureRecognizer.locationFirst else {
-            owsFailDebug("Missing locationStart.")
+            Log.error("[ImageEditorCropViewController] Missing locationStart.")
             return nil
         }
 
         let tolerance: CGFloat = ImageEditorCropViewController.desiredCornerSize * 2.0
         let left = tolerance
         let top = tolerance
-        let right = clipView.width() - tolerance
-        let bottom = clipView.height() - tolerance
+        let right = clipView.bounds.width - tolerance
+        let bottom = clipView.bounds.height - tolerance
 
         // We could ignore touches far outside the crop rectangle.
         if location.x < left {
@@ -804,8 +813,6 @@ class ImageEditorCropViewController: OWSViewController {
     }
 
     @objc func didTapReset(sender: UIButton) {
-        Logger.verbose("")
-
         updateTransform(ImageEditorTransform.defaultTransform(srcImageSizePixels: model.srcImageSizePixels))
     }
 

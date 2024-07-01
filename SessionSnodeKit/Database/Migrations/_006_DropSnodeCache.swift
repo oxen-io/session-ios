@@ -16,7 +16,7 @@ enum _006_DropSnodeCache: Migration {
         _001_InitialSetupMigration.LegacySnode.self, _001_InitialSetupMigration.LegacySnodeSet.self
     ]
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.drop(table: _001_InitialSetupMigration.LegacySnode.self)
         try db.drop(table: _001_InitialSetupMigration.LegacySnodeSet.self)
         

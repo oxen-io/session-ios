@@ -38,8 +38,8 @@ class ImagePickerHandler: NSObject, UIImagePickerControllerDelegate & UINavigati
             guard
                 let resourceValues: URLResourceValues = (try? imageUrl.resourceValues(forKeys: [.typeIdentifierKey])),
                 let type: Any = resourceValues.allValues.first?.value,
-                let typeString: String = type as? String,
-                MIMETypeUtil.supportedAnimatedImageUTITypes().contains(typeString)
+                let utiTypeString: String = type as? String,
+                MimeTypeUtil.isAnimated(utiType: utiTypeString)
             else {
                 let viewController: CropScaleImageViewController = CropScaleImageViewController(
                     srcImage: rawAvatar,

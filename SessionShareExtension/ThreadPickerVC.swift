@@ -8,10 +8,10 @@ import SessionUIKit
 import SignalUtilitiesKit
 import SessionMessagingKit
 import SessionSnodeKit
-import SignalCoreKit
+import SessionUtilitiesKit
 
 final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableViewDelegate, AttachmentApprovalViewControllerDelegate {
-    private let viewModel: ThreadPickerViewModel = ThreadPickerViewModel()
+    private let viewModel: ThreadPickerViewModel
     private var dataChangeObservable: DatabaseCancellable? {
         didSet { oldValue?.cancel() }   // Cancel the old observable if there was one
     }
@@ -20,6 +20,16 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
     var shareNavController: ShareNavController?
     
     // MARK: - Intialization
+    
+    init(using dependencies: Dependencies) {
+        viewModel = ThreadPickerViewModel(using: dependencies)
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     deinit {
         NotificationCenter.default.removeObserver(self)
@@ -187,16 +197,19 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .sinkUntilComplete(
-                receiveValue: { [weak self] attachments in
-                    guard let strongSelf = self else { return }
+                receiveValue: { [weak self, dependencies = self.viewModel.dependencies] attachments in
+                    guard
+                        let strongSelf = self,
+                        let approvalVC: UINavigationController = AttachmentApprovalViewController.wrappedInNavController(
+                            threadId: strongSelf.viewModel.viewData[indexPath.row].threadId,
+                            threadVariant: strongSelf.viewModel.viewData[indexPath.row].threadVariant,
+                            attachments: attachments,
+                            approvalDelegate: strongSelf,
+                            using: dependencies
+                        )
+                    else { return }
                     
-                    let approvalVC: UINavigationController = AttachmentApprovalViewController.wrappedInNavController(
-                        threadId: strongSelf.viewModel.viewData[indexPath.row].threadId,
-                        threadVariant: strongSelf.viewModel.viewData[indexPath.row].threadVariant,
-                        attachments: attachments,
-                        approvalDelegate: strongSelf
-                    )
-                    strongSelf.navigationController?.present(approvalVC, animated: true, completion: nil)
+                    self?.navigationController?.present(approvalVC, animated: true, completion: nil)
                 }
             )
     }
@@ -206,8 +219,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         didApproveAttachments attachments: [SignalAttachment],
         forThreadId threadId: String,
         threadVariant: SessionThread.Variant,
-        messageText: String?,
-        using dependencies: Dependencies = Dependencies()
+        messageText: String?
     ) {
         // Sharing a URL or plain text will populate the 'messageText' field so in those
         // cases we should ignore the attachments
@@ -227,7 +239,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         
         shareNavController?.dismiss(animated: true, completion: nil)
         
-        ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "vc_share_sending_message".localized()) { activityIndicator in
+        ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "vc_share_sending_message".localized()) { [dependencies = viewModel.dependencies] activityIndicator in
             Storage.resumeDatabaseAccess()
             LibSession.resumeNetworkAccess()
             
@@ -286,7 +298,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
                                 attachmentId: LinkPreview
                                     .generateAttachmentIfPossible(
                                         imageData: linkPreviewDraft.jpegImageData,
-                                        mimeType: OWSMimeTypeImageJpeg
+                                        mimeType: MimeTypeUtil.MimeType.imageJpeg
                                     )?
                                     .inserted(db)
                                     .id

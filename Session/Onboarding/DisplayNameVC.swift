@@ -4,8 +4,10 @@ import UIKit
 import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
+import SessionUtilitiesKit
 
 final class DisplayNameVC: BaseVC {
+    private let dependencies: Dependencies
     private let flow: Onboarding.Flow
     
     private var spacer1HeightConstraint: NSLayoutConstraint!
@@ -15,7 +17,8 @@ final class DisplayNameVC: BaseVC {
     
     // MARK: - Initialization
     
-    init(flow: Onboarding.Flow) {
+    init(flow: Onboarding.Flow, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.flow = flow
         
         super.init(nibName: nil, bundle: nil)
@@ -199,13 +202,13 @@ final class DisplayNameVC: BaseVC {
             self.flow.completeRegistration()
             
             // Go to the home screen
-            let homeVC: HomeVC = HomeVC()
+            let homeVC: HomeVC = HomeVC(using: dependencies)
             self.navigationController?.setViewControllers([ homeVC ], animated: true)
             return
         }
         
         // Need to get the PN mode if registering
-        let pnModeVC = PNModeVC(flow: .register)
+        let pnModeVC = PNModeVC(flow: .register, using: dependencies)
         navigationController?.pushViewController(pnModeVC, animated: true)
     }
 }

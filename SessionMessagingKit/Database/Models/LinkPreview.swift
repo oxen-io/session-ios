@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -130,14 +129,11 @@ public extension LinkPreview {
     
     static func generateAttachmentIfPossible(imageData: Data?, mimeType: String) throws -> Attachment? {
         guard let imageData: Data = imageData, !imageData.isEmpty else { return nil }
-        guard let fileExtension: String = MIMETypeUtil.fileExtension(forMIMEType: mimeType) else { return nil }
+        guard let fileExtension: String = MimeTypeUtil.fileExtension(for: mimeType) else { return nil }
         
-        let filePath = OWSFileSystem.temporaryFilePath(withFileExtension: fileExtension)
+        let filePath = FileSystem.temporaryFilePath(fileExtension: fileExtension)
         try imageData.write(to: NSURL.fileURL(withPath: filePath), options: .atomicWrite)
-                
-        guard let dataSource = DataSourcePath.dataSource(withFilePath: filePath, shouldDeleteOnDeallocation: true) else {
-            return nil
-        }
+        let dataSource: DataSourcePath = DataSourcePath(filePath: filePath, shouldDeleteOnDeinit: true)
         
         return Attachment(contentType: mimeType, dataSource: dataSource)
     }
@@ -202,7 +198,7 @@ public extension LinkPreview {
             result = String(result[..<endIndex])
         }
         
-        return result.filterStringForDisplay()
+        return result.filteredForDisplay
     }
     
     // MARK: - Text Parsing
@@ -328,7 +324,7 @@ public extension LinkPreview {
         url urlString: String,
         remainingRetries: UInt = 3
     ) -> AnyPublisher<(Data, URLResponse), Error> {
-        Logger.verbose("url: \(urlString)")
+        Log.verbose("[LinkPreview] Download url: \(urlString)")
 
         // let sessionConfiguration = ContentProxy.sessionConfiguration() // Loki: Signal's proxy appears to have been banned by YouTube
         let sessionConfiguration = URLSessionConfiguration.ephemeral
@@ -447,12 +443,12 @@ public extension LinkPreview {
             title = normalizedTitle
         }
 
-        Logger.verbose("title: \(String(describing: title))")
+        Log.verbose("[LinkPreview] Title: \(String(describing: title))")
 
         guard let rawImageUrlString = content.ogImageUrlString ?? content.faviconUrlString else {
             return Contents(title: title)
         }
-        guard let imageUrlString = decodeHTMLEntities(inString: rawImageUrlString)?.ows_stripped() else {
+        guard let imageUrlString = decodeHTMLEntities(inString: rawImageUrlString)?.stripped else {
             return Contents(title: title)
         }
 
@@ -480,7 +476,7 @@ public extension LinkPreview {
                 shouldIgnoreSignalProxy: true
             )
             .tryMap { asset, _ -> Data in
-                let imageSize = NSData.imageSize(forFilePath: asset.filePath, mimeType: imageMimeType)
+                let imageSize = Data.imageSize(for: asset.filePath, mimeType: imageMimeType)
                 
                 guard imageSize.width > 0, imageSize.height > 0 else {
                     throw LinkPreviewError.invalidContent
@@ -494,8 +490,8 @@ public extension LinkPreview {
                 
                 // Loki: If it's a GIF then ensure its validity and don't download it as a JPG
                 if
-                    imageMimeType == OWSMimeTypeImageGif &&
-                    NSData(data: data).ows_isValidImage(withMimeType: OWSMimeTypeImageGif)
+                    imageMimeType == MimeTypeUtil.MimeType.imageGif &&
+                    data.isValidImage(mimeType: MimeTypeUtil.MimeType.imageGif)
                 {
                     return data
                 }
@@ -512,7 +508,7 @@ public extension LinkPreview {
                 }
 
                 guard
-                    let dstImage = srcImage.resized(withMaxDimensionPoints: maxImageSize),
+                    let dstImage = srcImage.resized(maxDimensionPoints: maxImageSize),
                     let dstData = dstImage.jpegData(compressionQuality: 0.8)
                 else { throw LinkPreviewError.invalidContent }
                 
@@ -547,9 +543,8 @@ public extension LinkPreview {
     
     private static func mimetype(forImageFileExtension imageFileExtension: String) -> String? {
         guard imageFileExtension.count > 0 else { return nil }
-        guard let imageMimeType = MIMETypeUtil.mimeType(forFileExtension: imageFileExtension) else { return nil }
         
-        return imageMimeType
+        return MimeTypeUtil.mimeType(for: imageFileExtension)
     }
     
     private static func decodeHTMLEntities(inString value: String) -> String? {

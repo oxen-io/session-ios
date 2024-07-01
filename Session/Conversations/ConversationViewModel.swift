@@ -55,6 +55,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     private let initialUnreadInteractionId: Int64?
     private let markAsReadTrigger: PassthroughSubject<(SessionThreadViewModel.ReadTarget, Int64?), Never> = PassthroughSubject()
     private var markAsReadPublisher: AnyPublisher<Void, Never>?
+    public let dependencies: Dependencies
     
     public lazy var blockedBannerMessage: String = {
         let threadData: SessionThreadViewModel = self._threadData.wrappedValue
@@ -74,7 +75,12 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Initialization
     
-    init(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionInfo: Interaction.TimestampInfo?) {
+    init(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedInteractionInfo: Interaction.TimestampInfo?,
+        using dependencies: Dependencies
+    ) {
         typealias InitialData = (
             currentUserPublicKey: String,
             initialUnreadInteractionInfo: Interaction.TimestampInfo?,
@@ -177,6 +183,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             )
         )
         self.pagedDataObserver = nil
+        self.dependencies = dependencies
         
         // Note: Since this references self we need to finish initializing before setting it, we
         // also want to skip the initial query and trigger it async so that the push animation
@@ -566,7 +573,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         let linkPreviewAttachment: Attachment? = linkPreviewDraft.map { draft in
             try? LinkPreview.generateAttachmentIfPossible(
                 imageData: draft.jpegImageData,
-                mimeType: OWSMimeTypeImageJpeg
+                mimeType: MimeTypeUtil.MimeType.imageJpeg
             )
         }
         

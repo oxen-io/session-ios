@@ -6,10 +6,6 @@ import Foundation
 
 public extension String {
     
-    var digitsOnly: String {
-        return (self as NSString).digitsOnly()
-    }
-
     func substring(from index: Int) -> String {
         return String(self[self.index(self.startIndex, offsetBy: index)...])
     }

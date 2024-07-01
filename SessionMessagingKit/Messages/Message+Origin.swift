@@ -23,8 +23,8 @@ public extension Message {
             timestamp: TimeInterval,
             messageServerId: Int64,
             serverPublicKey: String,
-            blindedPublicKey: String,
-            isOutgoing: Bool
+            senderId: String,
+            recipientId: String
         )
         
         public var isConfigNamespace: Bool {

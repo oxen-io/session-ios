@@ -1,7 +1,7 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 
 import Foundation
-import SignalCoreKit
+import SessionUtilitiesKit
 
 public class OrderedDictionary<KeyType: Hashable, ValueType> {
 
@@ -35,57 +35,57 @@ public class OrderedDictionary<KeyType: Hashable, ValueType> {
 
     public func append(key: KeyType, value: ValueType) {
         if keyValueMap[key] != nil {
-            owsFailDebug("Unexpected duplicate key in key map: \(key)")
+            Log.error("[OrderedDictionary] Unexpected duplicate key in key map: \(key)")
         }
         keyValueMap[key] = value
 
         if orderedKeys.contains(key) {
-            owsFailDebug("Unexpected duplicate key in key list: \(key)")
+            Log.error("[OrderedDictionary] Unexpected duplicate key in key list: \(key)")
         } else {
             orderedKeys.append(key)
         }
 
         if orderedKeys.count != keyValueMap.count {
-            owsFailDebug("Invalid contents.")
+            Log.error("[OrderedDictionary] Invalid contents.")
         }
     }
 
     public func replace(key: KeyType, value: ValueType) {
         if keyValueMap[key] == nil {
-            owsFailDebug("Missing key in key map: \(key)")
+            Log.error("[OrderedDictionary] Missing key in key map: \(key)")
         }
         keyValueMap[key] = value
 
         if !orderedKeys.contains(key) {
-            owsFailDebug("Missing key in key list: \(key)")
+            Log.error("[OrderedDictionary] Missing key in key list: \(key)")
         }
 
         if orderedKeys.count != keyValueMap.count {
-            owsFailDebug("Invalid contents.")
+            Log.error("[OrderedDictionary] Invalid contents.")
         }
     }
 
     public func remove(key: KeyType) {
         if keyValueMap[key] == nil {
-            owsFailDebug("Missing key in key map: \(key)")
+            Log.error("[OrderedDictionary] Missing key in key map: \(key)")
         } else {
             keyValueMap.removeValue(forKey: key)
         }
 
         if !orderedKeys.contains(key) {
-            owsFailDebug("Missing key in key list: \(key)")
+            Log.error("[OrderedDictionary] Missing key in key list: \(key)")
         } else {
             orderedKeys = orderedKeys.filter { $0 != key }
         }
 
         if orderedKeys.count != keyValueMap.count {
-            owsFailDebug("Invalid contents.")
+            Log.error("[OrderedDictionary] Invalid contents.")
         }
     }
 
     public var count: Int {
         if orderedKeys.count != keyValueMap.count {
-            owsFailDebug("Invalid contents.")
+            Log.error("[OrderedDictionary] Invalid contents.")
         }
         return orderedKeys.count
     }
@@ -94,7 +94,7 @@ public class OrderedDictionary<KeyType: Hashable, ValueType> {
         var values = [ValueType]()
         for key in orderedKeys {
             guard let value = self.keyValueMap[key] else {
-                owsFailDebug("Missing value")
+                Log.error("[OrderedDictionary] Missing value")
                 continue
             }
             values.append(value)
@@ -106,7 +106,7 @@ public class OrderedDictionary<KeyType: Hashable, ValueType> {
         var items = [(KeyType, ValueType)]()
         for key in orderedKeys {
             guard let value = self.keyValueMap[key] else {
-                owsFailDebug("Missing value")
+                Log.error("[OrderedDictionary] Missing value")
                 continue
             }
             items.append((key, value))

@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -23,7 +22,8 @@ extension MessageReceiver {
                     db,
                     threadId: threadId,
                     threadVariant: threadVariant,
-                    message: message
+                    message: message,
+                    using: dependencies
                 )
                 
             case .nameChange:
@@ -257,7 +257,8 @@ extension MessageReceiver {
         _ db: Database,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        message: ClosedGroupControlMessage
+        message: ClosedGroupControlMessage,
+        using dependencies: Dependencies
     ) throws {
         guard case let .encryptionKeyPair(explicitGroupPublicKey, wrappers) = message.kind else {
             return
@@ -285,9 +286,12 @@ extension MessageReceiver {
         
         let plaintext: Data
         do {
-            plaintext = try MessageReceiver.decryptWithSessionProtocol(
-                ciphertext: encryptedKeyPair,
-                using: userKeyPair
+            plaintext = try dependencies.crypto.tryGenerate(
+                .plaintextWithSessionProtocolLegacyGroup(
+                    ciphertext: encryptedKeyPair,
+                    keyPair: userKeyPair,
+                    using: dependencies
+                )
             ).plaintext
         }
         catch {

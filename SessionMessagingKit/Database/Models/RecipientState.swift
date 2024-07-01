@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionUIKit
 
@@ -65,7 +64,7 @@ public struct RecipientState: Codable, Equatable, FetchableRecord, PersistableRe
                 case .syncing: return "MESSAGE_DELIVERY_STATUS_SYNCING".localized()
                     
                 default:
-                    owsFailDebug("Message has unexpected status: \(self).")
+                    Log.error("Message has unexpected status: \(self).")
                     return "MESSAGE_STATUS_SENT".localized()
             }
         }

@@ -2,7 +2,6 @@
 
 import Foundation
 import AVFoundation
-import SignalCoreKit
 import SessionUtilitiesKit
 
 @objc(OWSAudioActivity)
@@ -24,7 +23,7 @@ public class AudioActivity: NSObject {
     // MARK: 
 
     override public var description: String {
-        return "<\(self.logTag) audioDescription: \"\(audioDescription)\">"
+        return "<[AudioActivity] audioDescription: \"\(audioDescription)\">"
     }
 }
 
@@ -51,7 +50,7 @@ public class OWSAudioSession: NSObject {
 
     @objc
     public func startAudioActivity(_ audioActivity: AudioActivity) -> Bool {
-        Logger.debug("with \(audioActivity)")
+        Log.debug("[AudioActivity] startAudioActivity called with \(audioActivity)")
 
         objc_sync_enter(self)
         defer { objc_sync_exit(self) }
@@ -62,14 +61,14 @@ public class OWSAudioSession: NSObject {
             try ensureAudioCategory()
             return true
         } catch {
-            owsFailDebug("failed with error: \(error)")
+            Log.error("[AudioActivity] Failed with error: \(error)")
             return false
         }
     }
 
     @objc
     public func endAudioActivity(_ audioActivity: AudioActivity) {
-        Logger.debug("with audioActivity: \(audioActivity)")
+        Log.debug("[AudioActivity] endAudioActivity called with: \(audioActivity)")
 
         objc_sync_enter(self)
         defer { objc_sync_exit(self) }
@@ -78,7 +77,7 @@ public class OWSAudioSession: NSObject {
         do {
             try ensureAudioCategory()
         } catch {
-            owsFailDebug("error in ensureAudioCategory: \(error)")
+            Log.error("[AudioActivity] Error in ensureAudioCategory: \(error)")
         }
     }
 
@@ -99,12 +98,12 @@ public class OWSAudioSession: NSObject {
             try avAudioSession.setCategory(.record)
         } else if aggregateBehaviors.contains(.audioMessagePlayback) {
             if self.device.proximityState {
-                Logger.debug("proximityState: true")
+                Log.debug("[AudioActivity] proximityState: true")
 
                 try avAudioSession.setCategory(.playAndRecord)
                 try avAudioSession.overrideOutputAudioPort(.none)
             } else {
-                Logger.debug("proximityState: false")
+                Log.debug("[AudioActivity] proximityState: false")
                 try avAudioSession.setCategory(.playback)
             }
         } else if aggregateBehaviors.contains(.playback) {
@@ -119,7 +118,7 @@ public class OWSAudioSession: NSObject {
         do {
             try ensureAudioCategory()
         } catch {
-            owsFailDebug("error in response to proximity change: \(error)")
+            Log.error("[AudioActivity] Error in response to proximity change: \(error)")
         }
     }
 
@@ -145,7 +144,7 @@ public class OWSAudioSession: NSObject {
                 // Normally we should be explicitly stopping an audio activity, but this allows
                 // for recovery if the owner of the AudioAcivity was GC'd without ending it's
                 // audio activity
-                Logger.warn("an old activity has been gc'd")
+                Log.warn("[AudioActivity] An old activity has been gc'd")
                 return nil
             }
 
@@ -154,7 +153,7 @@ public class OWSAudioSession: NSObject {
         }
 
         guard currentActivities.isEmpty else {
-            Logger.debug("not deactivating due to currentActivities: \(currentActivities)")
+            Log.debug("[AudioActivity] Not deactivating due to currentActivities: \(currentActivities)")
             return
         }
 
@@ -163,7 +162,7 @@ public class OWSAudioSession: NSObject {
             // By notifying when we deactivate, the other app can resume playback.
             try avAudioSession.setActive(false, options: [.notifyOthersOnDeactivation])
         } catch {
-            owsFailDebug("failed with error: \(error)")
+            Log.error("[AudioActivity] Failed with error: \(error)")
         }
     }
 }

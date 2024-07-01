@@ -4,7 +4,6 @@ import Foundation
 import Combine
 import SessionUtilitiesKit
 import SessionSnodeKit
-import SignalCoreKit
 
 public enum AttachmentDownloadJob: JobExecutor {
     public static var maxFailureCount: Int = 3
@@ -127,12 +126,14 @@ public enum AttachmentDownloadJob: JobExecutor {
                         key.count > 0,
                         digest.count > 0
                     else { return data } // Open group attachments are unencrypted
-                        
-                    return try Cryptography.decryptAttachment(
-                        data,
-                        withKey: key,
-                        digest: digest,
-                        unpaddedSize: UInt32(attachment.byteCount)
+                    
+                    return try dependencies.crypto.tryGenerate(
+                        .decryptAttachment(
+                            ciphertext: data,
+                            key: key,
+                            digest: digest,
+                            unpaddedSize: attachment.byteCount
+                        )
                     )
                 }()
                 
@@ -146,7 +147,7 @@ public enum AttachmentDownloadJob: JobExecutor {
             .sinkUntilComplete(
                 receiveCompletion: { result in
                     // Remove the temporary file
-                    OWSFileSystem.deleteFile(temporaryFileUrl.path)
+                    try? FileSystem.deleteFile(at: temporaryFileUrl.path)
 
                     switch result {
                         case .finished:

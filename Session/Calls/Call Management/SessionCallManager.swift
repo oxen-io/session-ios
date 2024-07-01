@@ -5,7 +5,6 @@ import CallKit
 import GRDB
 import SessionUIKit
 import SessionMessagingKit
-import SignalCoreKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
@@ -93,7 +92,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     }
     
     public func reportOutgoingCall(_ call: SessionCall) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         UserDefaults.sharedLokiProject?[.isCallOngoing] = true
         UserDefaults.sharedLokiProject?[.lastCallPreOffer] = Date()
         

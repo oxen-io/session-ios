@@ -4,7 +4,6 @@ import Foundation
 import MediaPlayer
 import SessionUIKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 // This kind of view is tricky.  I've tried to organize things in the 
@@ -76,12 +75,12 @@ import SessionUtilitiesKit
 
     @available(*, unavailable, message:"use other constructor instead.")
     required init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     @objc required init(srcImage: UIImage, successCompletion : @escaping (Data) -> Void) {
         // normalized() can be slightly expensive but in practice this is fine.
-        self.srcImage = srcImage.normalized()
+        self.srcImage = srcImage.normalizedImage()
         self.successCompletion = successCompletion
         super.init(nibName: nil, bundle: nil)
 
@@ -151,7 +150,7 @@ import SessionUtilitiesKit
         let contentView = UIView()
         contentView.themeBackgroundColor = .backgroundPrimary
         self.view.addSubview(contentView)
-        contentView.autoPinEdgesToSuperviewEdges()
+        contentView.pin(to: self.view)
         
         let titleLabel: UILabel = UILabel()
         titleLabel.font = .boldSystemFont(ofSize: Values.veryLargeFontSize)
@@ -159,10 +158,10 @@ import SessionUtilitiesKit
         titleLabel.themeTextColor = .textPrimary
         titleLabel.textAlignment = .center
         contentView.addSubview(titleLabel)
-        titleLabel.autoPinWidthToSuperview()
-        
-        let titleLabelMargin = ScaleFromIPhone5(16)
-        titleLabel.autoPinEdge(toSuperviewSafeArea: .top, withInset: titleLabelMargin)
+        titleLabel.set(.width, to: .width, of: contentView)
+
+        let titleLabelMargin = Values.scaleFromIPhone5(16)
+        titleLabel.pin(.top, to: .top, of: titleLabel.safeAreaLayoutGuide, withInset: titleLabelMargin)
         
         let buttonRow: UIView = createButtonRow()
         contentView.addSubview(buttonRow)
@@ -172,7 +171,7 @@ import SessionUtilitiesKit
         buttonRow.set(
             .height,
             to: (
-                ScaleFromIPhone5To7Plus(35, 45) +
+                Values.scaleFromIPhone5To7Plus(35, 45) +
                 Values.mediumSpacing +
                 (UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? Values.mediumSpacing)
             )
@@ -500,7 +499,7 @@ import SessionUtilitiesKit
         UIGraphicsBeginImageContextWithOptions(dstSizePixels, !hasAlpha, dstScale)
 
         guard let context = UIGraphicsGetCurrentContext() else {
-            owsFailDebug("could not generate dst image.")
+            Log.error("[CropScaleImageViewController] Could not generate dst image.")
             return nil
         }
         context.interpolationQuality = .high
@@ -509,7 +508,7 @@ import SessionUtilitiesKit
         srcImage.draw(in: imageViewFrame)
 
         guard let scaledImage = UIGraphicsGetImageFromCurrentImageContext() else {
-            owsFailDebug("could not generate dst image.")
+            Log.error("[CropScaleImageViewController] Could not generate dst image.")
             return nil
         }
         UIGraphicsEndImageContext()

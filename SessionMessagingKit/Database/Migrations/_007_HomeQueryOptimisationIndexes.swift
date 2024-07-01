@@ -14,7 +14,7 @@ enum _007_HomeQueryOptimisationIndexes: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.create(
             index: "interaction_on_wasRead_and_hasMention_and_threadId", // stringlint:disable
             on: Interaction.databaseTableName,

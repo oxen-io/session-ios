@@ -14,7 +14,7 @@ enum _019_ScheduleAppUpdateCheckJob: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: GRDB.Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         _ = try Job(
             variant: .checkForAppUpdates,
             behaviour: .recurring

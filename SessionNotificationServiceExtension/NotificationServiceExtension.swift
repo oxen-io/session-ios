@@ -8,7 +8,6 @@ import UserNotifications
 import BackgroundTasks
 import SessionMessagingKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public final class NotificationServiceExtension: UNNotificationServiceExtension {
@@ -28,6 +27,9 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     override public func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         self.contentHandler = contentHandler
         self.request = request
+        
+        // Called via the OS so create a default 'Dependencies' instance
+        let dependencies: Dependencies = Dependencies()
 
         // Abort if the main app is running
         guard !(UserDefaults.sharedLokiProject?[.isMainAppActive]).defaulting(to: false) else {
@@ -52,7 +54,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
         // Perform main setup
         Storage.resumeDatabaseAccess()
-        DispatchQueue.main.sync { self.setUpIfNecessary() { } }
+        DispatchQueue.main.sync { self.setUpIfNecessary(using: dependencies) { } }
 
         // Handle the push notification
         Singleton.appReadiness.runNowOrWhenAppDidBecomeReady {
@@ -227,8 +229,8 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
 
     // MARK: Setup
 
-    private func setUpIfNecessary(completion: @escaping () -> Void) {
-        AssertIsOnMainThread()
+    private func setUpIfNecessary(using dependencies: Dependencies, completion: @escaping () -> Void) {
+        Log.assertOnMainThread()
 
         // The NSE will often re-use the same process, so if we're
         // already set up we want to do nothing; we're already ready
@@ -238,16 +240,14 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
         Log.info("Performing setup.")
         didPerformSetup = true
 
-        _ = AppVersion.sharedInstance()
-
-        Cryptography.seedRandom()
+        _ = AppVersion.shared
 
         AppSetup.setupEnvironment(
             retrySetupIfDatabaseInvalid: true,
             appSpecificBlock: {
                 Log.setup(with: Logger(
                     primaryPrefix: "NotificationServiceExtension",                                               // stringlint:disable
-                    customDirectory: "\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/NotificationExtension", // stringlint:disable
+                    customDirectory: "\(FileManager.default.appSharedDataDirectoryPath)/Logs/NotificationExtension", // stringlint:disable
                     forceNSLog: true
                 ))
                 
@@ -283,12 +283,13 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
                 }
                 
                 completion()
-            }
+            },
+            using: dependencies
         )
     }
     
     private func versionMigrationsDidComplete(needsConfigSync: Bool) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // If we need a config sync then trigger it now
         if needsConfigSync {
@@ -301,7 +302,7 @@ public final class NotificationServiceExtension: UNNotificationServiceExtension 
     }
 
     private func checkIsAppReady(migrationsCompleted: Bool) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // Only mark the app as ready once.
         guard !Singleton.appReadiness.isAppReady else { return }

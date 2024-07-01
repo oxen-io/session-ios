@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 
@@ -1337,8 +1336,8 @@ fileprivate extension LibSessionUtilSpec {
                 
                 // FIXME: Would be good to move these into the libSession-util instead of using Sodium separately
                 let groupSeed: Data = Data(hex: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
-                let groupEd25519KeyPair = Sodium().sign.keyPair(seed: groupSeed.bytes)!
-                let groupX25519PublicKey = Sodium().sign.toX25519(ed25519PublicKey: groupEd25519KeyPair.publicKey)!
+                let groupEd25519KeyPair: KeyPair = Crypto().generate(.ed25519KeyPair(seed: Array(groupSeed)))!
+                let groupX25519PublicKey: [UInt8] = Crypto().generate(.x25519(ed25519Pubkey: groupEd25519KeyPair.publicKey))!
                 
                 // Note: this isn't exactly what Session actually does here for legacy closed
                 // groups (rather it uses X25519 keys) but for this test the distinction doesn't matter.

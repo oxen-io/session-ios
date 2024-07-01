@@ -20,27 +20,27 @@ extension UIView {
             if gesture.state == .ended {
                 if draggedView.frame.midX >= (superview.layer.frame.width / 2) {
                     UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 1, options: .curveEaseIn, animations: {
-                        draggedView.center.x = (superview.layer.frame.width - (draggedView.width() / 2) - Values.smallSpacing)
+                        draggedView.center.x = (superview.layer.frame.width - (draggedView.bounds.width / 2) - Values.smallSpacing)
                     }, completion: nil)
                 }
                 else
                 {
                     UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 1, options: .curveEaseIn, animations: {
-                        draggedView.center.x = ((draggedView.width() / 2) + Values.smallSpacing)
+                        draggedView.center.x = ((draggedView.bounds.width / 2) + Values.smallSpacing)
                     }, completion: nil)
                 }
                 
                 let topMargin = ((UIApplication.shared.keyWindow?.safeAreaInsets.top ?? 0) + Values.veryLargeSpacing)
                 if draggedView.frame.minY <= topMargin {
                     UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 1, options: .curveEaseIn, animations: {
-                        draggedView.center.y = (topMargin + (draggedView.height() / 2))
+                        draggedView.center.y = (topMargin + (draggedView.bounds.height / 2))
                     }, completion: nil)
                 }
                 
                 let bottomMargin = (UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? 0)
                 if draggedView.frame.maxY >= superview.layer.frame.height {
                     UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 1, options: .curveEaseIn, animations: {
-                        draggedView.center.y = (superview.layer.frame.height - (draggedView.height() / 2) - bottomMargin)
+                        draggedView.center.y = (superview.layer.frame.height - (draggedView.bounds.height / 2) - bottomMargin)
                     }, completion: nil)
                 }
             }

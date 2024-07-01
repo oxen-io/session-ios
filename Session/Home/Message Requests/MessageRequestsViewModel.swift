@@ -167,10 +167,11 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                                 accessibility: Accessibility(
                                     identifier: "Message request"
                                 ),
-                                onTap: { [weak self] in
+                                onTap: { [weak self, dependencies] in
                                     let viewController: ConversationVC = ConversationVC(
                                         threadId: viewModel.threadId,
-                                        threadVariant: viewModel.threadVariant
+                                        threadVariant: viewModel.threadVariant,
+                                        using: dependencies
                                     )
                                     self?.transitionToScreen(viewController, transitionType: .push)
                                 }

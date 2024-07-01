@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -580,7 +579,10 @@ public extension SessionThread {
         guard capabilities.isEmpty || capabilities.contains(.blind) else { return nil }
         
         let blindedKeyPair: KeyPair? = dependencies.crypto.generate(
-            .blindedKeyPair(serverPublicKey: openGroupInfo.publicKey, edKeyPair: userEdKeyPair, using: dependencies)
+            .blinded15KeyPair(
+                serverPublicKey: openGroupInfo.publicKey,
+                ed25519SecretKey: userEdKeyPair.secretKey
+            )
         )
         
         return blindedKeyPair.map { keyPair -> String in

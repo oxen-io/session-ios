@@ -70,10 +70,10 @@ extension SessionCallManager {
     private func requestTransaction(_ transaction: CXTransaction, completion: ((Error?) -> Void)? = nil) {
         callController?.request(transaction) { error in
             if let error = error {
-                SNLog("Error requesting transaction: \(error)")
+                Log.error("[SessionCallManager] Error requesting transaction: \(error)")
             }
             else {
-                SNLog("Requested transaction successfully")
+                Log.info("[SessionCallManager] Requested transaction successfully")
             }
             
             completion?(error)

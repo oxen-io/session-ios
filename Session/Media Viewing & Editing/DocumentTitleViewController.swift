@@ -6,7 +6,6 @@ import GRDB
 import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public class DocumentTileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
@@ -37,7 +36,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     }
 
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
     
     deinit {
@@ -90,7 +89,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         )
 
         view.addSubview(self.tableView)
-        tableView.autoPin(toEdgesOf: view)
+        tableView.pin(to: view)
         
         // Notifications
         NotificationCenter.default.addObserver(
@@ -145,7 +144,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         // If we have a focused item then we want to scroll to it
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return }
         
-        Logger.debug("scrolling to focused item at indexPath: \(focusedIndexPath)")
+        Log.debug("[DocumentTitleViewController] Scrolling to focused item at indexPath: \(focusedIndexPath)")
         self.view.layoutIfNeeded()
         self.tableView.scrollToRow(at: focusedIndexPath, at: .middle, animated: false)
         
@@ -342,7 +341,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         if
             attachment.isText ||
             attachment.isMicrosoftDoc ||
-            attachment.contentType == OWSMimeTypeApplicationPdf
+            attachment.contentType == MimeTypeUtil.MimeType.applicationPdf
         {
             
             delegate?.preview(fileUrl: fileUrl)
@@ -569,7 +568,7 @@ class DocumentSectionHeaderView: UIView {
 
     @available(*, unavailable, message: "Unimplemented")
     required init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public func configure(title: String) {
@@ -589,12 +588,15 @@ class DocumentStaticHeaderView: UIView {
         label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.numberOfLines = 0
-        label.autoPinEdgesToSuperviewMargins(with: UIEdgeInsets(top: 0, leading: Values.largeSpacing, bottom: 0, trailing: Values.largeSpacing))
+        label.pin(.top, toMargin: .top, of: self)
+        label.pin(.leading, toMargin: .leading, of: self, withInset: Values.largeSpacing)
+        label.pin(.trailing, toMargin: .trailing, of: self, withInset: -Values.largeSpacing)
+        label.pin(.bottom, toMargin: .bottom, of: self)
     }
 
     @available(*, unavailable, message: "Unimplemented")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public func configure(title: String) {

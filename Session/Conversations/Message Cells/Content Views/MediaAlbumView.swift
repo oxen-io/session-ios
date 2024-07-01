@@ -2,7 +2,6 @@
 
 import UIKit
 import SessionMessagingKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public class MediaAlbumView: UIStackView {
@@ -17,7 +16,7 @@ public class MediaAlbumView: UIStackView {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public required init(
@@ -56,21 +55,21 @@ public class MediaAlbumView: UIStackView {
         backgroundView.themeBackgroundColor = .backgroundPrimary
         addSubview(backgroundView)
         
-        backgroundView.setContentHuggingLow()
-        backgroundView.setCompressionResistanceLow()
+        backgroundView.setContentHugging(to: .defaultLow)
+        backgroundView.setCompressionResistance(to: .defaultLow)
         backgroundView.pin(to: backgroundView)
         
         switch itemViews.count {
-            case 0: return owsFailDebug("No item views.")
+            case 0: return Log.error("[MediaAlbumView] No item views.")
                 
             case 1:
                 // X
                 guard let itemView = itemViews.first else {
-                    owsFailDebug("Missing item view.")
+                    Log.error("[MediaAlbumView] Missing item view.")
                     return
                 }
                 addSubview(itemView)
-                itemView.autoPinEdgesToSuperviewEdges()
+                itemView.pin(to: self)
                 
             case 2:
                 // X X
@@ -92,7 +91,7 @@ public class MediaAlbumView: UIStackView {
                 let bigImageSize = smallImageSize * 2 + MediaAlbumView.kSpacingPts
 
                 guard let leftItemView = itemViews.first else {
-                    owsFailDebug("Missing view")
+                    Log.error("[MediaAlbumView] Missing view")
                     return
                 }
                 autoSet(viewSize: bigImageSize, ofViews: [leftItemView])
@@ -111,7 +110,7 @@ public class MediaAlbumView: UIStackView {
 
                 if items.count > MediaAlbumView.kMaxItems {
                     guard let lastView = rightViews.last else {
-                        owsFailDebug("Missing lastView")
+                        Log.error("[MediaAlbumView] Missing lastView")
                         return
                     }
 
@@ -120,7 +119,7 @@ public class MediaAlbumView: UIStackView {
                     let tintView = UIView()
                     tintView.themeBackgroundColor = .messageBubble_overlay
                     lastView.addSubview(tintView)
-                    tintView.autoPinEdgesToSuperviewEdges()
+                    tintView.pin(to: self)
 
                     let moreCount = max(1, items.count - MediaAlbumView.kMaxItems)
                     let moreText = String(
@@ -133,7 +132,7 @@ public class MediaAlbumView: UIStackView {
                     moreLabel.text = moreText
                     moreLabel.themeTextColor = .white
                     lastView.addSubview(moreLabel)
-                    moreLabel.autoCenterInSuperview()
+                    moreLabel.center(in: lastView)
                 }
         }
 
@@ -144,7 +143,7 @@ public class MediaAlbumView: UIStackView {
                 continue
             }
             guard let index = itemViews.firstIndex(of: itemView) else {
-                owsFailDebug("Couldn't determine index of item view.")
+                Log.error("[MediaAlbumView] Couldn't determine index of item view.")
                 continue
             }
             let item = items[index]
@@ -155,14 +154,14 @@ public class MediaAlbumView: UIStackView {
                 continue
             }
             guard let icon = UIImage(named: "media_album_caption") else {
-                owsFailDebug("Couldn't load icon.")
+                Log.error("[MediaAlbumView] Couldn't load icon.")
                 continue
             }
             let iconView = UIImageView(image: icon)
             itemView.addSubview(iconView)
             itemView.layoutMargins = .zero
-            iconView.autoPinTopToSuperviewMargin(withInset: 6)
-            iconView.autoPinLeadingToSuperviewMargin(withInset: 6)
+            iconView.pin(.top, to: .top, of: itemView.layoutMarginsGuide, withInset: 6)
+            iconView.pin(.leading, to: .leading, of: itemView.layoutMarginsGuide, withInset: 6)
         }
     }
 
@@ -171,7 +170,8 @@ public class MediaAlbumView: UIStackView {
         ofViews views: [MediaView]
     ) {
         for itemView in views {
-            itemView.autoSetDimensions(to: CGSize(width: viewSize, height: viewSize))
+            itemView.set(.width, to: viewSize)
+            itemView.set(.height, to: viewSize)
         }
     }
 
@@ -250,7 +250,7 @@ public class MediaAlbumView: UIStackView {
         var bestDistance: CGFloat = 0
         for itemView in itemViews {
             let itemCenter = convert(itemView.center, from: itemView.superview)
-            let distance = CGPointDistance(location, itemCenter)
+            let distance = location.distance(to: itemCenter)
             if bestMediaView != nil && distance > bestDistance {
                 continue
             }

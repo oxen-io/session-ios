@@ -202,14 +202,14 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         
         // Unread count view
         unreadCountView.addSubview(unreadCountLabel)
-        unreadCountLabel.setCompressionResistanceHigh()
+        unreadCountView.setCompressionResistance(to: .required)
         unreadCountLabel.pin([ VerticalEdge.top, VerticalEdge.bottom ], to: unreadCountView)
         unreadCountView.pin(.leading, to: .leading, of: unreadCountLabel, withInset: -4)
         unreadCountView.pin(.trailing, to: .trailing, of: unreadCountLabel, withInset: 4)
         
         // Has mention view
         hasMentionView.addSubview(hasMentionLabel)
-        hasMentionLabel.setCompressionResistanceHigh()
+        hasMentionLabel.setCompressionResistance(to: .required)
         hasMentionLabel.pin(to: hasMentionView)
         
         // Label stack view

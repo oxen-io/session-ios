@@ -65,7 +65,8 @@ open class ScreenLockViewController: UIViewController {
         
         view.themeBackgroundColorForced = .theme(.classicDark, color: .black)  // Need to match the Launch screen
 
-        let edgesView: UIView = UIView.container()
+        let edgesView: UIView = UIView()
+        edgesView.layoutMargins = .zero
         self.view.addSubview(edgesView)
         edgesView.pin(to: view)
         

@@ -18,7 +18,7 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // If we have no ed25519 key then there is no need to create cached dump data
         guard let secretKey: [UInt8] = Identity.fetchUserEd25519KeyPair(db)?.secretKey else {
             Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
@@ -26,10 +26,10 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         }
         
         // Create the initial config state
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
         let timestampMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         
-        LibSession.loadState(db, userPublicKey: userPublicKey, ed25519SecretKey: secretKey)
+        LibSession.loadState(db, userPublicKey: userPublicKey, ed25519SecretKey: secretKey, using: dependencies)
         
         // Retrieve all threads (we are going to base the config dump data on the active
         // threads rather than anything else in the database)
@@ -39,11 +39,11 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         
         // MARK: - UserProfile Config Dump
         
-        try LibSession
+        try dependencies.caches[.libSession]
             .config(for: .userProfile, publicKey: userPublicKey)
             .mutate { conf in
                 try LibSession.update(
-                    profile: Profile.fetchOrCreateCurrentUser(db),
+                    profile: Profile.fetchOrCreateCurrentUser(db, using: dependencies),
                     in: conf
                 )
                 
@@ -70,7 +70,7 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         
         // MARK: - Contact Config Dump
         
-        try LibSession
+        try dependencies.caches[.libSession]
             .config(for: .contacts, publicKey: userPublicKey)
             .mutate { conf in
                 // Exclude Note to Self, community, group and outgoing blinded message requests
@@ -79,7 +79,7 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
                     .filter { thread in
                         thread.variant == .contact &&
                         thread.id != userPublicKey &&
-                        SessionId(from: thread.id)?.prefix == .standard
+                        (try? SessionId(from: thread.id))?.prefix == .standard
                     }
                     .map { $0.id }
                 let contactsData: [ContactInfo] = try Contact
@@ -136,7 +136,7 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         
         // MARK: - ConvoInfoVolatile Config Dump
         
-        try LibSession
+        try dependencies.caches[.libSession]
             .config(for: .convoInfoVolatile, publicKey: userPublicKey)
             .mutate { conf in
                 let volatileThreadInfo: [LibSession.VolatileThreadInfo] = LibSession.VolatileThreadInfo
@@ -161,7 +161,7 @@ enum _014_GenerateInitialUserConfigDumps: Migration {
         
         // MARK: - UserGroups Config Dump
         
-        try LibSession
+        try dependencies.caches[.libSession]
             .config(for: .userGroups, publicKey: userPublicKey)
             .mutate { conf in
                 let legacyGroupData: [LibSession.LegacyGroupInfo] = try LibSession.LegacyGroupInfo.fetchAll(db)

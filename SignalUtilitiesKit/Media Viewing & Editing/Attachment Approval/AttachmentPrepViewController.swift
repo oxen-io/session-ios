@@ -5,7 +5,6 @@ import UIKit
 import AVKit
 import AVFoundation
 import SessionUIKit
-import SignalCoreKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
@@ -26,6 +25,7 @@ public class AttachmentPrepViewController: OWSViewController {
 
     // MARK: - Properties
 
+    private let dependencies: Dependencies
     weak var prepDelegate: AttachmentPrepViewControllerDelegate?
 
     let attachmentItem: SignalAttachmentItem
@@ -98,13 +98,14 @@ public class AttachmentPrepViewController: OWSViewController {
 
     // MARK: - Initializers
 
-    init(attachmentItem: SignalAttachmentItem) {
+    init(attachmentItem: SignalAttachmentItem, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.attachmentItem = attachmentItem
         
         super.init(nibName: nil, bundle: nil)
         
         if attachment.hasError {
-            owsFailDebug(attachment.error.debugDescription)
+            Log.error("[AttachmentPrepViewController] \(attachment.error.debugDescription)")
         }
     }
 
@@ -210,7 +211,7 @@ public class AttachmentPrepViewController: OWSViewController {
         }
          
         if attachment.isVideo || attachment.isAudio {
-            let playButtonSize: CGFloat = ScaleFromIPhone5(70)
+            let playButtonSize: CGFloat = Values.scaleFromIPhone5(70)
             
             NSLayoutConstraint.activate([
                 playButton.centerXAnchor.constraint(equalTo: contentContainerView.centerXAnchor),
@@ -341,7 +342,7 @@ extension AttachmentPrepViewController: UIScrollViewDelegate {
         
         // Ensure bounds have been computed
         guard mediaMessageView.bounds.width > 0, mediaMessageView.bounds.height > 0 else {
-            Logger.warn("bad bounds")
+            Log.warn("[AttachmentPrepViewController] bad bounds")
             return
         }
 
@@ -361,9 +362,9 @@ extension AttachmentPrepViewController: UIScrollViewDelegate {
         guard isZoomable else {
             scrollView.contentInset = UIEdgeInsets(
                 top: -AttachmentPrepViewController.verticalCenterOffset,
-                leading: 0,
+                left: 0,
                 bottom: 0,
-                trailing: 0
+                right: 0
             )
             return
         }

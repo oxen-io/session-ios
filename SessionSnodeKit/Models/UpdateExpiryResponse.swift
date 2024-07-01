@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import Sodium
 import SessionUtilitiesKit
 
 public class UpdateExpiryResponse: SnodeRecursiveResponse<UpdateExpiryResponse.SwarmItem> {}
@@ -50,9 +49,9 @@ extension UpdateExpiryResponse: ValidatableResponse {
     internal static var requiredSuccessfulResponses: Int { -1 }
     
     internal func validResultMap(
-        sodium: Sodium,
-        userX25519PublicKey: String,
-        validationData: [String]
+        swarmPublicKey: String,
+        validationData: [String],
+        using dependencies: Dependencies
     ) throws -> [String: UpdateExpiryResponseResult] {
         let validationMap: [String: UpdateExpiryResponseResult] = try swarm.reduce(into: [:]) { result, next in
             guard
@@ -80,7 +79,7 @@ extension UpdateExpiryResponse: ValidatableResponse {
             ///
             /// **Note:** If `updated` is empty then the `expiry` value will match the value that was
             /// included in the original request
-            let verificationBytes: [UInt8] = userX25519PublicKey.bytes
+            let verificationBytes: [UInt8] = swarmPublicKey.bytes
                 .appending(contentsOf: "\(appliedExpiry)".data(using: .ascii)?.bytes)
                 .appending(contentsOf: validationData.joined().bytes)
                 .appending(contentsOf: next.value.updated.sorted().joined().bytes)
@@ -91,10 +90,12 @@ extension UpdateExpiryResponse: ValidatableResponse {
                         result.append(contentsOf: "\(nextUnchanged.value)".data(using: .ascii)?.bytes ?? [])
                     }
                 )
-            let isValid: Bool = sodium.sign.verify(
-                message: verificationBytes,
-                publicKey: Data(hex: next.key).bytes,
-                signature: encodedSignature.bytes
+            let isValid: Bool = dependencies.crypto.verify(
+                .signature(
+                    message: verificationBytes,
+                    publicKey: Data(hex: next.key).bytes,
+                    signature: encodedSignature.bytes
+                )
             )
             
             // If the update signature is invalid then we want to fail here

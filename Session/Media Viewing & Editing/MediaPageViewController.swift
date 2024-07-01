@@ -5,7 +5,6 @@ import GRDB
 import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -33,7 +32,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     public func setCurrentItem(_ item: MediaGalleryViewModel.Item, direction: UIPageViewController.NavigationDirection, animated isAnimated: Bool) {
         guard let galleryPage = self.buildGalleryPage(galleryItem: item) else {
-            owsFailDebug("unexpectedly unable to build new gallery page")
+            Log.error("[MediaPageViewController] Unexpectedly unable to build new gallery page")
             return
         }
         
@@ -87,11 +86,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     @available(*, unavailable, message: "Unimplemented")
     required init?(coder: NSCoder) {
-        notImplemented()
-    }
-
-    deinit {
-        Logger.debug("deinit")
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - Subview
@@ -180,8 +175,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         galleryRailView.isHidden = true
         galleryRailView.delegate = self
-        galleryRailView.autoSetDimension(.height, toSize: 72)
-        footerBar.autoSetDimension(.height, toSize: 44)
+        galleryRailView.set(.height, to: 72)
+        footerBar.set(.height, to: 44)
 
         let bottomContainer: DynamicallySizedView = DynamicallySizedView()
         bottomContainer.clipsToBounds = true
@@ -193,7 +188,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         bottomStack.axis = .vertical
         bottomStack.isLayoutMarginsRelativeArrangement = true
         bottomContainer.addSubview(bottomStack)
-        bottomStack.autoPinEdgesToSuperviewEdges()
+        bottomStack.pin(to: bottomContainer)
         
         let galleryRailBlockingView: UIView = UIView()
         galleryRailBlockingView.themeBackgroundColor = .backgroundPrimary
@@ -276,7 +271,6 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }
 
     override func didReceiveMemoryWarning() {
-        Logger.info("")
         super.didReceiveMemoryWarning()
 
         self.cachedPages = [:]
@@ -287,7 +281,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     var pagerScrollViewContentOffsetObservation: NSKeyValueObservation?
     func pagerScrollView(_ pagerScrollView: UIScrollView, contentOffsetDidChange change: NSKeyValueObservedChange<CGPoint>) {
         guard let newValue = change.newValue else {
-            owsFailDebug("newValue was unexpectedly nil")
+            Log.error("[MediaPageViewController] newValue was unexpectedly nil")
             return
         }
 
@@ -516,7 +510,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     
     public func share(using dependencies: Dependencies = Dependencies()) {
         guard let currentViewController = self.viewControllers?[0] as? MediaDetailViewController else {
-            owsFailDebug("currentViewController was unexpectedly nil")
+            Log.error("[MediaPageViewController] currentViewController was unexpectedly nil")
             return
         }
         guard let originalFilePath: String = currentViewController.galleryItem.attachment.originalFilePath else {
@@ -534,10 +528,10 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         
         shareVC.completionWithItemsHandler = { activityType, completed, returnedItems, activityError in
             if let activityError = activityError {
-                SNLog("Failed to share with activityError: \(activityError)")
+                Log.error("[MediaPageViewController] Failed to share with activityError: \(activityError)")
             }
             else if completed {
-                SNLog("Did share with activityType: \(activityType.debugDescription)")
+                Log.info("[MediaPageViewController] Did share with activityType: \(activityType.debugDescription)")
             }
             
             guard
@@ -615,7 +609,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     @objc public func didPressPlayBarButton() {
         guard let currentViewController = self.viewControllers?.first as? MediaDetailViewController else {
-            SNLog("currentViewController was unexpectedly nil")
+            Log.error("[MediaPageViewController] currentViewController was unexpectedly nil")
             return
         }
         
@@ -626,12 +620,11 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     var pendingViewController: MediaDetailViewController?
     public func pageViewController(_ pageViewController: UIPageViewController, willTransitionTo pendingViewControllers: [UIViewController]) {
-        Logger.debug("")
 
-        assert(pendingViewControllers.count == 1)
+        Log.assert(pendingViewControllers.count == 1)
         pendingViewControllers.forEach { viewController in
             guard let pendingViewController = viewController as? MediaDetailViewController else {
-                owsFailDebug("unexpected mediaDetailViewController: \(viewController)")
+                Log.error("[MediaPageViewController] Unexpected mediaDetailViewController: \(viewController)")
                 return
             }
             self.pendingViewController = pendingViewController
@@ -645,12 +638,11 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }
 
     public func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted: Bool) {
-        Logger.debug("")
 
-        assert(previousViewControllers.count == 1)
+        Log.assert(previousViewControllers.count == 1)
         previousViewControllers.forEach { viewController in
             guard let previousPage = viewController as? MediaDetailViewController else {
-                owsFailDebug("unexpected mediaDetailViewController: \(viewController)")
+                Log.error("[MediaPageViewController] Unexpected mediaDetailViewController: \(viewController)")
                 return
             }
 
@@ -792,7 +784,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         self.navigationController?.view.isUserInteractionEnabled = false
         self.navigationController?.dismiss(animated: true, completion: { [weak self] in
-            if !IsLandscapeOrientationEnabled() {
+            if !UIDevice.current.isIPad {
                 UIDevice.current.ows_setOrientation(.portrait)
             }
             
@@ -805,8 +797,6 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     // MARK: MediaDetailViewControllerDelegate
 
     public func mediaDetailViewControllerDidTapMedia(_ mediaDetailViewController: MediaDetailViewController) {
-        Logger.debug("")
-
         self.shouldHideToolbars = !self.shouldHideToolbars
     }
 
@@ -855,13 +845,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         containerView.layoutMargins = UIEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
 
         containerView.addSubview(stackView)
-
-        stackView.autoPinEdge(toSuperviewMargin: .top, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .trailing, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .bottom, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .leading, relation: .greaterThanOrEqual)
-        stackView.setContentHuggingHigh()
-        stackView.autoCenterInSuperview()
+        stackView.pin(.top, greaterThanOrEqualTo: .top, of: containerView)
+        stackView.pin(.trailing, greaterThanOrEqualTo: .trailing, of: containerView)
+        stackView.pin(.bottom, lessThanOrEqualTo: .bottom, of: containerView)
+        stackView.pin(.leading, lessThanOrEqualTo: .leading, of: containerView)
+        stackView.setContentHugging(to: .required)
+        stackView.center(in: containerView)
 
         return containerView
     }()
@@ -891,7 +880,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
                     return "MEDIA_GALLERY_SENDER_NAME_YOU".localized() //"Short sender label for media sent by you"
                         
                 default:
-                    owsFailDebug("Unsupported message variant: \(targetItem.interactionVariant)")
+                    Log.error("[MediaPageViewController] Unsupported message variant: \(targetItem.interactionVariant)")
                     return ""
             }
         }()
@@ -942,7 +931,7 @@ extension MediaGalleryViewModel.Item: GalleryRailItem {
 extension MediaPageViewController: GalleryRailViewDelegate {
     func galleryRailView(_ galleryRailView: GalleryRailView, didTapItem imageRailItem: GalleryRailItem) {
         guard let targetItem = imageRailItem as? MediaGalleryViewModel.Item else {
-            owsFailDebug("unexpected imageRailItem: \(imageRailItem)")
+            Log.error("[MediaPageViewController] Unexpected imageRailItem: \(imageRailItem)")
             return
         }
 

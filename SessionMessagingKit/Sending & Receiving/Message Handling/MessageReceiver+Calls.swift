@@ -63,7 +63,7 @@ extension MessageReceiver {
                 .fetchOne(db))
                 .defaulting(to: false)
         else { return }
-        guard let timestamp = message.sentTimestamp, TimestampUtils.isWithinOneMinute(timestamp: timestamp) else {
+        guard let timestamp = message.sentTimestamp, TimestampUtils.isWithinOneMinute(timestampMs: timestamp) else {
             // Add missed call message for call offer messages from more than one minute
             if let interaction: Interaction = try MessageReceiver.insertCallInfoMessage(db, for: message, state: .missed) {
                 let thread: SessionThread = try SessionThread

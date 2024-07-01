@@ -5,8 +5,19 @@ import GRDB
 import DifferenceKit
 import SignalUtilitiesKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 public class ThreadPickerViewModel {
+    // MARK: - Initialization
+    
+    public let dependencies: Dependencies
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+    
+    // MARK: - Content
+    
     /// This value is the current state of the view
     public private(set) var viewData: [SessionThreadViewModel] = []
     

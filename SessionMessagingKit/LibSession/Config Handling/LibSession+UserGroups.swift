@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -723,12 +722,14 @@ public extension LibSession {
     
     static func batchUpdate(
         _ db: Database,
-        disappearingConfigs: [DisappearingMessagesConfiguration]
+        disappearingConfigs: [DisappearingMessagesConfiguration],
+        using dependencies: Dependencies
     ) throws {
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
+            publicKey: getUserHexEncodedPublicKey(db, using: dependencies),
+            using: dependencies
         ) { conf in
             try LibSession.upsert(
                 legacyGroups: disappearingConfigs.map {

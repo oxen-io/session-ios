@@ -17,7 +17,7 @@ enum _015_BlockCommunityMessageRequests: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Profile.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Add the new 'Profile' properties
         try db.alter(table: Profile.self) { t in
             t.add(.blocksCommunityMessageRequests, .boolean)
@@ -29,7 +29,7 @@ enum _015_BlockCommunityMessageRequests: Migration {
             Identity.userExists(db),
             (try Setting.exists(db, id: Setting.BoolKey.checkForCommunityMessageRequests.rawValue)) == false
         {
-            let rawBlindedMessageRequestValue: Int32 = try LibSession
+            let rawBlindedMessageRequestValue: Int32 = try dependencies.caches[.libSession]
                 .config(for: .userProfile, publicKey: getUserHexEncodedPublicKey(db))
                 .wrappedValue
                 .map { conf -> Int32 in try LibSession.rawBlindedMessageRequestValue(in: conf) }

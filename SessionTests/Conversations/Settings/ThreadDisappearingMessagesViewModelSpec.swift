@@ -14,25 +14,31 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var mockStorage: Storage! = SynchronousStorage(
-            customWriter: try! DatabaseQueue(),
-            migrationTargets: [
-                SNUtilitiesKit.self,
-                SNSnodeKit.self,
-                SNMessagingKit.self,
-                SNUIKit.self
-            ],
-            initialData: { db in
-                try SessionThread(
-                    id: "TestId",
-                    variant: .contact
-                ).insert(db)
-            }
-        )
         @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
+            storage: nil,
             scheduler: .immediate
         )
+        @TestState var mockStorage: Storage! = {
+            let result = SynchronousStorage(
+                customWriter: try! DatabaseQueue(),
+                migrationTargets: [
+                    SNUtilitiesKit.self,
+                    SNSnodeKit.self,
+                    SNMessagingKit.self,
+                    SNUIKit.self
+                ],
+                initialData: { db in
+                    try SessionThread(
+                        id: "TestId",
+                        variant: .contact
+                    ).insert(db)
+                },
+                using: dependencies
+            )
+            dependencies.storage = result
+            
+            return result
+        }()
         @TestState var viewModel: ThreadDisappearingMessagesSettingsViewModel! = ThreadDisappearingMessagesSettingsViewModel(
             threadId: "TestId",
             threadVariant: .contact,

@@ -211,7 +211,10 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                     // Use a transform scale to reduce the size of the typing indicator to the
                                     // desired size (this way the animation remains intact)
                                     let cell: TypingIndicatorCell = TypingIndicatorCell()
-                                    cell.transform = CGAffineTransform.scale(targetHeight / cell.bounds.height)
+                                    cell.transform = CGAffineTransform(
+                                        scaleX: targetHeight / cell.bounds.height,
+                                        y: targetHeight / cell.bounds.height
+                                    )
                                     cell.typingIndicatorView.startAnimation()
                                     result.addSubview(cell)
                                     
