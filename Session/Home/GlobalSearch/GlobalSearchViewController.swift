@@ -12,12 +12,22 @@ import SignalCoreKit
 class GlobalSearchViewController: BaseVC, LibSessionRespondingViewController, UITableViewDelegate, UITableViewDataSource {
     fileprivate typealias SectionModel = ArraySection<SearchSection, SessionThreadViewModel>
     
-    // MARK: - SearchSection
+    fileprivate struct SearchResultData {
+        var state: SearchResultsState
+        var data: [SectionModel]
+    }
     
-    enum SearchSection: Int, Differentiable {
-        case noResults
+    enum SearchResultsState: Int, Differentiable {
+        case none
+        case results
+        case defaultContacts
+    }
+    
+    // MARK: - SearchSection
+    enum SearchSection: Codable, Hashable, Differentiable {
         case contactsAndGroups
         case messages
+        case groupedContacts(title: String)
     }
     
     // MARK: - LibSessionRespondingViewController
@@ -31,18 +41,73 @@ class GlobalSearchViewController: BaseVC, LibSessionRespondingViewController, UI
     
     // MARK: - Variables
     
-    private lazy var defaultSearchResults: [SectionModel] = {
-        let result: SessionThreadViewModel? = Storage.shared.read { db -> SessionThreadViewModel? in
+    private lazy var defaultSearchResults: SearchResultData = {
+        let nonalphabeticNameTitle: String = "#" // stringlint:disable
+        let contacts: [SessionThreadViewModel] = Storage.shared.read { db -> [SessionThreadViewModel]? in
             try SessionThreadViewModel
-                .noteToSelfOnlyQuery(userPublicKey: getUserHexEncodedPublicKey(db))
-                .fetchOne(db)
+                .defaultContactsQuery(userPublicKey: getUserHexEncodedPublicKey(db))
+                .fetchAll(db)
+        }
+        .defaulting(to: [])
+        .sorted {
+            $0.displayName.lowercased() < $1.displayName.lowercased()
         }
         
-        return [ result.map { ArraySection(model: .contactsAndGroups, elements: [$0]) } ]
-            .compactMap { $0 }
+        var groupedContacts: [String: SectionModel] = [:]
+        contacts.forEach { contactViewModel in
+            guard !contactViewModel.threadIsNoteToSelf else {
+                groupedContacts[""] = SectionModel(
+                    model: .groupedContacts(title: ""),
+                    elements: [contactViewModel]
+                )
+                return
+            }
+            
+            let displayName = NSMutableString(string: contactViewModel.displayName)
+            CFStringTransform(displayName, nil, kCFStringTransformToLatin, false)
+            CFStringTransform(displayName, nil, kCFStringTransformStripDiacritics, false)
+                
+            let initialCharacter: String = (displayName.length > 0 ? displayName.substring(to: 1) : "")
+            let section: String = initialCharacter.capitalized.isSingleAlphabet ?
+                initialCharacter.capitalized :
+                nonalphabeticNameTitle
+                
+            if groupedContacts[section] == nil {
+                groupedContacts[section] = SectionModel(
+                    model: .groupedContacts(title: section),
+                    elements: []
+                )
+            }
+            groupedContacts[section]?.elements.append(contactViewModel)
+        }
+        
+        return SearchResultData(
+            state: .defaultContacts,
+            data: groupedContacts.values.sorted { sectionModel0, sectionModel1 in
+                let title0: String = {
+                    switch sectionModel0.model {
+                        case .groupedContacts(let title): return title
+                        default: return ""
+                    }
+                }()
+                let title1: String = {
+                    switch sectionModel1.model {
+                        case .groupedContacts(let title): return title
+                        default: return ""
+                    }
+                }()
+                
+                if ![title0, title1].contains(nonalphabeticNameTitle) {
+                    return title0 < title1
+                }
+                
+                return title1 == nonalphabeticNameTitle
+            }
+        )
     }()
+    
     private var readConnection: Atomic<Database?> = Atomic(nil)
-    private lazy var searchResultSet: [SectionModel] = self.defaultSearchResults
+    private lazy var searchResultSet: SearchResultData = defaultSearchResults
     private var termForCurrentSearchResultSet: String = ""
     private var lastSearchText: String?
     private var refreshTimer: Timer?
@@ -215,25 +280,11 @@ class GlobalSearchViewController: BaseVC, LibSessionRespondingViewController, UI
             DispatchQueue.main.async {
                 switch result {
                     case .success(let sections):
-                        let hasResults: Bool = (
-                            !searchText.isEmpty &&
-                            (sections.map { $0.elements.count }.reduce(0, +) > 0)
-                        )
-                        
                         self?.termForCurrentSearchResultSet = searchText
-                        self?.searchResultSet = [
-                            (hasResults ? nil : [
-                                ArraySection(
-                                    model: .noResults,
-                                    elements: [
-                                        SessionThreadViewModel(threadId: SessionThreadViewModel.invalidId)
-                                    ]
-                                )
-                            ]),
-                            (hasResults ? sections : nil)
-                        ]
-                        .compactMap { $0 }
-                        .flatMap { $0 }
+                        self?.searchResultSet = SearchResultData(
+                            state: (sections.map { $0.elements.count }.reduce(0, +) > 0) ? .results : .none,
+                            data: sections
+                        )
                         self?.isLoading = false
                         self?.tableView.reloadData()
                         self?.refreshTimer = nil
@@ -285,10 +336,9 @@ extension GlobalSearchViewController {
     public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: false)
         
-        let section: SectionModel = self.searchResultSet[indexPath.section]
+        let section: SectionModel = self.searchResultSet.data[indexPath.section]
         
         switch section.model {
-            case .noResults: break
             case .contactsAndGroups, .messages:
                 show(
                     threadId: section.elements[indexPath.row].threadId,
@@ -304,6 +354,11 @@ extension GlobalSearchViewController {
                             timestampMs: timestampMs
                         )
                     }()
+                )
+            case .groupedContacts:
+                show(
+                    threadId: section.elements[indexPath.row].threadId,
+                    threadVariant: section.elements[indexPath.row].threadVariant
                 )
         }
     }
@@ -340,11 +395,11 @@ extension GlobalSearchViewController {
     // MARK: - UITableViewDataSource
 
     public func numberOfSections(in tableView: UITableView) -> Int {
-        return self.searchResultSet.count
+        return self.searchResultSet.data.count
     }
     
     public func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.searchResultSet[section].elements.count
+        return self.searchResultSet.data[section].elements.count
     }
 
     public func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
@@ -356,7 +411,7 @@ extension GlobalSearchViewController {
     }
 
     public func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        guard nil != self.tableView(tableView, titleForHeaderInSection: section) else {
+        guard self.searchResultSet.state != .none else {
             return .leastNonzeroMagnitude
         }
         
@@ -364,35 +419,44 @@ extension GlobalSearchViewController {
     }
 
     public func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        guard let title: String = self.tableView(tableView, titleForHeaderInSection: section) else {
-            return UIView()
-        }
-
+        let section: SectionModel = self.searchResultSet.data[section]
+        
         let titleLabel = UILabel()
-        titleLabel.font = .boldSystemFont(ofSize: Values.largeFontSize)
-        titleLabel.text = title
         titleLabel.themeTextColor = .textPrimary
 
         let container = UIView()
         container.themeBackgroundColor = .backgroundPrimary
         container.addSubview(titleLabel)
         
-        titleLabel.pin(.top, to: .top, of: container, withInset: Values.mediumSpacing)
-        titleLabel.pin(.bottom, to: .bottom, of: container, withInset: -Values.mediumSpacing)
+        titleLabel.pin(.top, to: .top, of: container, withInset: Values.verySmallSpacing)
+        titleLabel.pin(.bottom, to: .bottom, of: container, withInset: -Values.verySmallSpacing)
         titleLabel.pin(.left, to: .left, of: container, withInset: Values.largeSpacing)
         titleLabel.pin(.right, to: .right, of: container, withInset: -Values.largeSpacing)
         
-        return container
-    }
-
-    public func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        let section: SectionModel = self.searchResultSet[section]
-        
         switch section.model {
-            case .noResults: return nil
-            case .contactsAndGroups: return (section.elements.isEmpty ? nil : "SEARCH_SECTION_CONTACTS".localized())
-            case .messages: return (section.elements.isEmpty ? nil : "SEARCH_SECTION_MESSAGES".localized())
+            case .contactsAndGroups: 
+                guard !section.elements.isEmpty else { return UIView() }
+                titleLabel.font = .boldSystemFont(ofSize: Values.largeFontSize)
+                titleLabel.text = "sessionConversations".localized()
+                break
+            case .messages: 
+                guard !section.elements.isEmpty else { return UIView() }
+                titleLabel.font = .boldSystemFont(ofSize: Values.largeFontSize)
+                titleLabel.text = "SEARCH_SECTION_MESSAGES".localized()
+                break
+            case .groupedContacts(let title): 
+                guard !section.elements.isEmpty else { return UIView() }
+                if title.isEmpty {
+                    titleLabel.font = .boldSystemFont(ofSize: Values.largeFontSize)
+                    titleLabel.text = "NEW_CONVERSATION_CONTACTS_SECTION_TITLE".localized()
+                } else {
+                    titleLabel.font = .systemFont(ofSize: Values.smallFontSize)
+                    titleLabel.text = title
+                }
+                break
         }
+
+        return container
     }
 
     public func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -400,14 +464,15 @@ extension GlobalSearchViewController {
     }
 
     public func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let section: SectionModel = self.searchResultSet[indexPath.section]
+        guard self.searchResultSet.state != .none else {
+            let cell: EmptySearchResultCell = tableView.dequeue(type: EmptySearchResultCell.self, for: indexPath)
+            cell.configure(isLoading: isLoading)
+            return cell
+        }
+        
+        let section: SectionModel = self.searchResultSet.data[indexPath.section]
         
         switch section.model {
-            case .noResults:
-                let cell: EmptySearchResultCell = tableView.dequeue(type: EmptySearchResultCell.self, for: indexPath)
-                cell.configure(isLoading: isLoading)
-                return cell
-                
             case .contactsAndGroups:
                 let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
                 cell.updateForContactAndGroupSearchResult(with: section.elements[indexPath.row], searchText: self.termForCurrentSearchResultSet)
@@ -417,6 +482,26 @@ extension GlobalSearchViewController {
                 let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
                 cell.updateForMessageSearchResult(with: section.elements[indexPath.row], searchText: self.termForCurrentSearchResultSet)
                 return cell
+            
+            case .groupedContacts:
+                let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
+                cell.updateForDefaultContacts(with: section.elements[indexPath.row])
+                return cell
         }
+    }
+    
+    public func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard self.searchResultSet.state == .defaultContacts else { return nil }
+        
+        return UIContextualAction.configuration(
+            for: UIContextualAction.generateSwipeActions(
+                [ .block, .delete ],
+                for: .trailing,
+                indexPath: indexPath,
+                tableView: tableView,
+                threadViewModel: self.searchResultSet.data[indexPath.section].elements[indexPath.row],
+                viewController: self
+            )
+        )
     }
 }

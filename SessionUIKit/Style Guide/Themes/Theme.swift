@@ -101,7 +101,7 @@ public protocol ThemeColors {
 // MARK: - ThemedNavigation
 
 public protocol ThemedNavigation {
-    var navigationBackground: ThemeValue { get }
+    var navigationBackground: ThemeValue? { get }
 }
 
 // MARK: - ThemeValue
@@ -177,6 +177,8 @@ public indirect enum ThemeValue: Hashable {
     case sessionButton_destructiveBackground
     case sessionButton_destructiveHighlight
     case sessionButton_destructiveBorder
+    case sessionButton_primaryFilledText
+    case sessionButton_primaryFilledBackground
     
     // SolidButton
     case solidButton_background
@@ -193,6 +195,7 @@ public indirect enum ThemeValue: Hashable {
     case alert_text
     case alert_background
     case alert_buttonBackground
+    case toast_background
     
     // ConversationButton
     case conversationButton_background

@@ -97,6 +97,7 @@ struct MessageInfoScreen: View {
                                 MediaView_SwiftUI(
                                     attachment: attachments[0],
                                     isOutgoing: (messageViewModel.variant == .standardOutgoing),
+                                    shouldSupressControls: true, 
                                     cornerRadius: 0
                                 )
                                 .frame(
@@ -163,7 +164,7 @@ struct MessageInfoScreen: View {
                                     alignment: .center
                                 ) {
                                     let resolution: String = {
-                                        guard let width = attachment.width, let height = attachment.height else { return "N/A" }
+                                        guard let width = attachment.width, let height = attachment.height else { return "attachmentsNa".localized() }
                                         return "\(width)×\(height)"
                                     }()
                                     InfoBlock(title: "ATTACHMENT_INFO_RESOLUTION".localized() + ":") {
@@ -175,7 +176,7 @@ struct MessageInfoScreen: View {
                                     Spacer()
                                     
                                     let duration: String = {
-                                        guard let duration = attachment.duration else { return "N/A" }
+                                        guard let duration = attachment.duration else { return "attachmentsNa".localized() }
                                         return floor(duration).formatted(format: .videoDuration)
                                     }()
                                     InfoBlock(title: "ATTACHMENT_INFO_DURATION".localized() + ":") {
@@ -195,7 +196,7 @@ struct MessageInfoScreen: View {
                             .padding(.all, Values.largeSpacing)
                         }
                         .frame(maxHeight: .infinity)
-                        .background(themeColor: .backgroundSecondary)
+                        .backgroundColor(themeColor: .backgroundSecondary)
                         .cornerRadius(Self.cornerRadius)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, Values.verySmallSpacing)
@@ -282,7 +283,7 @@ struct MessageInfoScreen: View {
                         .padding(.all, Values.largeSpacing)
                     }
                     .frame(maxHeight: .infinity)
-                    .background(themeColor: .backgroundSecondary)
+                    .backgroundColor(themeColor: .backgroundSecondary)
                     .cornerRadius(Self.cornerRadius)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, Values.verySmallSpacing)
@@ -336,7 +337,7 @@ struct MessageInfoScreen: View {
                             .padding(.horizontal, Values.largeSpacing)
                         }
                         .frame(maxHeight: .infinity)
-                        .background(themeColor: .backgroundSecondary)
+                        .backgroundColor(themeColor: .backgroundSecondary)
                         .cornerRadius(Self.cornerRadius)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, Values.verySmallSpacing)
@@ -345,7 +346,7 @@ struct MessageInfoScreen: View {
                 }
             }
         }
-        .background(themeColor: .backgroundPrimary)
+        .backgroundColor(themeColor: .backgroundPrimary)
     }
     
     private func showMediaFullScreen(attachment: Attachment) {

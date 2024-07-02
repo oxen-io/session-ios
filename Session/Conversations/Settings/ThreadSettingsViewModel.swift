@@ -344,7 +344,7 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigationItemSource, Navi
                             ),
                             title: (threadViewModel.threadVariant == .community ?
                                 "COPY_GROUP_URL".localized() :
-                                "vc_conversation_settings_copy_session_id_button_title".localized()
+                                "accountIDCopy".localized()
                             ),
                             accessibility: Accessibility(
                                 identifier: "\(ThreadSettingsViewModel.self).copy_thread_id",

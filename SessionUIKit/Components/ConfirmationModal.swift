@@ -113,9 +113,9 @@ public class ConfirmationModal: Modal, UITextFieldDelegate {
         result.isLayoutMarginsRelativeArrangement = true
         result.layoutMargins = UIEdgeInsets(
             top: Values.largeSpacing,
-            left: Values.largeSpacing,
+            left: Values.veryLargeSpacing,
             bottom: Values.verySmallSpacing,
-            right: Values.largeSpacing
+            right: Values.veryLargeSpacing
         )
         
         return result

@@ -162,7 +162,7 @@ class MessageRequestFooterView: UIView {
         )
         self.descriptionLabel.text = (threadRequiresApproval ?
             "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized() :
-            "MESSAGE_REQUESTS_INFO".localized()
+            "messageRequestsAcceptDescription".localized()
         )
         self.actionStackView.isHidden = threadRequiresApproval
         self.messageRequestDescriptionLabelBottomConstraint?.constant = (threadRequiresApproval ? -4 : -20)

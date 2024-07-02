@@ -150,6 +150,7 @@ final class ExpandingAttachmentsButton: UIView, InputViewButtonDelegate {
     // MARK: Convenience
     private func container(for button: InputViewButton) -> UIView {
         let result = UIView()
+        result.isAccessibilityElement = true
         result.addSubview(button)
         result.set(.width, to: InputViewButton.expandedSize)
         result.set(.height, to: InputViewButton.expandedSize)

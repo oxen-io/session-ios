@@ -45,7 +45,7 @@ struct DocumentView_SwiftUI: View {
                 width: 24 + Values.mediumSpacing * 2,
                 height: 32 + Values.smallSpacing * 2
             )
-            .background(themeColor: .messageBubble_overlay)
+            .backgroundColor(themeColor: .messageBubble_overlay)
 
             VStack(
                 alignment: .leading

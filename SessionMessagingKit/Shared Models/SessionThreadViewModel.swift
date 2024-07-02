@@ -1823,6 +1823,50 @@ public extension SessionThreadViewModel {
         }
     }
     
+    static func defaultContactsQuery(userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+        let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
+        let contactProfile: TypedTableAlias<Profile> = TypedTableAlias(ViewModel.self, column: .contactProfile)
+        
+        /// **Note:** The `numColumnsBeforeProfiles` value **MUST** match the number of fields before
+        /// the `contactProfile` entry below otherwise the query will fail to parse and might throw
+        let numColumnsBeforeProfiles: Int = 8
+        let request: SQLRequest<ViewModel> = """
+            SELECT
+                100 AS \(Column.rank),
+                
+                \(thread[.rowId]) AS \(ViewModel.Columns.rowId),
+                \(thread[.id]) AS \(ViewModel.Columns.threadId),
+                \(thread[.variant]) AS \(ViewModel.Columns.threadVariant),
+                \(thread[.creationDateTimestamp]) AS \(ViewModel.Columns.threadCreationDateTimestamp),
+                '' AS \(ViewModel.Columns.threadMemberNames),
+                
+                (\(SQL("\(thread[.id]) = \(userPublicKey)"))) AS \(ViewModel.Columns.threadIsNoteToSelf),
+                IFNULL(\(thread[.pinnedPriority]), 0) AS \(ViewModel.Columns.threadPinnedPriority),
+                
+                \(contactProfile.allColumns),
+                
+                \(SQL("\(userPublicKey)")) AS \(ViewModel.Columns.currentUserPublicKey)
+
+            FROM \(SessionThread.self)
+            LEFT JOIN \(contactProfile) ON \(contactProfile[.id]) = \(thread[.id])
+        
+            WHERE \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)"))
+        """
+        
+        // Add adapters which will group the various 'Profile' columns so they can be decoded
+        // as instances of 'Profile' types
+        return request.adapted { db in
+            let adapters = try splittingRowAdapters(columnCounts: [
+                numColumnsBeforeProfiles,
+                Profile.numberOfSelectedColumns(db)
+            ])
+            
+            return ScopeAdapter.with(ViewModel.self, [
+                .contactProfile: adapters[1]
+            ])
+        }
+    }
+    
     /// This method returns only the 'Note to Self' thread in the structure of a search result conversation
     static func noteToSelfOnlyQuery(userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()

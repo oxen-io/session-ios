@@ -13,7 +13,7 @@ extension SnodeAPI {
             }
             
             fileprivate let nonce: String?
-            fileprivate let encryptedValue: String
+            fileprivate let encryptedValue: String?
         }
         
         enum CodingKeys: String, CodingKey {
@@ -35,7 +35,9 @@ extension SnodeAPI {
         // MARK: - Convenience
         
         func sessionId(sodium: Sodium, nameBytes: [UInt8], nameHashBytes: [UInt8]) throws -> String {
-            let ciphertext: [UInt8] = Data(hex: result.encryptedValue).bytes
+            guard let encryptedValue = result.encryptedValue else { throw SnodeAPIError.onsNotFound }
+            
+            let ciphertext: [UInt8] = Data(hex: encryptedValue).bytes
             
             // Handle old Argon2-based encryption used before HF16
             guard let hexEncodedNonce: String = result.nonce else {

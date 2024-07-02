@@ -115,7 +115,7 @@ struct QuoteView_SwiftUI: View {
                             height: Self.thumbnailSize,
                             alignment: .center
                         )
-                        .background(themeColor: .messageBubble_overlay)
+                        .backgroundColor(themeColor: .messageBubble_overlay)
                         .cornerRadius(Self.cornerRadius)
                 }
             } else {

@@ -96,7 +96,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         return margin <= ConversationVC.scrollToBottomMargin
     }
 
-    lazy var mnemonic: String = { ((try? SeedVC.mnemonic()) ?? "") }()
+    lazy var mnemonic: String = { ((try? Identity.mnemonic()) ?? "") }()
 
     // FIXME: Would be good to create a Swift-based cache and replace this
     lazy var mediaCache: NSCache<NSString, AnyObject> = {

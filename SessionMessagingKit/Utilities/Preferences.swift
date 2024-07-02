@@ -53,6 +53,9 @@ public extension Setting.BoolKey {
     /// A flag indicating whether the user has ever viewed their seed
     static let hasViewedSeed: Setting.BoolKey = "hasViewedSeed"
     
+    /// A flag indicating whether the user hides the recovery password permanently
+    static let hideRecoveryPasswordPermanently: Setting.BoolKey = "hideRecoveryPasswordPermanently"
+    
     /// A flag indicating whether the user has ever saved a thread
     static let hasSavedThread: Setting.BoolKey = "hasSavedThread"
     

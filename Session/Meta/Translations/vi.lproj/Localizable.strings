@@ -317,7 +317,7 @@
 "fast_mode" = "Fast Mode";
 "slow_mode_explanation" = "Session will occasionally check for new messages in the background.";
 "slow_mode" = "Slow Mode";
-"vc_pn_mode_title" = "Message Notifications";
+"vc_pn_mode_title" = "Message notifications";
 "vc_link_device_recovery_phrase_tab_title" = "Recovery Phrase";
 "vc_link_device_scan_qr_code_explanation" = "Navigate to Settings → Recovery Phrase on your other device to show your QR code.";
 "vc_enter_recovery_phrase_title" = "Recovery Phrase";
@@ -610,7 +610,7 @@
 "PRIVACY_SCREEN_MESSAGE_REQUESTS_COMMUNITY_DESCRIPTION" = "Allow message requests from Community conversations.";
 
 /* Information displayed above the input when sending a message to a new user for the first time explaining limitations around the types of messages which can be sent before being approved */
-"MESSAGE_REQUEST_PENDING_APPROVAL_INFO" = "You will be able to send voice messages and attachments once the recipient has approved this message request";
+"MESSAGE_REQUEST_PENDING_APPROVAL_INFO" = "You will be able to send voice messages and attachments once the recipient has approved this message request.";
 
 /* State of a message while it's still in the process of being sent */
 "MESSAGE_DELIVERY_STATUS_SENDING" = "Sending";
@@ -1053,3 +1053,81 @@ The point that a message will disappear in a disappearing message update message
 
 /* A message indicating how the disappearing messages setting applies in a one-to-one conversation for legacy mode */
 "DISAPPERING_MESSAGES_SUBTITLE_LEGACY" = "This setting applies to everyone in this conversation.";
+
+//Onboarding
+"onboardingBubbleWelcomeToSession" = "Welcome to Session";
+"onboardingBubbleSessionIsEngineered" = "Session is engineered to protect your privacy.";
+"onboardingBubbleNoPhoneNumber" = "You don't even need a phone number to sign up.";
+"onboardingBubbleCreatingAnAccountIsEasy" = "Creating an account is instant, free, and anonymous";
+"onboardingBubblePrivacyInYourPocket" = "Privacy in your pocket.";
+"onboardingAccountCreate" = "Create account";
+"onboardingAccountExists" = "I have an account";
+"onboardingTosPrivacy" = "By using this service, you agree to our %@ and %@";
+"terms_of_service" = "Terms of Service";
+"privacy_policy" = "Privacy Policy";
+"displayNameDescription" = "It can be your real name, an alias, or anything else you like — and you can change it any time.";
+"displayNameEnter" = "Enter a display name";
+"displayNameNew" = "Pick a new display name";
+"displayNameErrorNew" = "We were unable to load your display name. Please enter a new display name to continue.";
+"onboarding_recovery_password_title" = "Save your recovery password";
+"onboarding_recovery_password_subtitle" = "Save your recovery password to make sure you don't lose access to your account.";
+"onboarding_recovery_password_explanation" = "Use your password to load your account on new devices. Make sure it is stored in a safe place — and don't share it with anyone.";
+"onboardingAccountCreated" = "Account Created";
+"conversationsNone" = "You don't have any conversations yet";
+"onboardingHitThePlusButton" = "Hit the plus button to start a chat, create a group, or join an official community!";
+"onboarding_recovery_password_tab_explanation" = "Enter your recovery password to load your account. If you haven't saved it, you can find it in your app settings.";
+"recoveryPasswordEnter" = "Enter your recovery password";
+"onboarding_load_account_title" = "Load Account";
+"waitOneMoment" = "One moment please..";
+"loadAccountProgressMessage" = "Loading your account";
+"recoveryPasswordErrorMessageShort" = "The Recovery Password you entered is not long enough. Please check and try again.";
+"recoveryPasswordErrorMessageIncorrect" = "Some of the words in your Recovery Password are incorrect. Please check and try again.";
+"recoveryPasswordErrorMessageGeneric" = "Please check your Recovery Password and try again.";
+"urlOpen" = "Open URL";
+"urlOpenBrowswer" = "This will open in your browser.";
+"onboardingMessageNotificationExplaination" = "There are two ways Session can notify you of new messages.";
+"sessionRecoveryPassword" = "Recovery Password";
+"recovery_password_explanation_1" = "Use your recovery password to load your account on new devices.";
+"recovery_password_explanation_2" = "Your account cannot be recovered without your recovery password. Make sure it's stored somewhere safe and secure — and don't share it with anyone.";
+"recoveryPasswordHideRecoveryPassword" = "Hide Recovery Password";
+"recoveryPasswordHideRecoveryPasswordDescription" = "Permanently hide your recovery password on this device.";
+"hide" = "Hide";
+"recoveryPasswordHidePermanently" = "Hide Recovery Password Permanently";
+"hide_recovery_password_modal_warning_1" = "Without your recovery password, you cannot load your account on new devices.";
+"hide_recovery_password_modal_warning_2" = "We strongly recommend you save your recovery password in a safe and secure place before continuing.";
+"recoveryPasswordHidePermanentlyDescription2" = "Are you sure you want to permanently hide your recovery password on this device? This cannot be undone.";
+"qrView" = "View QR";
+"recoveryPasswordView" = "View Password";
+"yes" = "Yes";
+"qrNotRecoveryPassword" = "This QR code does not contain a Recovery Password";
+"warning" = "Warning";
+"quitButton" = "Quit";
+"cancel" = "Cancel";
+"onboardingBackLoadAccount" = "You cannot go back further. In order to stop loading your account, Session needs to quit.";
+"onboardingBackAccountCreation" = "You cannot go back further. In order to cancel your account creation, Session needs to quit.";
+
+//Settings
+"view" = "View";
+"settings_scan_qr_code_tab_title" = "Scan";
+"settings_view_my_qr_code_explanation" = "This is your Account ID. Other users can scan it to start a conversation with you.";
+"qrNotAccountId" = "This QR code does not contain an Account ID.";
+"lockApp" = "Lock App";
+"accountIdYours" = "Your Account ID";
+"accountIDCopy" = "Copy Account ID";
+
+//Start Conversation
+"qrYoursDescription" = "Friends can message you by scanning your QR code.";
+"start_conversation_screen_title" = "Start Conversation";
+"invite_a_friend_explanation" = "Invite your friend to chat with you on Session by sharing your Account ID with them.";
+"accountIdEnter" = "Enter Account ID";
+"accountIdOrOnsEnter" = "Enter Account ID or ONS";
+"new_message_screen_enter_account_id_explanation" = "Start a new conversation by entering your friend's Account ID, ONS or scanning their QR code.";
+"accountIdErrorInvalid" = "This Account ID is invalid. Please check and try again.";
+"new_message_screen_error_msg_unrecognized_ons" = "We couldn’t recognize this ONS. Please check and try again.";
+"onsErrorUnableToSearch" = "We were unable to search for this ONS. Please try again later.";
+
+//General
+"attachmentsNa" = "N/A";
+"search" = "Search";
+"messageRequestsAcceptDescription" = "Sending a message to this user will automatically accept their message request and reveal your Account ID.";
+"sessionConversations" = "Conversations";

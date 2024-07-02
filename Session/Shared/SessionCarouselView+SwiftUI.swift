@@ -30,6 +30,7 @@ public struct SessionCarouselView_SwiftUI: View {
                     MediaView_SwiftUI(
                         attachment: attachment,
                         isOutgoing: self.isOutgoing,
+                        shouldSupressControls: true,
                         cornerRadius: 0
                     )
                 }

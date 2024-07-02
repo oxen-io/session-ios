@@ -7,10 +7,19 @@ public class HostWrapper: ObservableObject {
     public weak var controller: UIViewController?
 }
 
-public class SessionHostingViewController<Content>: UIHostingController<ModifiedContent<Content,SwiftUI._EnvironmentKeyWritingModifier<HostWrapper?>>> where Content : View {
+public enum NavigationItemPosition {
+    case left
+    case right
+}
+
+public class SessionHostingViewController<Content>: UIHostingController<ModifiedContent<Content, _EnvironmentKeyWritingModifier<HostWrapper?>>>, ThemedNavigation where Content : View {
     public override var preferredStatusBarStyle: UIStatusBarStyle {
         return ThemeManager.currentTheme.statusBarStyle
     }
+    
+    public var navigationBackground: ThemeValue? { customizedNavigationBackground }
+    private let customizedNavigationBackground: ThemeValue?
+    private let shouldHideNavigationBar: Bool
 
     lazy var navBarTitleLabel: UILabel = {
         let result = UILabel()
@@ -31,18 +40,20 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
 
         return result
     }()
-
-    public init(rootView:Content) {
+    
+    public init(rootView:Content, customizedNavigationBackground: ThemeValue? = nil, shouldHideNavigationBar: Bool = false) {
+        self.customizedNavigationBackground = customizedNavigationBackground
+        self.shouldHideNavigationBar = shouldHideNavigationBar
         let container = HostWrapper()
         let modified = rootView.environmentObject(container) as! ModifiedContent<Content, _EnvironmentKeyWritingModifier<HostWrapper?>>
         super.init(rootView: modified)
         container.controller = self
     }
-
+    
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-
+    
     public override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -51,6 +62,20 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
         ThemeManager.applyNavigationStylingIfNeeded(to: self)
 
         setNeedsStatusBarAppearanceUpdate()
+    }
+    
+    public override func viewWillAppear(_ animated: Bool) {
+        if shouldHideNavigationBar {
+            self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        }
+        super.viewWillAppear(animated)
+    }
+    
+    public override func viewWillDisappear(_ animated: Bool) {
+        if shouldHideNavigationBar {
+            self.navigationController?.setNavigationBarHidden(false, animated: animated)
+        }
+        super.viewWillDisappear(animated)
     }
 
     internal func setNavBarTitle(_ title: String, customFontSize: CGFloat? = nil) {
@@ -71,7 +96,7 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
 
         navigationItem.titleView = container
     }
-
+    
     internal func setUpNavBarSessionHeading() {
         let headingImageView = UIImageView(
             image: UIImage(named: "SessionHeading")?
@@ -81,7 +106,7 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
         headingImageView.contentMode = .scaleAspectFit
         headingImageView.set(.width, to: 150)
         headingImageView.set(.height, to: Values.mediumFontSize)
-
+        
         navigationItem.titleView = headingImageView
     }
 
@@ -91,7 +116,22 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
         logoImageView.contentMode = .scaleAspectFit
         logoImageView.set(.width, to: 32)
         logoImageView.set(.height, to: 32)
-
+        
         navigationItem.titleView = logoImageView
+    }
+    
+    internal func setUpDismissingButton(on postion: NavigationItemPosition) {
+        let closeButton = UIBarButtonItem(image: #imageLiteral(resourceName: "X"), style: .plain, target: self, action: #selector(close))
+        closeButton.themeTintColor = .textPrimary
+        switch postion {
+            case .left:
+                navigationItem.leftBarButtonItem = closeButton
+            case .right:
+                navigationItem.rightBarButtonItem = closeButton
+        }
+    }
+    
+    @objc private func close() {
+        dismiss(animated: true, completion: nil)
     }
 }

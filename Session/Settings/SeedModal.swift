@@ -10,7 +10,7 @@ final class SeedModal: Modal {
     // MARK: - Initialization
     
     init() throws {
-        self.mnemonic = try SeedVC.mnemonic()
+        self.mnemonic = try Identity.mnemonic()
         
         super.init(targetView: nil, dismissType: .recursive, afterClosed: nil)
         

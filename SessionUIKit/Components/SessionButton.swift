@@ -118,11 +118,12 @@ public final class SessionButton: UIButton {
     
     private func setup(size: Size) {
         clipsToBounds = true
+        let spacing: CGFloat = (size == .small ? Values.smallSpacing : Values.largeSpacing)
         contentEdgeInsets = UIEdgeInsets(
             top: 0,
-            left: Values.largeSpacing,
+            left: spacing,
             bottom: 0,
-            right: Values.largeSpacing
+            right: spacing
         )
         titleLabel?.font = .boldSystemFont(ofSize: (size == .small ?
             Values.smallFontSize :

@@ -6,7 +6,7 @@ import SessionUIKit
 import SessionUtilitiesKit
 
 protocol QRScannerDelegate: AnyObject {
-    func controller(_ controller: QRCodeScanningViewController, didDetectQRCodeWith string: String, onError: (() -> ())?)
+    func controller(_ controller: QRCodeScanningViewController, didDetectQRCodeWith string: String, onSuccess: (() -> ())?, onError: (() -> ())?)
 }
 
 class QRCodeScanningViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
@@ -16,6 +16,7 @@ class QRCodeScanningViewController: UIViewController, AVCaptureMetadataOutputObj
     private var capture: AVCaptureSession?
     private var captureLayer: AVCaptureVideoPreviewLayer?
     private var captureEnabled: Bool = false
+    private var shouldResumeCapture: Bool = false
     
     // MARK: - Initialization
     
@@ -49,7 +50,7 @@ class QRCodeScanningViewController: UIViewController, AVCaptureMetadataOutputObj
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        if captureEnabled {
+        if captureEnabled || shouldResumeCapture {
             self.startCapture()
         }
     }
@@ -199,8 +200,57 @@ class QRCodeScanningViewController: UIViewController, AVCaptureMetadataOutputObj
         // Vibrate
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
 
-        self.scanDelegate?.controller(self, didDetectQRCodeWith: qrCode) { [weak self] in
-            self?.startCapture()
+        self.scanDelegate?.controller(
+            self,
+            didDetectQRCodeWith: qrCode,
+            onSuccess: { [weak self] in
+                self?.shouldResumeCapture = true
+            },
+            onError: { [weak self] in
+                self?.startCapture()
+            }
+        )
+    }
+}
+
+// MARK: SwiftUI
+import SwiftUI
+
+struct QRCodeScanningVC_SwiftUI: UIViewControllerRepresentable {
+    typealias UIViewControllerType = QRCodeScanningViewController
+    
+    let scanQRCodeVC = QRCodeScanningViewController()
+    var didDetectQRCode: (String, (() -> ())?, (() -> ())?) -> ()
+    
+    func makeUIViewController(context: Context) -> QRCodeScanningViewController {
+        return scanQRCodeVC
+    }
+    
+    func updateUIViewController(_ scanQRCodeVC: QRCodeScanningViewController, context: Context) {
+        scanQRCodeVC.startCapture()
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            scanQRCodeVC: scanQRCodeVC,
+            didDetectQRCode: didDetectQRCode
+        )
+    }
+    
+    class Coordinator: NSObject, QRScannerDelegate {
+        var didDetectQRCode: (String, (() -> ())?, (() -> ())?) -> ()
+        
+        init(
+            scanQRCodeVC: QRCodeScanningViewController,
+            didDetectQRCode: @escaping (String, (() -> ())?, (() -> ())?) -> ()
+        ) {
+            self.didDetectQRCode = didDetectQRCode
+            super.init()
+            scanQRCodeVC.scanDelegate = self
+        }
+        
+        func controller(_ controller: QRCodeScanningViewController, didDetectQRCodeWith string: String, onSuccess: (() -> ())?, onError: (() -> ())?) {
+            didDetectQRCode(string, onSuccess, onError)
         }
     }
 }

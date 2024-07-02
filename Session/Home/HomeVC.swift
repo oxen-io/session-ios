@@ -21,6 +21,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     private var isLoadingMore: Bool = false
     private var isAutoLoadingNextPage: Bool = false
     private var viewHasAppeared: Bool = false
+    private var flow: Onboarding.Flow?
     
     // MARK: - LibSessionRespondingViewController
     
@@ -28,9 +29,9 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     
     // MARK: - Intialization
     
-    init() {
+    init(flow: Onboarding.Flow? = nil) {
         Storage.shared.addObserver(viewModel.pagedDataObserver)
-        
+        self.flow = flow
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -47,24 +48,14 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     private var tableViewTopConstraint: NSLayoutConstraint!
     
     private lazy var seedReminderView: SeedReminderView = {
-        let result = SeedReminderView(hasContinueButton: true)
+        let result = SeedReminderView()
         result.accessibilityLabel = "Recovery phrase reminder"
-        let title = "You're almost finished! 80%"
-        result.subtitle = "view_seed_reminder_subtitle_1".localized()
-        result.setProgress(0.8, animated: false)
+        result.title = NSAttributedString(string: "onboarding_recovery_password_title".localized())
+        result.subtitle = "onboarding_recovery_password_subtitle".localized()
+        result.setProgress(1, animated: false)
         result.delegate = self
         result.isHidden = !self.viewModel.state.showViewedSeedBanner
-        
-        ThemeManager.onThemeChange(observer: result) { [weak result] _, primaryColor in
-            let attributedTitle = NSMutableAttributedString(string: title)
-            attributedTitle.addAttribute(
-                .foregroundColor,
-                value: primaryColor.color,
-                range: (title as NSString).range(of: "80%")
-            )
-            result?.title = attributedTitle
-        }
-        
+
         return result
     }()
     
@@ -193,23 +184,102 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     }()
     
     private lazy var emptyStateView: UIView = {
-        let explanationLabel = UILabel()
-        explanationLabel.font = .systemFont(ofSize: Values.smallFontSize)
-        explanationLabel.text = "vc_home_empty_state_message".localized()
-        explanationLabel.themeTextColor = .textPrimary
-        explanationLabel.textAlignment = .center
-        explanationLabel.lineBreakMode = .byWordWrapping
-        explanationLabel.numberOfLines = 0
+        let emptyConvoLabel = UILabel()
+        emptyConvoLabel.font = .boldSystemFont(ofSize: Values.mediumFontSize)
+        emptyConvoLabel.text = "conversationsNone".localized()
+        emptyConvoLabel.themeTextColor = .textPrimary
+        emptyConvoLabel.textAlignment = .center
         
-        let createNewPrivateChatButton = SessionButton(style: .bordered, size: .large)
-        createNewPrivateChatButton.setTitle("vc_home_empty_state_button_title".localized(), for: .normal)
-        createNewPrivateChatButton.addTarget(self, action: #selector(createNewConversation), for: .touchUpInside)
-        createNewPrivateChatButton.set(.width, to: Values.iPadButtonWidth)
+        let instructionLabel = UILabel()
+        instructionLabel.font = .systemFont(ofSize: Values.verySmallFontSize)
+        instructionLabel.text = "onboardingHitThePlusButton".localized()
+        instructionLabel.themeTextColor = .textPrimary
+        instructionLabel.textAlignment = .center
+        instructionLabel.lineBreakMode = .byWordWrapping
+        instructionLabel.numberOfLines = 0
         
-        let result = UIStackView(arrangedSubviews: [ explanationLabel, createNewPrivateChatButton ])
+        let result = UIStackView(arrangedSubviews: [ 
+            emptyConvoLabel,
+            UIView.vSpacer(Values.smallSpacing),
+            instructionLabel
+        ])
         result.axis = .vertical
-        result.spacing = Values.mediumSpacing
+        result.spacing = Values.verySmallSpacing
         result.alignment = .center
+        
+        return result
+    }()
+    
+    private lazy var emptyStateLogoView: UIView = {
+        let sessionLogoImage: UIImageView = UIImageView(image: UIImage(named: "SessionGreen64"))
+        sessionLogoImage.contentMode = .scaleAspectFit
+        sessionLogoImage.set(.height, to: 103)
+        
+        let sessionTitleImage: UIImageView = UIImageView(
+            image: UIImage(named: "SessionHeading")?
+                .withRenderingMode(.alwaysTemplate)
+        )
+        sessionTitleImage.themeTintColor = .textPrimary
+        sessionTitleImage.contentMode = .scaleAspectFit
+        sessionTitleImage.set(.height, to: 22)
+        
+        let result = UIStackView(arrangedSubviews: [
+            sessionLogoImage,
+            UIView.vSpacer(Values.smallSpacing + Values.verySmallSpacing),
+            sessionTitleImage,
+            UIView.vSpacer(Values.verySmallSpacing)
+        ])
+        result.axis = .vertical
+        result.spacing = Values.verySmallSpacing
+        result.alignment = .fill
+        result.isHidden = true
+        
+        return result
+    }()
+    
+    private lazy var accountCreatedView: UIView = {
+        let image: UIImageView = UIImageView(image: UIImage(named: "Hooray"))
+        image.contentMode = .center
+        image.set(.height, to: 96)
+        
+        let accountCreatedLabel = UILabel()
+        accountCreatedLabel.font = .boldSystemFont(ofSize: Values.veryLargeFontSize)
+        accountCreatedLabel.text = "onboardingAccountCreated".localized()
+        accountCreatedLabel.themeTextColor = .textPrimary
+        accountCreatedLabel.textAlignment = .center
+        
+        let welcomeLabel = UILabel()
+        welcomeLabel.font = .systemFont(ofSize: Values.smallFontSize)
+        welcomeLabel.text = "onboardingBubbleWelcomeToSession".localized()
+        welcomeLabel.themeTextColor = .sessionButton_text
+        welcomeLabel.textAlignment = .center
+
+        let result = UIStackView(arrangedSubviews: [
+            image,
+            accountCreatedLabel,
+            welcomeLabel,
+            UIView.vSpacer(Values.verySmallSpacing)
+        ])
+        result.axis = .vertical
+        result.spacing = Values.verySmallSpacing
+        result.alignment = .fill
+        result.isHidden = true
+        
+        return result
+    }()
+    
+    private lazy var emptyStateStackView: UIStackView = {
+        let result = UIStackView(arrangedSubviews: [
+            accountCreatedView,
+            emptyStateLogoView,
+            UIView.vSpacer(Values.smallSpacing),
+            UIView.line(),
+            UIView.vSpacer(Values.smallSpacing),
+            emptyStateView
+        ])
+        result.axis = .vertical
+        result.spacing = Values.verySmallSpacing
+        result.alignment = .fill
         result.isHidden = true
         
         return result
@@ -257,10 +327,11 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         tableView.pin(.bottom, to: .bottom, of: view)
         
         // Empty state view
-        view.addSubview(emptyStateView)
-        emptyStateView.center(.horizontal, in: view)
-        let verticalCenteringConstraint = emptyStateView.center(.vertical, in: view)
-        verticalCenteringConstraint.constant = -16 // Makes things appear centered visually
+        view.addSubview(emptyStateStackView)
+        emptyStateStackView.set(.width, to: 300)
+        emptyStateStackView.center(.horizontal, in: view)
+        let verticalCenteringConstraint2 = emptyStateStackView.center(.vertical, in: view)
+        verticalCenteringConstraint2.constant = -Values.massiveSpacing // Makes things appear centered visually
         
         // New conversation button
         view.addSubview(newConversationButton)
@@ -381,7 +452,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         if updatedState.showViewedSeedBanner != self.viewModel.state.showViewedSeedBanner {
             tableViewTopConstraint.isActive = false
             seedReminderView.isHidden = !updatedState.showViewedSeedBanner
-            
+
             if updatedState.showViewedSeedBanner {
                 tableViewTopConstraint = tableView.pin(.top, to: .bottom, of: seedReminderView)
             }
@@ -406,7 +477,9 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                 self?.loadingConversationsLabel.isHidden = true
                 
                 // Show the empty state if there is no data
-                self?.emptyStateView.isHidden = (
+                self?.accountCreatedView.isHidden = (self?.flow != .register)
+                self?.emptyStateLogoView.isHidden = (self?.flow == .register)
+                self?.emptyStateStackView.isHidden = (
                     !updatedData.isEmpty &&
                     updatedData.contains(where: { !$0.elements.isEmpty })
                 )
@@ -422,7 +495,15 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         loadingConversationsLabel.isHidden = true
         
         // Show the empty state if there is no data
-        emptyStateView.isHidden = (
+        if self.flow == .register {
+            accountCreatedView.isHidden = false
+            emptyStateLogoView.isHidden = true
+        } else {
+            accountCreatedView.isHidden = true
+            emptyStateLogoView.isHidden = false
+        }
+        
+        emptyStateStackView.isHidden = (
             !updatedData.isEmpty &&
             updatedData.contains(where: { !$0.elements.isEmpty })
         )
@@ -746,12 +827,12 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     // MARK: - Interaction
     
     func handleContinueButtonTapped(from seedReminderView: SeedReminderView) {
-        let targetViewController: UIViewController = {
-            if let seedVC: SeedVC = try? SeedVC() {
-                return StyledNavigationController(rootViewController: seedVC)
-            }
-            
-            return ConfirmationModal(
+        if let recoveryPasswordView: RecoveryPasswordScreen = try? RecoveryPasswordScreen() {
+            let viewController: SessionHostingViewController = SessionHostingViewController(rootView: recoveryPasswordView)
+            viewController.setNavBarTitle("sessionRecoveryPassword".localized())
+            self.navigationController?.pushViewController(viewController, animated: true)
+        } else {
+            let targetViewController: UIViewController = ConfirmationModal(
                 info: ConfirmationModal.Info(
                     title: "ALERT_ERROR_TITLE".localized(),
                     body: .text("LOAD_RECOVERY_PASSWORD_ERROR".localized()),
@@ -759,9 +840,8 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                     cancelStyle: .alert_text
                 )
             )
-        }()
-        
-        present(targetViewController, animated: true, completion: nil)
+            present(targetViewController, animated: true, completion: nil)
+        }
     }
     
     func show(
@@ -778,7 +858,11 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         
         let finalViewControllers: [UIViewController] = [
             self,
-            (isMessageRequest ? SessionTableViewController(viewModel: MessageRequestsViewModel()) : nil),
+            (
+                (isMessageRequest && action != .compose) ?
+                SessionTableViewController(viewModel: MessageRequestsViewModel()) :
+                nil
+            ),
             ConversationVC(
                 threadId: threadId,
                 threadVariant: variant,
@@ -807,8 +891,14 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     }
     
     @objc func createNewConversation() {
-        let newConversationVC = NewConversationVC()
-        let navigationController = StyledNavigationController(rootViewController: newConversationVC)
+        let viewController = SessionHostingViewController(
+            rootView: StartConversationScreen(),
+            customizedNavigationBackground: .backgroundSecondary
+        )
+        viewController.setNavBarTitle("start_conversation_screen_title".localized())
+        viewController.setUpDismissingButton(on: .right)
+        
+        let navigationController = StyledNavigationController(rootViewController: viewController)
         if UIDevice.current.isIPad {
             navigationController.modalPresentationStyle = .fullScreen
         }
@@ -817,8 +907,9 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     }
     
     func createNewDMFromDeepLink(sessionId: String) {
-        let newDMVC = NewDMVC(sessionId: sessionId, shouldShowBackButton: false)
-        let navigationController = StyledNavigationController(rootViewController: newDMVC)
+        let viewController: SessionHostingViewController = SessionHostingViewController(rootView: NewMessageScreen(accountId: sessionId))
+        viewController.setNavBarTitle("vc_create_private_chat_title".localized())
+        let navigationController = StyledNavigationController(rootViewController: viewController)
         if UIDevice.current.isIPad {
             navigationController.modalPresentationStyle = .fullScreen
         }

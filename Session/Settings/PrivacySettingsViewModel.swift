@@ -107,7 +107,7 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                     elements: [
                         SessionCell.Info(
                             id: .screenLock,
-                            title: "PRIVACY_SCREEN_SECURITY_LOCK_SESSION_TITLE".localized(),
+                            title: "lockApp".localized(),
                             subtitle: "PRIVACY_SCREEN_SECURITY_LOCK_SESSION_DESCRIPTION".localized(),
                             rightAccessory: .toggle(
                                 .boolValue(

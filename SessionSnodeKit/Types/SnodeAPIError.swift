@@ -27,6 +27,7 @@ public enum SnodeAPIError: Error, CustomStringConvertible {
     case onsDecryptionFailed
     case onsHashingFailed
     case onsValidationFailed
+    case onsNotFound
     
     // Quic
     case invalidNetwork
@@ -65,6 +66,7 @@ public enum SnodeAPIError: Error, CustomStringConvertible {
             case .onsDecryptionFailed: return "Couldn't decrypt ONS name (SnodeAPIError.onsDecryptionFailed)."
             case .onsHashingFailed: return "Couldn't compute ONS name hash (SnodeAPIError.onsHashingFailed)."
             case .onsValidationFailed: return "ONS name validation failed (SnodeAPIError.onsValidationFailed)."
+            case .onsNotFound: return "ONS name not found (SnodeAPIError.onsNotFound)"
                 
             // Quic
             case .invalidNetwork: return "Unable to create network (SnodeAPIError.invalidNetwork)."

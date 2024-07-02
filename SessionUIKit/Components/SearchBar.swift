@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUtilitiesKit
 
 public final class SearchBar : UISearchBar {
     
@@ -53,7 +54,7 @@ public extension UISearchBar {
             guard let textColor: UIColor = theme.color(for: .textSecondary) else { return }
             
             searchTextField?.attributedPlaceholder = NSAttributedString(
-                string: "Search",
+                string: "search".localized(),
                 attributes: [
                     .foregroundColor: textColor
                 ])

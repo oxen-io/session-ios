@@ -86,7 +86,7 @@ extension ContextMenuVC {
         static func copySessionID(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?) -> Action {
             return Action(
                 icon: UIImage(named: "ic_copy"),
-                title: "vc_conversation_settings_copy_session_id_button_title".localized(),
+                title: "accountIDCopy".localized(),
                 accessibilityLabel: "Copy Session ID"
                 
             ) { delegate?.copySessionID(cellViewModel) }

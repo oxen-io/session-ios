@@ -267,6 +267,32 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
     // MARK: - Content
     
     // MARK: --Search Results
+    public func updateForDefaultContacts(with cellViewModel: SessionThreadViewModel) {
+        profilePictureView.update(
+            publicKey: cellViewModel.threadId,
+            threadVariant: cellViewModel.threadVariant,
+            customImageData: cellViewModel.openGroupProfilePictureData,
+            profile: cellViewModel.profile,
+            additionalProfile: cellViewModel.additionalProfile
+        )
+        
+        isPinnedIcon.isHidden = true
+        unreadCountView.isHidden = true
+        unreadImageView.isHidden = true
+        hasMentionView.isHidden = true
+        timestampLabel.isHidden = true
+        timestampLabel.text = cellViewModel.lastInteractionDate.formattedForDisplay
+        bottomLabelStackView.isHidden = true
+        
+        ThemeManager.onThemeChange(observer: displayNameLabel) { [weak displayNameLabel] theme, _ in
+            guard let textColor: UIColor = theme.color(for: .textPrimary) else { return }
+                
+            displayNameLabel?.attributedText = NSMutableAttributedString(
+                string: cellViewModel.displayName,
+                attributes: [ .foregroundColor: textColor ]
+            )
+        }
+    }
     
     public func updateForMessageSearchResult(with cellViewModel: SessionThreadViewModel, searchText: String) {
         profilePictureView.update(

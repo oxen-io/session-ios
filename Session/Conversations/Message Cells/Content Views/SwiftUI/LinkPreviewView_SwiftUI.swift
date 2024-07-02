@@ -80,7 +80,7 @@ public struct LinkPreviewView_SwiftUI: View {
                             width: imageSize,
                             height: imageSize
                         )
-                        .background(themeColor: .messageBubble_overlay)
+                        .backgroundColor(themeColor: .messageBubble_overlay)
                         .cornerRadius(state is LinkPreview.SentState ? 0 : 8)
                 } else {
                     ActivityIndicator(themeColor: .borderSeparator, width: 2)

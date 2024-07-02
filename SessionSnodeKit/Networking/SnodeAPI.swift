@@ -414,7 +414,6 @@ public final class SnodeAPI {
                                 )
                             }
                             .send(using: dependencies)
-                            .retry(4)
                             .map { _, sessionId in sessionId }
                             .eraseToAnyPublisher()
                     }
