@@ -3,15 +3,23 @@
 // stringlint:disable
 
 import Foundation
-import SignalCoreKit
+import CocoaLumberjackSwift
 
 // MARK: - Log
 
 public enum Log {
-    fileprivate typealias LogInfo = (level: Log.Level, message: String, withPrefixes: Bool, silenceForTests: Bool)
+    fileprivate typealias LogInfo = (
+        level: Log.Level,
+        message: String,
+        withPrefixes: Bool,
+        silenceForTests: Bool,
+        file: StaticString,
+        function: StaticString,
+        line: UInt
+    )
     
     public enum Level {
-        case trace
+        case verbose
         case debug
         case info
         case warn
@@ -116,66 +124,121 @@ public enum Log {
         }
     }
     
-    public static func trace(
+    public static func verbose(
         _ message: String,
         withPrefixes: Bool = true,
-        silenceForTests: Bool = false
+        silenceForTests: Bool = false,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
-        custom(.trace, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.verbose, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
     }
     
     public static func debug(
         _ message: String,
         withPrefixes: Bool = true,
-        silenceForTests: Bool = false
+        silenceForTests: Bool = false,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
-        custom(.debug, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.debug, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
     }
     
     public static func info(
         _ message: String,
         withPrefixes: Bool = true,
-        silenceForTests: Bool = false
+        silenceForTests: Bool = false,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
-        custom(.info, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.info, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
     }
     
     public static func warn(
         _ message: String,
         withPrefixes: Bool = true,
-        silenceForTests: Bool = false
+        silenceForTests: Bool = false,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
-        custom(.warn, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.warn, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
     }
     
     public static func error(
         _ message: String,
         withPrefixes: Bool = true,
-        silenceForTests: Bool = false
+        silenceForTests: Bool = false,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
-        custom(.error, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.error, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
     }
     
     public static func critical(
         _ message: String,
         withPrefixes: Bool = true,
-        silenceForTests: Bool = false
+        silenceForTests: Bool = false,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
-        custom(.critical, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        custom(.critical, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
+    }
+    
+    public static func assert(
+        _ condition: Bool,
+        _ message: @autoclosure () -> String = String(),
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
+    ) {
+        guard !condition else { return }
+        
+        let filename: String = URL(fileURLWithPath: "\(file)").lastPathComponent
+        let message: String = message()
+        let logMessage: String = (message.isEmpty ? "Assertion failed." : message)
+        let formattedMessage: String = "[\(filename):\(line) \(function)] \(logMessage)"
+        custom(.critical, formattedMessage, withPrefixes: true, silenceForTests: false, file: file, function: function, line: line)
+        assertionFailure(formattedMessage)
+    }
+    
+    public static func assertOnMainThread(
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
+    ) {
+        guard !Thread.isMainThread else { return }
+        
+        let filename: String = URL(fileURLWithPath: "\(file)").lastPathComponent
+        let formattedMessage: String = "[\(filename):\(line) \(function)] Must be on main thread."
+        custom(.critical, formattedMessage, withPrefixes: true, silenceForTests: false, file: file, function: function, line: line)
+        assertionFailure(formattedMessage)
     }
     
     public static func custom(
         _ level: Log.Level,
         _ message: String,
         withPrefixes: Bool,
-        silenceForTests: Bool
+        silenceForTests: Bool,
+        file: StaticString = #file,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
         guard
             let logger: Logger = logger.wrappedValue,
             !logger.isSuspended.wrappedValue
-        else { return pendingStartupLogs.mutate { $0.append((level, message, withPrefixes, silenceForTests)) } }
+        else {
+            return pendingStartupLogs.mutate {
+                $0.append((level, message, withPrefixes, silenceForTests, file, function, line))
+            }
+        }
         
-        logger.log(level, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        logger.log(level, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
     }
 }
 
@@ -215,7 +278,7 @@ public class Logger {
         dateFormatter.dateFormat = "yyyy/MM/dd HH:mm:ss:SSS ZZZZZ"
         
         self.fileLogger.logFormatter = DDLogFileFormatterDefault(dateFormatter: dateFormatter)
-        self.fileLogger.rollingFrequency = kDayInterval // Refresh everyday
+        self.fileLogger.rollingFrequency = (24 * 60 * 60) // Refresh everyday
         self.fileLogger.logFileManager.maximumNumberOfLogFiles = 3 // Save 3 days' log files
         DDLog.add(self.fileLogger)
         
@@ -242,8 +305,8 @@ public class Logger {
             
             DDLog.loggingQueue.async {
                 let extensionInfo: [(dir: String, type: ExtensionType)] = [
-                    ("\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/NotificationExtension", .notification),
-                    ("\(OWSFileSystem.appSharedDataDirectoryPath())/Logs/ShareExtension", .share)
+                    ("\(FileManager.default.appSharedDataDirectoryPath)/Logs/NotificationExtension", .notification),
+                    ("\(FileManager.default.appSharedDataDirectoryPath)/Logs/ShareExtension", .share)
                 ]
                 let extensionLogs: [(path: String, type: ExtensionType)] = extensionInfo.flatMap { dir, type -> [(path: String, type: ExtensionType)] in
                     guard let files: [String] = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
@@ -321,7 +384,7 @@ public class Logger {
         // If we had an error loading the extension logs then actually log it
         if let error: String = error {
             Log.empty()
-            log(.error, error, withPrefixes: true, silenceForTests: false)
+            log(.error, error, withPrefixes: true, silenceForTests: false, file: #file, function: #function, line: #line)
         }
         
         // After creating a new logger we want to log two empty lines to make it easier to read
@@ -329,8 +392,8 @@ public class Logger {
         Log.empty()
         
         // Add any logs that were pending during the startup process
-        pendingLogs.forEach { level, message, withPrefixes, silenceForTests in
-            log(level, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests)
+        pendingLogs.forEach { level, message, withPrefixes, silenceForTests, file, function, line in
+            log(level, message, withPrefixes: withPrefixes, silenceForTests: silenceForTests, file: file, function: function, line: line)
         }
     }
     
@@ -338,7 +401,10 @@ public class Logger {
         _ level: Log.Level,
         _ message: String,
         withPrefixes: Bool,
-        silenceForTests: Bool
+        silenceForTests: Bool,
+        file: StaticString,
+        function: StaticString,
+        line: UInt
     ) {
         guard !silenceForTests || !isRunningTests else { return }
         
@@ -367,12 +433,12 @@ public class Logger {
         
         switch level {
             case .off: return
-            case .trace: OWSLogger.verbose(logMessage)
-            case .debug: OWSLogger.debug(logMessage)
-            case .info: OWSLogger.info(logMessage)
-            case .warn: OWSLogger.warn(logMessage)
-            case .error, .critical: OWSLogger.error(logMessage)
-            
+            case .verbose: DDLogVerbose("💙 \(logMessage)", file: file, function: function, line: line)
+            case .debug: DDLogDebug("💚 \(logMessage)", file: file, function: function, line: line)
+            case .info: DDLogInfo("💛 \(logMessage)", file: file, function: function, line: line)
+            case .warn: DDLogWarn("🧡 \(logMessage)", file: file, function: function, line: line)
+            case .error: DDLogError("❤️ \(logMessage)", file: file, function: function, line: line)
+            case .critical: DDLogError("🔥 \(logMessage)", file: file, function: function, line: line)
         }
         
         #if DEBUG

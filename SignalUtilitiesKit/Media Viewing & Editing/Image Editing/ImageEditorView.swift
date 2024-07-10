@@ -2,7 +2,6 @@
 
 import UIKit
 import SessionUtilitiesKit
-import SignalCoreKit
 
 @objc
 public protocol ImageEditorViewDelegate: AnyObject {
@@ -29,7 +28,6 @@ public class ImageEditorView: UIView {
     //       if we wanted more color continuity.
     private var currentColor = ImageEditorColor.defaultColor()
 
-    @objc
     public required init(model: ImageEditorModel, delegate: ImageEditorViewDelegate) {
         self.model = model
         self.delegate = delegate
@@ -42,7 +40,7 @@ public class ImageEditorView: UIView {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - Views
@@ -55,7 +53,7 @@ public class ImageEditorView: UIView {
     public func configureSubviews() -> Bool {
         canvasView.configureSubviews()
         self.addSubview(canvasView)
-        canvasView.autoPinEdgesToSuperviewEdges()
+        canvasView.pin(to: self)
 
         self.isUserInteractionEnabled = true
 
@@ -124,17 +122,14 @@ public class ImageEditorView: UIView {
     // MARK: - Actions
 
     @objc func didTapUndo(sender: UIButton) {
-        Logger.verbose("")
         guard model.canUndo() else {
-            owsFailDebug("Can't undo.")
+            Log.error("[ImageEditorView] Can't undo.")
             return
         }
         model.undo()
     }
 
     @objc func didTapBrush(sender: UIButton) {
-        Logger.verbose("")
-
         let brushView = ImageEditorBrushViewController(
             delegate: self,
             model: model,
@@ -146,20 +141,14 @@ public class ImageEditorView: UIView {
     }
 
     @objc func didTapCrop(sender: UIButton) {
-        Logger.verbose("")
-
         presentCropTool()
     }
 
     @objc func didTapNewText(sender: UIButton) {
-        Logger.verbose("")
-
         createNewTextItem()
     }
 
     private func createNewTextItem() {
-        Logger.verbose("")
-
         let viewSize = canvasView.gestureReferenceView.bounds.size
         let imageSize =  model.srcImageSizePixels
         let imageFrame = ImageEditorCanvasView.imageFrame(forViewSize: viewSize, imageSize: imageSize,
@@ -183,18 +172,16 @@ public class ImageEditorView: UIView {
         edit(textItem: textItem, isNewItem: true)
     }
 
-    @objc func didTapDone(sender: UIButton) {
-        Logger.verbose("")
-    }
+    @objc func didTapDone(sender: UIButton) {}
 
     // MARK: - Tap Gesture
 
     @objc
     public func handleTapGesture(_ gestureRecognizer: UIGestureRecognizer) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         guard gestureRecognizer.state == .recognized else {
-            owsFailDebug("Unexpected state.")
+            Log.error("[ImageEditorView] Unexpected state.")
             return
         }
 
@@ -206,7 +193,7 @@ public class ImageEditorView: UIView {
         }
 
         guard let textItem = model.item(forId: textLayer.itemId) as? ImageEditorTextItem else {
-            owsFailDebug("Missing or invalid text item.")
+            Log.error("[ImageEditorView] Missing or invalid text item.")
             return
         }
 
@@ -221,7 +208,7 @@ public class ImageEditorView: UIView {
 
     @objc
     public func handlePinchGesture(_ gestureRecognizer: ImageEditorPinchGestureRecognizer) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // We could undo an in-progress pinch if the gesture is cancelled, but it seems gratuitous.
 
@@ -233,7 +220,7 @@ public class ImageEditorView: UIView {
                 return
             }
             guard let textItem = model.item(forId: textLayer.itemId) as? ImageEditorTextItem else {
-                owsFailDebug("Missing or invalid text item.")
+                Log.error("[ImageEditorView] Missing or invalid text item.")
                 return
             }
             pinchingTextItem = textItem
@@ -255,13 +242,12 @@ public class ImageEditorView: UIView {
                                                                         viewBounds: viewBounds,
                                                                         model: self.model,
                                                                         transform: self.model.currentTransform())
-            let gestureDeltaImageUnit = gestureNowImageUnit.minus(gestureStartImageUnit)
-            let unitCenter = CGPointClamp01(textItem.unitCenter.plus(gestureDeltaImageUnit))
+            let gestureDeltaImageUnit = gestureNowImageUnit.subtracting(gestureStartImageUnit)
+            let unitCenter = textItem.unitCenter.adding(gestureDeltaImageUnit).clamp01()
 
             // NOTE: We use max(1, ...) to avoid divide-by-zero.
-            let newScaling = CGFloatClamp(textItem.scaling * gestureRecognizer.pinchStateLast.distance / max(1.0, gestureRecognizer.pinchStateStart.distance),
-                                          ImageEditorTextItem.kMinScaling,
-                                          ImageEditorTextItem.kMaxScaling)
+            let newScaling = (textItem.scaling * gestureRecognizer.pinchStateLast.distance / max(1.0, gestureRecognizer.pinchStateStart.distance))
+                .clamp(ImageEditorTextItem.kMinScaling, ImageEditorTextItem.kMaxScaling)
 
             let newRotationRadians = textItem.rotationRadians + gestureRecognizer.pinchStateLast.angleRadians - gestureRecognizer.pinchStateStart.angleRadians
 
@@ -298,28 +284,31 @@ public class ImageEditorView: UIView {
     private func textLayer(forLocation locationInView: CGPoint) -> EditorTextLayer? {
         let viewBounds = self.canvasView.gestureReferenceView.bounds
         let affineTransform = self.model.currentTransform().affineTransform(viewSize: viewBounds.size)
-        let locationInCanvas = locationInView.minus(viewBounds.center).applyingInverse(affineTransform).plus(viewBounds.center)
+        let locationInCanvas = locationInView
+            .subtracting(viewBounds.center)
+            .applying(affineTransform.inverted())
+            .adding(viewBounds.center)
         return canvasView.textLayer(forLocation: locationInCanvas)
     }
 
     @objc
     public func handleMoveTextGesture(_ gestureRecognizer: ImageEditorPanGestureRecognizer) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // We could undo an in-progress move if the gesture is cancelled, but it seems gratuitous.
 
         switch gestureRecognizer.state {
         case .began:
             guard let locationStart = gestureRecognizer.locationFirst else {
-                owsFailDebug("Missing locationStart.")
+                Log.error("[ImageEditorView] Missing locationStart.")
                 return
             }
             guard let textLayer = self.textLayer(forLocation: locationStart) else {
-                owsFailDebug("No text layer")
+                Log.error("[ImageEditorView] No text layer")
                 return
             }
             guard let textItem = model.item(forId: textLayer.itemId) as? ImageEditorTextItem else {
-                owsFailDebug("Missing or invalid text item.")
+                Log.error("[ImageEditorView] Missing or invalid text item.")
                 return
             }
             movingTextItem = textItem
@@ -331,11 +320,11 @@ public class ImageEditorView: UIView {
                 return
             }
             guard let locationStart = gestureRecognizer.locationFirst else {
-                owsFailDebug("Missing locationStart.")
+                Log.error("[ImageEditorView] Missing locationStart.")
                 return
             }
             guard let movingTextStartUnitCenter = movingTextStartUnitCenter else {
-                owsFailDebug("Missing movingTextStartUnitCenter.")
+                Log.error("[ImageEditorView] Missing movingTextStartUnitCenter.")
                 return
             }
 
@@ -350,8 +339,8 @@ public class ImageEditorView: UIView {
                                                                         viewBounds: viewBounds,
                                                                         model: self.model,
                                                                         transform: self.model.currentTransform())
-            let gestureDeltaImageUnit = gestureNowImageUnit.minus(gestureStartImageUnit)
-            let unitCenter = CGPointClamp01(movingTextStartUnitCenter.plus(gestureDeltaImageUnit))
+            let gestureDeltaImageUnit = gestureNowImageUnit.subtracting(gestureStartImageUnit)
+            let unitCenter = movingTextStartUnitCenter.adding(gestureDeltaImageUnit).clamp01()
             let newItem = textItem.copy(unitCenter: unitCenter)
 
             if movingTextHasMoved {
@@ -377,7 +366,7 @@ public class ImageEditorView: UIView {
 
     @objc
     public func handleBrushGesture(_ gestureRecognizer: UIGestureRecognizer) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         let removeCurrentStroke = {
             if let stroke = self.currentStroke {
@@ -421,7 +410,7 @@ public class ImageEditorView: UIView {
             tryToAppendStrokeSample()
 
             guard let lastStroke = self.currentStroke else {
-                owsFailDebug("Missing last stroke.")
+                Log.error("[ImageEditorView] Missing last stroke.")
                 removeCurrentStroke()
                 return
             }
@@ -445,7 +434,6 @@ public class ImageEditorView: UIView {
     // MARK: - Edit Text Tool
 
     private func edit(textItem: ImageEditorTextItem, isNewItem: Bool) {
-        Logger.verbose("")
 
         // TODO:
         let maxTextWidthPoints = model.srcImageSizePixels.width * ImageEditorTextItem.kDefaultUnitWidth
@@ -466,10 +454,8 @@ public class ImageEditorView: UIView {
     // MARK: - Crop Tool
 
     private func presentCropTool() {
-        Logger.verbose("")
-
         guard let srcImage = canvasView.loadSrcImage() else {
-            owsFailDebug("Couldn't load src image.")
+            Log.error("[ImageEditorView] Couldn't load src image.")
             return
         }
 
@@ -478,7 +464,7 @@ public class ImageEditorView: UIView {
         // use a default transform.
         let previewTransform = ImageEditorTransform.defaultTransform(srcImageSizePixels: model.srcImageSizePixels)
         guard let previewImage = ImageEditorCanvasView.renderForOutput(model: model, transform: previewTransform) else {
-            owsFailDebug("Couldn't generate preview image.")
+            Log.error("[ImageEditorView] Couldn't generate preview image.")
             return
         }
 
@@ -494,7 +480,7 @@ extension ImageEditorView: UIGestureRecognizerDelegate {
 
     @objc public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard moveTextGestureRecognizer == gestureRecognizer else {
-            owsFailDebug("Unexpected gesture.")
+            Log.error("[ImageEditorView] Unexpected gesture.")
             return false
         }
 
@@ -523,7 +509,7 @@ extension ImageEditorView: ImageEditorModelObserver {
 extension ImageEditorView: ImageEditorTextViewControllerDelegate {
 
     public func textEditDidComplete(textItem: ImageEditorTextItem) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // Model items are immutable; we _replace_ the item rather than modify it.
         if model.has(itemForId: textItem.itemId) {
@@ -536,7 +522,7 @@ extension ImageEditorView: ImageEditorTextViewControllerDelegate {
     }
 
     public func textEditDidDelete(textItem: ImageEditorTextItem) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         if model.has(itemForId: textItem.itemId) {
             model.remove(item: textItem)

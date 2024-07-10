@@ -12,6 +12,14 @@ extension SnodeAPI {
         let messageHashes: [String]
         let requireSuccessfulDeletion: Bool
         
+        override var verificationBytes: [UInt8] {
+            /// Ed25519 signature of `("delete" || messages...)`; this signs the value constructed
+            /// by concatenating "delete" and all `messages` values, using `pubkey` to sign.  Must be base64
+            /// encoded for json requests; binary for OMQ requests.
+            SnodeAPI.Endpoint.deleteMessages.path.bytes
+                .appending(contentsOf: messageHashes.joined().bytes)
+        }
+        
         // MARK: - Init
         
         public init(
@@ -44,27 +52,6 @@ extension SnodeAPI {
             }
             
             try super.encode(to: encoder)
-        }
-        
-        // MARK: - Abstract Methods
-        
-        override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("delete" || messages...)`; this signs the value constructed
-            /// by concatenating "delete" and all `messages` values, using `pubkey` to sign.  Must be base64
-            /// encoded for json requests; binary for OMQ requests.
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.deleteMessages.path.bytes
-                .appending(contentsOf: messageHashes.joined().bytes)
-            
-            guard
-                let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
-                    message: verificationBytes,
-                    secretKey: ed25519SecretKey
-                )
-            else {
-                throw SnodeAPIError.signingFailed
-            }
-            
-            return signatureBytes
         }
     }
 }

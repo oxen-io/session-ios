@@ -3,25 +3,13 @@
 import Foundation
 import Combine
 import GRDB
-import Sodium
-import Curve25519Kit
 import SessionUtilitiesKit
-import SessionSnodeKit
 
 extension KeyPair: Mocked {
     static var mockValue: KeyPair = KeyPair(
         publicKey: Data(hex: TestConstants.publicKey).bytes,
         secretKey: Data(hex: TestConstants.edSecretKey).bytes
     )
-}
-
-extension ECKeyPair: Mocked {
-    static var mockValue: Self {
-        try! Self.init(
-            publicKeyData: Data(hex: TestConstants.publicKey),
-            privateKeyData: Data(hex: TestConstants.privateKey)
-        )
-    }
 }
 
 extension Database: Mocked {
@@ -46,15 +34,6 @@ extension Network.RequestType: MockedGeneric {
     static func mockValue(type: T.Type) -> Network.RequestType<T> {
         return Network.RequestType(id: "mock") { _ in Fail(error: MockError.mockedData).eraseToAnyPublisher() }
     }
-}
-
-extension Network.Destination: Mocked {
-    static var mockValue: Network.Destination = Network.Destination.server(
-        url: URL(string: "https://oxen.io")!,
-        method: .get,
-        headers: nil,
-        x25519PublicKey: ""
-    )
 }
 
 extension AnyPublisher: MockedGeneric where Failure == Error {

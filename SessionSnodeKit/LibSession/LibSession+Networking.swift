@@ -26,7 +26,7 @@ public extension Network.RequestType {
 
 public extension LibSession {
     private static var networkCache: Atomic<UnsafeMutablePointer<network_object>?> = Atomic(nil)
-    private static var snodeCachePath: String { "\(OWSFileSystem.appSharedDataDirectoryPath())/snodeCache" }
+    private static var snodeCachePath: String { "\(FileManager.default.appSharedDataDirectoryPath)/snodeCache" }
     private static var isSuspended: Atomic<Bool> = Atomic(false)
     private static var lastPaths: Atomic<[[Snode]]> = Atomic([])
     private static var lastNetworkStatus: Atomic<NetworkStatus> = Atomic(.unknown)

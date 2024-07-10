@@ -70,6 +70,9 @@ public struct Request<T: Encodable, Endpoint: EndpointType> {
                 
             case let bodyBytes as [UInt8]:
                 return Data(bodyBytes)
+            
+            case let bodyDirectData as Data:
+                return bodyDirectData
                 
             default:
                 // Having no body is fine so just return nil

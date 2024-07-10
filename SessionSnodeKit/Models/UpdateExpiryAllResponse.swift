@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import Sodium
 import SessionUtilitiesKit
 
 public class UpdateExpiryAllResponse: SnodeRecursiveResponse<UpdateExpiryAllResponse.SwarmItem> {}
@@ -51,9 +50,9 @@ extension UpdateExpiryAllResponse: ValidatableResponse {
     internal static var requiredSuccessfulResponses: Int { -1 }
     
     internal func validResultMap(
-        sodium: Sodium,
-        userX25519PublicKey: String,
-        validationData: UInt64
+        swarmPublicKey: String,
+        validationData: UInt64,
+        using dependencies: Dependencies
     ) throws -> [String: [String]] {
         let validationMap: [String: [String]] = try swarm.reduce(into: [:]) { result, next in
             guard
@@ -75,14 +74,16 @@ extension UpdateExpiryAllResponse: ValidatableResponse {
             /// Signature of `( PUBKEY_HEX || EXPIRY || UPDATED[0] || ... || UPDATED[N] )`
             /// signed by the node's ed25519 pubkey.  When doing a multi-namespace delete the `UPDATED`
             /// values are totally ordered (i.e. among all the hashes deleted regardless of namespace)
-            let verificationBytes: [UInt8] = userX25519PublicKey.bytes
+            let verificationBytes: [UInt8] = swarmPublicKey.bytes
                 .appending(contentsOf: "\(validationData)".data(using: .ascii)?.bytes)
                 .appending(contentsOf: next.value.updated.joined().bytes)
             
-            let isValid: Bool = sodium.sign.verify(
-                message: verificationBytes,
-                publicKey: Data(hex: next.key).bytes,
-                signature: encodedSignature.bytes
+            let isValid: Bool = dependencies.crypto.verify(
+                .signature(
+                    message: verificationBytes,
+                    publicKey: Data(hex: next.key).bytes,
+                    signature: encodedSignature.bytes
+                )
             )
             
             // If the update signature is invalid then we want to fail here

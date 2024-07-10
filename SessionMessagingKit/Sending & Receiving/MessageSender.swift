@@ -5,7 +5,6 @@ import Combine
 import GRDB
 import SessionSnodeKit
 import SessionUtilitiesKit
-import Sodium
 
 public final class MessageSender {
     // MARK: - Message Preparation
@@ -269,27 +268,14 @@ public final class MessageSender {
         // Encrypt the serialized protobuf
         let ciphertext: Data
         do {
-            switch destination {
-                case .contact(let publicKey):
-                    ciphertext = try encryptWithSessionProtocol(db, plaintext: plaintext, for: publicKey, using: dependencies)
-                    
-                case .syncMessage:
-                    ciphertext = try encryptWithSessionProtocol(db, plaintext: plaintext, for: userPublicKey, using: dependencies)
-                    
-                case .closedGroup(let groupPublicKey):
-                    guard let encryptionKeyPair: ClosedGroupKeyPair = try? ClosedGroupKeyPair.fetchLatestKeyPair(db, threadId: groupPublicKey) else {
-                        throw MessageSenderError.noKeyPair
-                    }
-                    
-                    ciphertext = try encryptWithSessionProtocol(
-                        db,
-                        plaintext: plaintext,
-                        for: SessionId(.standard, publicKey: encryptionKeyPair.publicKey.bytes).hexString,
-                        using: dependencies
-                    )
-                    
-                case .openGroup, .openGroupInbox: preconditionFailure()
-            }
+            ciphertext = try dependencies.crypto.tryGenerate(
+                .ciphertextWithSessionProtocol(
+                    db,
+                    plaintext: plaintext,
+                    destination: destination,
+                    using: dependencies
+                )
+            )
         }
         catch {
             SNLog("Couldn't encrypt message for destination: \(destination) due to error: \(error).")
@@ -411,12 +397,12 @@ public final class MessageSender {
                 return SessionId(.unblinded, publicKey: userEdKeyPair.publicKey).hexString
             }
             guard
-                let blindedKeyPair: KeyPair = dependencies.crypto.generate(
-                    .blindedKeyPair(serverPublicKey: openGroup.publicKey, edKeyPair: userEdKeyPair, using: dependencies)
+                let blinded15KeyPair: KeyPair = dependencies.crypto.generate(
+                    .blinded15KeyPair(serverPublicKey: openGroup.publicKey, ed25519SecretKey: userEdKeyPair.secretKey)
                 )
             else { throw MessageSenderError.signingFailed }
             
-            return SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString
+            return SessionId(.blinded15, publicKey: blinded15KeyPair.publicKey).hexString
         }()
         
         // Validate the message
@@ -564,13 +550,15 @@ public final class MessageSender {
         let ciphertext: Data
         
         do {
-            ciphertext = try encryptWithSessionBlindingProtocol(
-                db,
-                plaintext: plaintext,
-                for: recipientBlindedPublicKey,
-                openGroupPublicKey: openGroupPublicKey,
-                using: dependencies
-            )
+            ciphertext = try dependencies.crypto.generateResult(
+                .ciphertextWithSessionBlindingProtocol(
+                    db,
+                    plaintext: plaintext,
+                    recipientBlindedId: recipientBlindedPublicKey,
+                    serverPublicKey: openGroupPublicKey,
+                    using: dependencies
+                )
+            ).successOrThrow()
         }
         catch {
             SNLog("Couldn't encrypt message for destination: \(destination) due to error: \(error).")

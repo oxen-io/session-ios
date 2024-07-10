@@ -4,7 +4,7 @@ import Foundation
 import MediaPlayer
 import SessionUIKit
 import NVActivityIndicatorView
-import SignalCoreKit
+import SessionUtilitiesKit
 
 // A modal view that be used during blocking interactions (e.g. waiting on response from
 // service or on the completion of a long-running local operation).
@@ -58,7 +58,7 @@ public class ModalActivityIndicatorViewController: OWSViewController {
 
     @available(*, unavailable, message:"use other constructor instead.")
     public required init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public required init(
@@ -85,7 +85,7 @@ public class ModalActivityIndicatorViewController: OWSViewController {
     ) {
         guard let fromViewController: UIViewController = fromViewController else { return }
         
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         
         fromViewController.present(
             ModalActivityIndicatorViewController(canCancel: canCancel, message: message, onAppear: onAppear),
@@ -142,7 +142,7 @@ public class ModalActivityIndicatorViewController: OWSViewController {
         }
         else {
             self.view.addSubview(spinner)
-            spinner.autoCenterInSuperview()
+            spinner.center(in: self.view)
         }
 
         if canCancel {
@@ -184,7 +184,7 @@ public class ModalActivityIndicatorViewController: OWSViewController {
     }
 
     @objc func cancelPressed() {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         wasCancelled = true
 

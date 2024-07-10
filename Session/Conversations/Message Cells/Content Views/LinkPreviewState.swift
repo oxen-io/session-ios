@@ -2,7 +2,7 @@
 
 import UIKit
 import SessionMessagingKit
-import SignalCoreKit
+import SessionUtilitiesKit
 
 protocol LinkPreviewState {
     var isLoaded: Bool { get }
@@ -51,7 +51,7 @@ public extension LinkPreview {
         var image: UIImage? {
             guard let jpegImageData = linkPreviewDraft.jpegImageData else { return nil }
             guard let image = UIImage(data: jpegImageData) else {
-                owsFailDebug("Could not load image: \(jpegImageData.count)")
+                Log.error("[LinkPreview] Could not load image: \(jpegImageData.count)")
                 return nil
             }
             
@@ -84,7 +84,7 @@ public extension LinkPreview {
         var imageState: LinkPreview.ImageState {
             guard linkPreview.attachmentId != nil else { return .none }
             guard let imageAttachment: Attachment = imageAttachment else {
-                owsFailDebug("Missing imageAttachment.")
+                Log.error("[LinkPreview] Missing imageAttachment.")
                 return .none
             }
             
@@ -109,7 +109,7 @@ public extension LinkPreview {
                 return nil
             }
             guard let image = UIImage(data: imageData) else {
-                owsFailDebug("Could not load image: \(imageAttachment?.localRelativeFilePath ?? "unknown")")
+                Log.error("[LinkPreview] Could not load image: \(imageAttachment?.localRelativeFilePath ?? "unknown")")
                 return nil
             }
             

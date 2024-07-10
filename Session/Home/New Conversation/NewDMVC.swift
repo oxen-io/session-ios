@@ -172,7 +172,7 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
     }
     
     fileprivate func startNewDMIfPossible(with onsNameOrPublicKey: String, onError: (() -> ())?) {
-        let maybeSessionId: SessionId? = SessionId(from: onsNameOrPublicKey)
+        let maybeSessionId: SessionId? = try? SessionId(from: onsNameOrPublicKey)
         
         if KeyPair.isValidHexEncodedPublicKey(candidate: onsNameOrPublicKey) {
             switch maybeSessionId?.prefix {

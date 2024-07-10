@@ -4,7 +4,6 @@
 
 #import <UIKit/UIKit.h>
 #import "OWSBezierPathView.h"
-#import <SignalCoreKit/OWSAsserts.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -61,15 +60,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)setConfigureShapeLayerBlock:(ConfigureShapeLayerBlock)configureShapeLayerBlock
 {
-    OWSAssertDebug(configureShapeLayerBlock);
-
     [self setConfigureShapeLayerBlocks:@[ configureShapeLayerBlock ]];
 }
 
 - (void)setConfigureShapeLayerBlocks:(NSArray<ConfigureShapeLayerBlock> *)configureShapeLayerBlocks
 {
-    OWSAssertDebug(configureShapeLayerBlocks.count > 0);
-
     _configureShapeLayerBlocks = configureShapeLayerBlocks;
 
     [self updateLayers];

@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public enum FailedAttachmentDownloadsJob: JobExecutor {

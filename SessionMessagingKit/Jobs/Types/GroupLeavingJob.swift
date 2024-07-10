@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 

@@ -5,7 +5,6 @@ import Combine
 import GRDB
 import SessionMessagingKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -453,7 +452,7 @@ public class NotificationPresenter: NotificationsProtocol {
         guard Storage.shared[.playNotificationSoundInForeground] else { return false }
 
         let nowMs: UInt64 = UInt64(floor(Date().timeIntervalSince1970 * 1000))
-        let recentThreshold = nowMs - UInt64(kAudioNotificationsThrottleInterval * Double(kSecondInMs))
+        let recentThreshold = nowMs - UInt64(kAudioNotificationsThrottleInterval * 1000)
 
         let recentNotifications = mostRecentNotifications.wrappedValue.filter { $0 > recentThreshold }
 
@@ -558,12 +557,12 @@ class NotificationActionHandler {
             .eraseToAnyPublisher()
     }
 
-    func showThread(userInfo: [AnyHashable: Any]) -> AnyPublisher<Void, Never> {
+    func showThread(userInfo: [AnyHashable: Any], using dependencies: Dependencies) -> AnyPublisher<Void, Never> {
         guard
             let threadId = userInfo[AppNotificationUserInfoKey.threadId] as? String,
             let threadVariantRaw = userInfo[AppNotificationUserInfoKey.threadVariantRaw] as? Int,
             let threadVariant: SessionThread.Variant = SessionThread.Variant(rawValue: threadVariantRaw)
-        else { return showHomeVC() }
+        else { return showHomeVC(using: dependencies) }
 
         // If this happens when the the app is not, visible we skip the animation so the thread
         // can be visible to the user immediately upon opening the app, rather than having to watch
@@ -579,8 +578,8 @@ class NotificationActionHandler {
             .eraseToAnyPublisher()
     }
     
-    func showHomeVC() -> AnyPublisher<Void, Never> {
-        SessionApp.showHomeView()
+    func showHomeVC(using dependencies: Dependencies) -> AnyPublisher<Void, Never> {
+        SessionApp.showHomeView(using: dependencies)
         return Just(())
             .eraseToAnyPublisher()
     }
@@ -625,7 +624,7 @@ enum NotificationError: Error {
 
 extension NotificationError {
     static func failDebug(_ description: String) -> NotificationError {
-        owsFailDebug(description)
+        Log.error("[NotificationActionHandler] Failed with error: \(description)")
         return NotificationError.assertionError(description: description)
     }
 }

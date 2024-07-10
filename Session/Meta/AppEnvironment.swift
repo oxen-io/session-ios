@@ -5,7 +5,6 @@
 import Foundation
 import SessionUtilitiesKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionMessagingKit
 
 public class AppEnvironment {
@@ -16,7 +15,7 @@ public class AppEnvironment {
         get { return _shared }
         set {
             guard SNUtilitiesKit.isRunningTests else {
-                owsFailDebug("Can only switch environments in tests.")
+                Log.error("[AppEnvironment] Can only switch environments in tests.")
                 return
             }
 

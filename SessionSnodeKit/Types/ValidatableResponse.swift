@@ -1,7 +1,7 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-import Sodium
+import SessionUtilitiesKit
 
 internal protocol ValidatableResponse {
     associatedtype ValidationData
@@ -15,32 +15,22 @@ internal protocol ValidatableResponse {
     /// -4 = 25% of the nodes need to have returned success responses
     static var requiredSuccessfulResponses: Int { get }
     
-    static func validated(
+    @discardableResult static func validated(
         map validResultMap: [String: ValidationResponse],
         totalResponseCount: Int
     ) throws -> [String: ValidationResponse]
     
-    func validResultMap(
-        sodium: Sodium,
-        userX25519PublicKey: String,
-        validationData: ValidationData
+    @discardableResult func validResultMap(
+        swarmPublicKey: String,
+        validationData: ValidationData,
+        using dependencies: Dependencies
     ) throws -> [String: ValidationResponse]
-    
-    func validateResultMap(sodium: Sodium, userX25519PublicKey: String, validationData: ValidationData) throws
 }
 
 // MARK: - Convenience
 
 internal extension ValidatableResponse {
-    func validateResultMap(sodium: Sodium, userX25519PublicKey: String, validationData: ValidationData) throws {
-        _ = try validResultMap(
-            sodium: sodium,
-            userX25519PublicKey: userX25519PublicKey,
-            validationData: validationData
-        )
-    }
-    
-    static func validated(
+    @discardableResult static func validated(
         map validResultMap: [String: ValidationResponse],
         totalResponseCount: Int
     ) throws -> [String: ValidationResponse] {
@@ -63,21 +53,16 @@ internal extension ValidatableResponse {
 }
 
 internal extension ValidatableResponse where ValidationData == Void {
-    func validResultMap(sodium: Sodium, userX25519PublicKey: String) throws -> [String: ValidationResponse] {
-        return try validResultMap(sodium: sodium, userX25519PublicKey: userX25519PublicKey, validationData: ())
-    }
-    
-    func validateResultMap(sodium: Sodium, userX25519PublicKey: String) throws {
-        _ = try validResultMap(
-            sodium: sodium,
-            userX25519PublicKey: userX25519PublicKey,
-            validationData: ()
-        )
+    @discardableResult func validResultMap(
+        swarmPublicKey: String,
+        using dependencies: Dependencies
+    ) throws -> [String: ValidationResponse] {
+        return try validResultMap(swarmPublicKey: swarmPublicKey, validationData: (), using: dependencies)
     }
 }
 
 internal extension ValidatableResponse where ValidationResponse == Bool {
-    static func validated(map validResultMap: [String: Bool]) throws -> [String: Bool] {
+    @discardableResult static func validated(map validResultMap: [String: Bool]) throws -> [String: Bool] {
         return try validated(
             map: validResultMap.filter { $0.value },
             totalResponseCount: validResultMap.count

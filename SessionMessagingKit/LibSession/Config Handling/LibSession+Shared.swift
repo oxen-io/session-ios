@@ -9,6 +9,12 @@ import SessionUtilitiesKit
 
 // MARK: - Convenience
 
+public extension LibSession {
+    enum Crypto {
+        public typealias Domain = String
+    }
+}
+
 internal extension LibSession {
     /// This is a buffer period within which we will process messages which would result in a config change, any message which would normally
     /// result in a config change which was sent before `lastConfigMessage.timestamp - configChangeBufferPeriod` will not
@@ -48,6 +54,7 @@ internal extension LibSession {
         _ db: Database,
         for variant: ConfigDump.Variant,
         publicKey: String,
+        using dependencies: Dependencies = Dependencies(),
         change: (UnsafeMutablePointer<config_object>?) throws -> ()
     ) throws {
         // Since we are doing direct memory manipulation we are using an `Atomic`
@@ -55,7 +62,7 @@ internal extension LibSession {
         let needsPush: Bool
         
         do {
-            needsPush = try LibSession
+            needsPush = try dependencies.caches[.libSession]
                 .config(for: variant, publicKey: publicKey)
                 .mutate { conf in
                     guard conf != nil else { throw LibSessionError.nilConfigObject }
@@ -388,8 +395,8 @@ public extension LibSession {
         // false)
         guard
             threadVariant == .community || (
-                SessionId(from: threadId)?.prefix != .blinded15 &&
-                SessionId(from: threadId)?.prefix != .blinded25
+                (try? SessionId(from: threadId))?.prefix != .blinded15 &&
+                (try? SessionId(from: threadId))?.prefix != .blinded25
             )
         else { return false }
         

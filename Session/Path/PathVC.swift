@@ -365,13 +365,16 @@ private final class LineView: UIView {
 
     private func expandDot() {
         UIView.animate(withDuration: 0.5) { [weak self] in
-            self?.dotView.transform = CGAffineTransform.scale(PathVC.expandedDotSize / PathVC.dotSize)
+            self?.dotView.transform = CGAffineTransform(
+                scaleX: PathVC.expandedDotSize / PathVC.dotSize,
+                y: PathVC.expandedDotSize / PathVC.dotSize
+            )
         }
     }
 
     private func collapseDot() {
         UIView.animate(withDuration: 0.5) { [weak self] in
-            self?.dotView.transform = CGAffineTransform.scale(1)
+            self?.dotView.transform = CGAffineTransform(scaleX: 1, y: 1)
         }
     }
     

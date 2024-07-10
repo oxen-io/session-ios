@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 
 public final class ClosedGroupControlMessage: ControlMessage {

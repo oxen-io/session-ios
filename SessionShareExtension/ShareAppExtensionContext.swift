@@ -4,7 +4,6 @@ import UIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 import SessionMessagingKit
-import SignalCoreKit
 
 /// This is _NOT_ a singleton and will be instantiated each time that the SAE is used.
 final class ShareAppExtensionContext: AppContext {
@@ -73,7 +72,7 @@ final class ShareAppExtensionContext: AppContext {
     // MARK: - Notifications
     
     @objc private func extensionHostDidBecomeActive(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .active
         
@@ -84,7 +83,7 @@ final class ShareAppExtensionContext: AppContext {
     }
     
     @objc private func extensionHostWillResignActive(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .inactive
         
@@ -95,7 +94,7 @@ final class ShareAppExtensionContext: AppContext {
     }
 
     @objc private func extensionHostDidEnterBackground(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .background
 
@@ -106,7 +105,7 @@ final class ShareAppExtensionContext: AppContext {
     }
 
     @objc private func extensionHostWillEnterForeground(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .inactive
 
@@ -126,7 +125,5 @@ final class ShareAppExtensionContext: AppContext {
         Log.info("Ignoring request to show/hide status bar since we're in an app extension")
     }
     
-    func setNetworkActivityIndicatorVisible(_ value: Bool) {
-        owsFailDebug("")
-    }
+    func setNetworkActivityIndicatorVisible(_ value: Bool) {}
 }

@@ -329,8 +329,13 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
 
     // MARK: - Initialization
     
-    init(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionInfo: Interaction.TimestampInfo? = nil) {
-        self.viewModel = ConversationViewModel(threadId: threadId, threadVariant: threadVariant, focusedInteractionInfo: focusedInteractionInfo)
+    init(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedInteractionInfo: Interaction.TimestampInfo? = nil,
+        using dependencies: Dependencies
+    ) {
+        self.viewModel = ConversationViewModel(threadId: threadId, threadVariant: threadVariant, focusedInteractionInfo: focusedInteractionInfo, using: dependencies)
         
         Storage.shared.addObserver(viewModel.pagedDataObserver)
         
@@ -589,8 +594,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     guard
                         let sessionId: String = self?.viewModel.threadData.threadId,
                         (
-                            SessionId.Prefix(from: sessionId) == .blinded15 ||
-                            SessionId.Prefix(from: sessionId) == .blinded25
+                            (try? SessionId.Prefix(from: sessionId)) == .blinded15 ||
+                            (try? SessionId.Prefix(from: sessionId)) == .blinded25
                         ),
                         let blindedLookup: BlindedIdLookup = Storage.shared.read({ db in
                             try BlindedIdLookup
@@ -1781,12 +1786,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             ipadCancelButton.setThemeTitleColor(.textPrimary, for: .normal)
             searchBarContainer.addSubview(ipadCancelButton)
             ipadCancelButton.pin(.trailing, to: .trailing, of: searchBarContainer)
-            ipadCancelButton.autoVCenterInSuperview()
-            searchBar.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets.zero, excludingEdge: .trailing)
+            ipadCancelButton.center(.vertical, in: searchBarContainer)
+            searchBar.pin(.top, to: .top, of: searchBar)
+            searchBar.pin(.leading, to: .leading, of: searchBar)
             searchBar.pin(.trailing, to: .leading, of: ipadCancelButton, withInset: -Values.smallSpacing)
+            searchBar.pin(.bottom, to: .bottom, of: searchBar)
         }
         else {
-            searchBar.autoPinEdgesToSuperviewMargins()
+            searchBar.pin(toMarginsOf: searchBarContainer)
         }
         
         // Nav bar buttons

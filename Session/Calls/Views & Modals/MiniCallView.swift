@@ -167,11 +167,11 @@ final class MiniCallView: UIView, RTCVideoViewDelegate {
         else { return }
         
         window.addSubview(self)
-        left = self.autoPinEdge(toSuperviewEdge: .left)
+        left = self.pin(.left, to: .left, of: window)
         left?.isActive = false
-        right = self.autoPinEdge(toSuperviewEdge: .right, withInset: Values.smallSpacing)
-        top = self.autoPinEdge(toSuperviewEdge: .top, withInset: topMargin)
-        bottom = self.autoPinEdge(toSuperviewEdge: .bottom, withInset: bottomMargin)
+        right = self.pin(.right, to: .right, of: window, withInset: -Values.smallSpacing)
+        top = self.pin(.top, to: .top, of: window, withInset: topMargin)
+        bottom = self.pin(.bottom, to: .bottom, of: window, withInset: -bottomMargin)
         bottom?.isActive = false
         
         UIView.animate(withDuration: 0.5, delay: 0, options: [], animations: {
@@ -208,7 +208,7 @@ final class MiniCallView: UIView, RTCVideoViewDelegate {
     func persistCurrentPosition(newSize: CGSize) {
         let currentCenter = self.center
         
-        if currentCenter.x < ((self.superview?.width() ?? 0) / 2) {
+        if currentCenter.x < ((self.superview?.bounds.width ?? 0) / 2) {
             left?.isActive = true
             right?.isActive = false
         }
@@ -218,7 +218,7 @@ final class MiniCallView: UIView, RTCVideoViewDelegate {
         }
         
         let willTouchTop: Bool = (currentCenter.y < ((newSize.height / 2) + topMargin))
-        let willTouchBottom: Bool = ((currentCenter.y + (newSize.height / 2)) >= (self.superview?.height() ?? 0))
+        let willTouchBottom: Bool = ((currentCenter.y + (newSize.height / 2)) >= (self.superview?.bounds.height ?? 0))
         
         if willTouchBottom {
             top?.isActive = false
@@ -244,11 +244,11 @@ final class MiniCallView: UIView, RTCVideoViewDelegate {
         }
         
         if self.right?.isActive == true {
-            self.right?.constant = (self.frame.maxX - (self.superview?.width() ?? 0))
+            self.right?.constant = (self.frame.maxX - (self.superview?.bounds.width ?? 0))
         }
         
         if self.bottom?.isActive == true {
-            self.bottom?.constant = (self.frame.maxY - (self.superview?.height() ?? 0))
+            self.bottom?.constant = (self.frame.maxY - (self.superview?.bounds.height ?? 0))
         }
         
         self.window?.bringSubviewToFront(self)

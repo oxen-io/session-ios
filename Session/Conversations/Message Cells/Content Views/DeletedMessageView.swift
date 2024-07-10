@@ -29,7 +29,7 @@ final class DeletedMessageView: UIView {
     private func setUpViewHierarchy(textColor: ThemeValue) {
         // Image view
         let icon = UIImage(named: "ic_trash")?
-            .resizedImage(to: CGSize(
+            .resized(to: CGSize(
                 width: DeletedMessageView.iconSize,
                 height: DeletedMessageView.iconSize
             ))?

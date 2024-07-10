@@ -4,7 +4,6 @@
 
 import Foundation
 import GRDB
-import Curve25519Kit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
@@ -14,7 +13,7 @@ enum MockDataGenerator {
     static var printProgress: Bool = true
     static var hasStartedGenerationThisRun: Bool = false
     
-    static func generateMockData(_ db: Database) {
+    static func generateMockData(_ db: Database, using dependencies: Dependencies) {
         // Don't re-generate the mock data if it already exists
         guard !hasStartedGenerationThisRun && !(try! SessionThread.exists(db, id: "MockDatabaseThread")) else {
             hasStartedGenerationThisRun = true
@@ -221,11 +220,11 @@ enum MockDataGenerator {
                 }
                 
                 // Add the group to the user's set of public keys to poll for and store the key pair
-                let encryptionKeyPair = Curve25519.generateKeyPair()
+                let encryptionKeyPair = dependencies.crypto.generate(.x25519KeyPair())!
                 try! ClosedGroupKeyPair(
                     threadId: randomGroupPublicKey,
-                    publicKey: encryptionKeyPair.publicKey,
-                    secretKey: encryptionKeyPair.privateKey,
+                    publicKey: Data(encryptionKeyPair.publicKey),
+                    secretKey: Data(encryptionKeyPair.secretKey),
                     receivedTimestamp: timestampNow
                 )
                 .save(db)

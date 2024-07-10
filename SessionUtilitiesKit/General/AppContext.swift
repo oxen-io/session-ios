@@ -1,7 +1,6 @@
 // Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import SignalCoreKit
 
 // MARK: - Singleton
 
@@ -62,14 +61,15 @@ public extension AppContext {
             .appendingPathComponent(dirName)
             .path
         _temporaryDirectory = dirPath
-        OWSFileSystem.ensureDirectoryExists(dirPath, fileProtectionType: .complete)
+        FileSystem.temporaryDirectory.mutate { $0 = dirPath }
+        try? FileSystem.ensureDirectoryExists(at: dirPath, fileProtectionType: .complete)
         
         return dirPath
     }
     
     var temporaryDirectoryAccessibleAfterFirstAuth: String {
         let dirPath: String = NSTemporaryDirectory()
-        OWSFileSystem.ensureDirectoryExists(dirPath, fileProtectionType: .completeUntilFirstUserAuthentication)
+        try? FileSystem.ensureDirectoryExists(at: dirPath, fileProtectionType: .completeUntilFirstUserAuthentication)
         
         return dirPath;
     }
@@ -79,7 +79,7 @@ public extension AppContext {
             .urls(for: .documentDirectory, in: .userDomainMask)
             .last?
             .path
-        owsAssertDebug(targetPath != nil)
+        Log.assert(targetPath != nil)
         
         return (targetPath ?? "")
     }
@@ -111,7 +111,7 @@ public extension AppContext {
         let targetPath: String? = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: UserDefaults.applicationGroup)?
             .path
-        owsAssertDebug(targetPath != nil)
+        Log.assert(targetPath != nil)
         
         return (targetPath ?? "")
     }

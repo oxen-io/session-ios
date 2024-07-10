@@ -4,16 +4,15 @@ import Foundation
 import AVFAudio
 import CallKit
 import SessionUtilitiesKit
-import SignalCoreKit
 
 extension SessionCallManager: CXProviderDelegate {
     public func providerDidReset(_ provider: CXProvider) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         (currentCall as? SessionCall)?.endSessionCall()
     }
     
     public func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         if startCallAction() {
             action.fulfill()
         }
@@ -23,8 +22,8 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
-        AssertIsOnMainThread()
-        print("[CallKit] Perform CXAnswerCallAction")
+        Log.assertOnMainThread()
+        Log.debug("[CallKit] Perform CXAnswerCallAction")
         
         guard let call: SessionCall = (self.currentCall as? SessionCall) else { return action.fail() }
         
@@ -42,8 +41,8 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-        print("[CallKit] Perform CXEndCallAction")
-        AssertIsOnMainThread()
+        Log.debug("[CallKit] Perform CXEndCallAction")
+        Log.assertOnMainThread()
         
         if endCallAction() {
             action.fulfill()
@@ -54,8 +53,8 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
-        print("[CallKit] Perform CXSetMutedCallAction, isMuted: \(action.isMuted)")
-        AssertIsOnMainThread()
+        Log.debug("[CallKit] Perform CXSetMutedCallAction, isMuted: \(action.isMuted)")
+        Log.assertOnMainThread()
         
         if setMutedCallAction(isMuted: action.isMuted) {
             action.fulfill()
@@ -74,8 +73,8 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
-        print("[CallKit] Audio session did activate.")
-        AssertIsOnMainThread()
+        Log.debug("[CallKit] Audio session did activate.")
+        Log.assertOnMainThread()
         guard let call: SessionCall = (self.currentCall as? SessionCall) else { return }
         
         call.webRTCSession.audioSessionDidActivate(audioSession)
@@ -83,8 +82,8 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
-        print("[CallKit] Audio session did deactivate.")
-        AssertIsOnMainThread()
+        Log.debug("[CallKit] Audio session did deactivate.")
+        Log.assertOnMainThread()
         guard let call: SessionCall = (self.currentCall as? SessionCall) else { return }
         
         call.webRTCSession.audioSessionDidDeactivate(audioSession)

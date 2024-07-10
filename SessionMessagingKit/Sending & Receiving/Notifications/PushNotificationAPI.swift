@@ -5,14 +5,16 @@
 import Foundation
 import Combine
 import GRDB
-import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
+// MARK: - KeychainStorage
+
+public extension KeychainStorage.DataKey { static let pushNotificationEncryptionKey: Self = "PNEncryptionKeyKey" }
+
+// MARK: - PushNotificationAPI
+
 public enum PushNotificationAPI {
-    internal static let sodium: Atomic<Sodium> = Atomic(Sodium())
-    private static let keychainService: String = "PNKeyChainService"
-    private static let encryptionKeyKey: String = "PNEncryptionKeyKey"
     private static let encryptionKeyLength: Int = 32
     private static let maxRetryCount: Int = 4
     private static let tokenExpirationInterval: TimeInterval = (12 * 60 * 60)
@@ -405,31 +407,19 @@ public enum PushNotificationAPI {
             return (nil, .invalid, .failureNoContent)
         }
         
+        // Decrypt and decode the payload
         guard
             let encryptedData: Data = Data(base64Encoded: base64EncodedEncString),
             let notificationsEncryptionKey: Data = try? getOrGenerateEncryptionKey(using: dependencies),
-            encryptedData.count > dependencies.crypto.size(.aeadXChaCha20NonceBytes)
-        else { return (nil, .invalid, .failure) }
-        
-        let nonce: Data = encryptedData[0..<dependencies.crypto.size(.aeadXChaCha20NonceBytes)]
-        let payload: Data = encryptedData[dependencies.crypto.size(.aeadXChaCha20NonceBytes)...]
-        
-        guard
-            let paddedData: [UInt8] = try? dependencies.crypto.perform(
-                .decryptAeadXChaCha20(
-                    authenticatedCipherText: payload.bytes,
-                    secretKey: notificationsEncryptionKey.bytes,
-                    nonce: nonce.bytes
+            let decryptedData: Data = dependencies.crypto.generate(
+                .plaintextWithPushNotificationPayload(
+                    payload: encryptedData,
+                    encKey: notificationsEncryptionKey
                 )
-            )
+            ),
+            let notification: BencodeResponse<NotificationMetadata> = try? BencodeDecoder(using: dependencies)
+                .decode(BencodeResponse<NotificationMetadata>.self, from: decryptedData)
         else { return (nil, .invalid, .failure) }
-        
-        let decryptedData: Data = Data(paddedData.reversed().drop(while: { $0 == 0 }).reversed())
-        
-        // Decode the decrypted data
-        guard let notification: BencodeResponse<NotificationMetadata> = try? Bencode.decodeResponse(from: decryptedData) else {
-            return (nil, .invalid, .failure)
-        }
         
         // If the metadata says that the message was too large then we should show the generic
         // notification (this is a valid case)
@@ -449,10 +439,7 @@ public enum PushNotificationAPI {
     
     @discardableResult private static func getOrGenerateEncryptionKey(using dependencies: Dependencies) throws -> Data {
         do {
-            var encryptionKey: Data = try SSKDefaultKeychainStorage.shared.data(
-                forService: keychainService,
-                key: encryptionKeyKey
-            )
+            var encryptionKey: Data = try Singleton.keychain.data(forKey: .pushNotificationEncryptionKey)
             defer { encryptionKey.resetBytes(in: 0..<encryptionKey.count) }
             
             guard encryptionKey.count == encryptionKeyLength else { throw StorageError.invalidKeySpec }
@@ -467,11 +454,7 @@ public enum PushNotificationAPI {
                         var keySpec: Data = try Randomness.generateRandomBytes(numberBytes: encryptionKeyLength)
                         defer { keySpec.resetBytes(in: 0..<keySpec.count) } // Reset content immediately after use
                         
-                        try SSKDefaultKeychainStorage.shared.set(
-                            data: keySpec,
-                            service: keychainService,
-                            key: encryptionKeyKey
-                        )
+                        try Singleton.keychain.set(data: keySpec, forKey: .pushNotificationEncryptionKey)
                         return keySpec
                     }
                     catch {
@@ -494,6 +477,10 @@ public enum PushNotificationAPI {
                     throw StorageError.keySpecInaccessible
             }
         }
+    }
+    
+    public static func resetKeys() {
+        try? Singleton.keychain.remove(key: .pushNotificationEncryptionKey)
     }
     
     // MARK: - Convenience

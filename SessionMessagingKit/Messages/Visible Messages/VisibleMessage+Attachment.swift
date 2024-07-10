@@ -56,9 +56,9 @@ public extension VisibleMessage {
                 guard
                     let fileName: String = proto.fileName,
                     let fileExtension: String = URL(string: fileName)?.pathExtension
-                else { return OWSMimeTypeApplicationOctetStream }
+                else { return MimeTypeUtil.MimeType.applicationOctetStream }
                 
-                return (MIMETypeUtil.mimeType(forFileExtension: fileExtension) ?? OWSMimeTypeApplicationOctetStream)
+                return (MimeTypeUtil.mimeType(for: fileExtension) ?? MimeTypeUtil.MimeType.applicationOctetStream)
             }
             
             return VMAttachment(

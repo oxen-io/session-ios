@@ -7,7 +7,6 @@ import DifferenceKit
 import SessionUIKit
 import SessionMessagingKit
 import SessionUtilitiesKit
-import SignalCoreKit
 
 class HelpViewModel: SessionTableViewModel, NavigatableStateHolder, ObservableTableSource {
     typealias TableItem = Section

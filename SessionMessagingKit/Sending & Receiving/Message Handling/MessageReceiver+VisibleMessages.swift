@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
@@ -77,7 +76,7 @@ extension MessageReceiver {
         }()
         let variant: Interaction.Variant = try {
             guard
-                let senderSessionId: SessionId = SessionId(from: sender),
+                let senderSessionId: SessionId = try? SessionId(from: sender),
                 let openGroup: OpenGroup = maybeOpenGroup
             else {
                 return (sender == currentUserPublicKey ?
@@ -90,25 +89,16 @@ extension MessageReceiver {
             switch senderSessionId.prefix {
                 case .blinded15, .blinded25:
                     guard
-                        let userEdKeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db),
-                        let blindedKeyPair: KeyPair = dependencies.crypto.generate(
-                            .blindedKeyPair(
-                                serverPublicKey: openGroup.publicKey,
-                                edKeyPair: userEdKeyPair,
-                                using: dependencies
+                        dependencies.crypto.verify(
+                            .sessionId(
+                                currentUserPublicKey,
+                                matchesBlindedId: sender,
+                                serverPublicKey: openGroup.publicKey
                             )
                         )
                     else { return .standardIncoming }
                     
-                    let senderIdCurrentUserBlinded: Bool = (
-                        sender == SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString ||
-                        sender == SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString
-                    )
-                    
-                    return (senderIdCurrentUserBlinded ?
-                        .standardOutgoing :
-                        .standardIncoming
-                    )
+                    return .standardOutgoing
                     
                 case .standard, .unblinded:
                     return (sender == currentUserPublicKey ?

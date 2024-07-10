@@ -917,7 +917,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
             }
 
             // Don't back up ProxiedContent downloads.
-            OWSFileSystem.protectFileOrFolder(atPath: dirPath)
+            try? FileSystem.protectFileOrFolder(at: dirPath)
         } catch {
             downloadFolderPath = tempDirPath
         }

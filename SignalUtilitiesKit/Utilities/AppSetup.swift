@@ -14,7 +14,8 @@ public enum AppSetup {
         retrySetupIfDatabaseInvalid: Bool = false,
         appSpecificBlock: @escaping () -> (),
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
-        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> ()
+        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
         // If we've already run the app setup then only continue under certain circumstances
         guard !AppSetup.hasRun.wrappedValue else {
@@ -28,7 +29,8 @@ public enum AppSetup {
                         retrySetupIfDatabaseInvalid: false, // Don't want to get stuck in a loop
                         appSpecificBlock: appSpecificBlock,
                         migrationProgressChanged: migrationProgressChanged,
-                        migrationsCompletion: migrationsCompletion
+                        migrationsCompletion: migrationsCompletion,
+                        using: dependencies
                     )
                     
                 default:
@@ -42,23 +44,22 @@ public enum AppSetup {
         
         AppSetup.hasRun.mutate { $0 = true }
         
-        var backgroundTask: OWSBackgroundTask? = OWSBackgroundTask(labelStr: #function)
+        var backgroundTask: SessionBackgroundTask? = SessionBackgroundTask(label: #function)
         
         DispatchQueue.global(qos: .userInitiated).async {
             // Order matters here.
             //
             // All of these "singletons" should have any dependencies used in their
             // initializers injected.
-            OWSBackgroundTaskManager.shared().observeNotifications()
+            Singleton.backgroundTaskManager.startObservingNotifications()
             
             // Attachments can be stored to NSTemporaryDirectory()
             // If you receive a media message while the device is locked, the download will fail if
             // the temporary directory is NSFileProtectionComplete
-            let success: Bool = OWSFileSystem.protectFileOrFolder(
-                atPath: NSTemporaryDirectory(),
+            try? FileSystem.protectFileOrFolder(
+                at: NSTemporaryDirectory(),
                 fileProtectionType: .completeUntilFirstUserAuthentication
             )
-            assert(success)
 
             SessionEnvironment.shared = SessionEnvironment(
                 audioSession: OWSAudioSession(),
@@ -73,7 +74,8 @@ public enum AppSetup {
             runPostSetupMigrations(
                 backgroundTask: backgroundTask,
                 migrationProgressChanged: migrationProgressChanged,
-                migrationsCompletion: migrationsCompletion
+                migrationsCompletion: migrationsCompletion,
+                using: dependencies
             )
             
             // The 'if' is only there to prevent the "variable never read" warning from showing
@@ -82,11 +84,12 @@ public enum AppSetup {
     }
     
     public static func runPostSetupMigrations(
-        backgroundTask: OWSBackgroundTask? = nil,
+        backgroundTask: SessionBackgroundTask? = nil,
         migrationProgressChanged: ((CGFloat, TimeInterval) -> ())? = nil,
-        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> ()
+        migrationsCompletion: @escaping (Result<Void, Error>, Bool) -> (),
+        using dependencies: Dependencies
     ) {
-        var backgroundTask: OWSBackgroundTask? = (backgroundTask ?? OWSBackgroundTask(labelStr: #function))
+        var backgroundTask: SessionBackgroundTask? = (backgroundTask ?? SessionBackgroundTask(label: #function))
         
         Storage.shared.perform(
             migrationTargets: [
@@ -105,19 +108,21 @@ public enum AppSetup {
                         // SessionUtil state
                         LibSession.loadState(
                             db,
-                            userPublicKey: getUserHexEncodedPublicKey(db),
-                            ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey
+                            userPublicKey: getUserHexEncodedPublicKey(db, using: dependencies),
+                            ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey,
+                            using: dependencies
                         )
                 }
             },
             onComplete: { result, needsConfigSync in
                 // The 'needsConfigSync' flag should be based on whether either a migration or the
                 // configs need to be sync'ed
-                migrationsCompletion(result, (needsConfigSync || LibSession.needsSync))
+                migrationsCompletion(result, (needsConfigSync || dependencies.caches[.libSession].needsSync))
                 
                 // The 'if' is only there to prevent the "variable never read" warning from showing
                 if backgroundTask != nil { backgroundTask = nil }
-            }
+            },
+            using: dependencies
         )
     }
 }

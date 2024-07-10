@@ -34,8 +34,8 @@ func any() -> String { "" }
 func any() -> Data { Data() }
 func any() -> Bool { false }
 func any() -> Dependencies {
-    Dependencies(
-        storage: SynchronousStorage(customWriter: try! DatabaseQueue()),
+    let result: Dependencies = Dependencies(
+        storage: nil,
         network: MockNetwork(),
         crypto: MockCrypto(),
         standardUserDefaults: MockUserDefaults(),
@@ -46,6 +46,10 @@ func any() -> Dependencies {
         fixedTime: 0,
         forceSynchronous: true
     )
+    let storage: SynchronousStorage = SynchronousStorage(customWriter: try! DatabaseQueue(), using: result)
+    result.storage = storage
+    
+    return result
 }
 
 func anyAny() -> Any { 0 }              // Unique name for compilation performance reasons

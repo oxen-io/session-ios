@@ -75,13 +75,13 @@ final class CallMessageCell: MessageCell {
             withInset: -((CallMessageCell.inset * 2) + infoImageView.bounds.size.width)
         )
         label.pin(.bottom, to: .bottom, of: result, withInset: -CallMessageCell.inset)
+        
         result.addSubview(iconImageView)
-        
-        iconImageView.autoVCenterInSuperview()
+        iconImageView.center(.vertical, in: result)
         iconImageView.pin(.left, to: .left, of: result, withInset: CallMessageCell.inset)
-        result.addSubview(infoImageView)
         
-        infoImageView.autoVCenterInSuperview()
+        result.addSubview(infoImageView)
+        infoImageView.center(.vertical, in: result)
         infoImageView.pin(.right, to: .right, of: result, withInset: -CallMessageCell.inset)
         
         return result

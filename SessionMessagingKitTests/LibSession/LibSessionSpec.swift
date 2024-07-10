@@ -1,9 +1,6 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
-
-import Foundation
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 import SessionMessagingKit

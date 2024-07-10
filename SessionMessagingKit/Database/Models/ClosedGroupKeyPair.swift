@@ -49,9 +49,10 @@ public struct ClosedGroupKeyPair: Codable, Equatable, FetchableRecord, Persistab
         
         // This value has a unique constraint and is used for key de-duping so the formula
         // shouldn't be modified unless all existing keys have their values updated
-        self.threadKeyPairHash = Insecure.MD5
+        self.threadKeyPairHash = Data(Insecure.MD5
             .hash(data: threadId.bytes + publicKey.bytes + secretKey.bytes)
-            .hexString
+            .makeIterator())
+            .toHexString()
     }
 }
 

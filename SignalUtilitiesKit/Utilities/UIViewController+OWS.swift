@@ -102,10 +102,10 @@ public extension UIViewController {
             height: ((backButton.image(for: .normal)?.size.height ?? 0) + extraHeightPadding)
         )
 
-        let backItem: UIBarButtonItem = UIBarButtonItem(
-            customView: backButton,
-            accessibilityIdentifier: "\(type(of: self)).back"
-        )
+        let backItem: UIBarButtonItem = UIBarButtonItem(customView: backButton)
+        backButton.accessibilityIdentifier = "\(type(of: self)).back"
+        backButton.accessibilityLabel = "\(type(of: self)).back"
+        backItem.isAccessibilityElement = true
         backItem.width = backButton.frame.width
 
         return backItem;

@@ -258,7 +258,7 @@ class SOGSMessageSpec: QuickSpec {
                         // MARK: -------- succeeds if it succeeds verification
                         it("succeeds if it succeeds verification") {
                             mockCrypto
-                                .when { $0.verify(.signatureEd25519(any(), publicKey: any(), data: any())) }
+                                .when { $0.verify(.signatureXed25519(any(), curve25519PublicKey: anyArray(), data: any())) }
                                 .thenReturn(true)
                             
                             expect {
@@ -270,7 +270,7 @@ class SOGSMessageSpec: QuickSpec {
                         // MARK: -------- provides the correct values as parameters
                         it("provides the correct values as parameters") {
                             mockCrypto
-                                .when { $0.verify(.signatureEd25519(any(), publicKey: any(), data: any())) }
+                                .when { $0.verify(.signatureXed25519(any(), curve25519PublicKey: anyArray(), data: any())) }
                                 .thenReturn(true)
                             
                             _ = try? decoder.decode(OpenGroupAPI.Message.self, from: messageData)
@@ -278,9 +278,9 @@ class SOGSMessageSpec: QuickSpec {
                             expect(mockCrypto)
                                 .to(call(matchingParameters: true) {
                                     $0.verify(
-                                        .signatureEd25519(
+                                        .signatureXed25519(
                                             Data(base64Encoded: "VGVzdFNpZ25hdHVyZQ==")!,
-                                            publicKey: Data(hex: TestConstants.publicKey),
+                                            curve25519PublicKey: Data(hex: TestConstants.publicKey).bytes,
                                             data: Data(base64Encoded: "VGVzdERhdGE=")!
                                         )
                                     )
@@ -290,7 +290,7 @@ class SOGSMessageSpec: QuickSpec {
                         // MARK: -------- throws if it fails verification
                         it("throws if it fails verification") {
                             mockCrypto
-                                .when { $0.verify(.signatureEd25519(any(), publicKey: any(), data: any())) }
+                                .when { $0.verify(.signatureXed25519(any(), curve25519PublicKey: anyArray(), data: any())) }
                                 .thenReturn(false)
                             
                             expect {

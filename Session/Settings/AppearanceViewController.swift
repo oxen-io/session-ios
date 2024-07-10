@@ -268,8 +268,8 @@ final class AppearanceViewController: BaseVC {
         nightModeStackView.pin(.leading, to: .leading, of: contentView)
         nightModeStackView.set(.width, to: .width, of: contentView)
         
-        nightModeToggleLabel.setContentHuggingVerticalHigh()
-        nightModeToggleLabel.setCompressionResistanceVerticalHigh()
+        nightModeToggleLabel.setContentHugging(.vertical, to: .required)
+        nightModeToggleLabel.setCompressionResistance(.vertical, to: .required)
         nightModeToggleLabel.center(.vertical, in: nightModeToggleView)
         nightModeToggleLabel.pin(.leading, to: .leading, of: nightModeToggleView, withInset: Values.largeSpacing)
         

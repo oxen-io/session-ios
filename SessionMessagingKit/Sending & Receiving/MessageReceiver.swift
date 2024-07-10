@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUIKit
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -50,18 +49,20 @@ public enum MessageReceiver {
                     return openGroupId
                 }
                 
-            case (_, .openGroupInbox(let timestamp, let messageServerId, let serverPublicKey, let blindedPublicKey, let isOutgoing)):
+            case (_, .openGroupInbox(let timestamp, let messageServerId, let serverPublicKey, let senderId, let recipientId)):
                 guard let userEd25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db) else {
                     throw MessageReceiverError.noUserED25519KeyPair
                 }
                 
-                (plaintext, sender) = try decryptWithSessionBlindingProtocol(
-                    data: data,
-                    isOutgoing: isOutgoing,
-                    otherBlindedPublicKey: blindedPublicKey,
-                    with: serverPublicKey,
-                    userEd25519KeyPair: userEd25519KeyPair,
-                    using: dependencies
+                (plaintext, sender) = try dependencies.crypto.tryGenerate(
+                    .plaintextWithSessionBlindingProtocol(
+                        db,
+                        ciphertext: data,
+                        senderId: senderId,
+                        recipientId: recipientId,
+                        serverPublicKey: serverPublicKey,
+                        using: dependencies
+                    )
                 )
                 
                 plaintext = plaintext.removePadding()   // Remove the padding
@@ -84,9 +85,12 @@ public enum MessageReceiver {
                             throw MessageReceiverError.noUserX25519KeyPair
                         }
                         
-                        (plaintext, sender) = try decryptWithSessionProtocol(
-                            ciphertext: ciphertext,
-                            using: userX25519KeyPair
+                        (plaintext, sender) = try dependencies.crypto.tryGenerate(
+                            .plaintextWithSessionProtocol(
+                                db,
+                                ciphertext: ciphertext,
+                                using: dependencies
+                            )
                         )
                         plaintext = plaintext.removePadding()   // Remove the padding
                         sentTimestamp = envelope.timestamp
@@ -126,11 +130,14 @@ public enum MessageReceiver {
                             }
                             
                             do {
-                                return try decryptWithSessionProtocol(
-                                    ciphertext: ciphertext,
-                                    using: KeyPair(
-                                        publicKey: keyPair.publicKey.bytes,
-                                        secretKey: keyPair.secretKey.bytes
+                                return try dependencies.crypto.tryGenerate(
+                                    .plaintextWithSessionProtocolLegacyGroup(
+                                        ciphertext: ciphertext,
+                                        keyPair: KeyPair(
+                                            publicKey: keyPair.publicKey.bytes,
+                                            secretKey: keyPair.secretKey.bytes
+                                        ),
+                                        using: dependencies
                                     )
                                 )
                             }

@@ -10,7 +10,8 @@ class SynchronousStorage: Storage {
         customWriter: DatabaseWriter? = nil,
         migrationTargets: [MigratableTarget.Type]? = nil,
         migrations: [Storage.KeyedMigration]? = nil,
-        initialData: ((Database) throws -> ())? = nil
+        initialData: ((Database) throws -> ())? = nil,
+        using dependencies: Dependencies
     ) {
         super.init(customWriter: customWriter)
         
@@ -21,7 +22,8 @@ class SynchronousStorage: Storage {
                 async: false,
                 onProgressUpdate: nil,
                 onMigrationRequirement: { _, _ in },
-                onComplete: { _, _ in }
+                onComplete: { _, _ in },
+                using: dependencies
             )
         }
         
@@ -32,7 +34,8 @@ class SynchronousStorage: Storage {
                 async: false,
                 onProgressUpdate: nil,
                 onMigrationRequirement: { _, _ in },
-                onComplete: { _, _ in }
+                onComplete: { _, _ in },
+                using: dependencies
             )
         }
         

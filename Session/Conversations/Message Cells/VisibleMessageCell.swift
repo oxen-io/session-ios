@@ -874,7 +874,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
             // For open groups only attempt to start a conversation if the author has a blinded id
             guard cellViewModel.threadVariant != .community else {
                 // FIXME: Add in support for opening a conversation with a 'blinded25' id
-                guard SessionId.Prefix(from: cellViewModel.authorId) == .blinded15 else { return }
+                guard (try? SessionId.Prefix(from: cellViewModel.authorId)) == .blinded15 else { return }
                 
                 delegate?.startThread(
                     with: cellViewModel.authorId,

@@ -419,8 +419,6 @@ public extension Message {
         openGroupServerPublicKey: String,
         message: OpenGroupAPI.DirectMessage,
         data: Data,
-        isOutgoing: Bool,
-        otherBlindedPublicKey: String,
         using dependencies: Dependencies = Dependencies()
     ) throws -> ProcessedMessage? {
         return try processRawReceivedMessage(
@@ -430,8 +428,8 @@ public extension Message {
                 timestamp: message.posted,
                 messageServerId: message.id,
                 serverPublicKey: openGroupServerPublicKey,
-                blindedPublicKey: otherBlindedPublicKey,
-                isOutgoing: isOutgoing
+                senderId: message.sender,
+                recipientId: message.recipient
             ),
             using: dependencies
         )

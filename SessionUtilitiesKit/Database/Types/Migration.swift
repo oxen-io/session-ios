@@ -21,7 +21,7 @@ public protocol Migration {
     /// This includes any tables which have been permanently dropped as part of this migration
     static var droppedTables: [(TableRecord & FetchableRecord).Type] { get }
     
-    static func migrate(_ db: Database) throws
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws
 }
 
 public extension Migration {
@@ -29,7 +29,8 @@ public extension Migration {
     
     static func loggedMigrate(
         _ storage: Storage?,
-        targetIdentifier: TargetMigrations.Identifier
+        targetIdentifier: TargetMigrations.Identifier,
+        using dependencies: Dependencies
     ) -> ((_ db: Database) throws -> ()) {
         return { (db: Database) in
             Log.info("[Migration Info] Starting \(targetIdentifier.key(with: self))", silenceForTests: true)
@@ -37,7 +38,7 @@ public extension Migration {
             storage?.internalCurrentlyRunningMigration.mutate { $0 = (targetIdentifier, self) }
             defer { storage?.internalCurrentlyRunningMigration.mutate { $0 = nil } }
             
-            try migrate(db)
+            try migrate(db, using: dependencies)
             Log.info("[Migration Info] Completed \(targetIdentifier.key(with: self))", silenceForTests: true)
         }
     }

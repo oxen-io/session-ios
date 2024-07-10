@@ -14,7 +14,7 @@ enum _005_FixDeletedMessageReadState: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         _ = try Interaction
             .filter(
                 Interaction.Columns.variant == Interaction.Variant.standardIncomingDeleted ||

@@ -4,7 +4,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import DifferenceKit
 import SessionUtilitiesKit
 

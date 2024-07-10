@@ -206,7 +206,7 @@ public final class JobRunner: JobRunnerType {
     internal var appHasBecomeActive: Atomic<Bool> = Atomic(false)
     internal var perSessionJobsCompleted: Atomic<Set<Int64>> = Atomic([])
     internal var hasCompletedInitialBecomeActive: Atomic<Bool> = Atomic(false)
-    internal var shutdownBackgroundTask: Atomic<OWSBackgroundTask?> = Atomic(nil)
+    internal var shutdownBackgroundTask: Atomic<SessionBackgroundTask?> = Atomic(nil)
     
     private var canStartNonBlockingQueue: Bool {
         blockingQueue.wrappedValue?.hasStartedAtLeastOnce.wrappedValue == true &&
@@ -610,7 +610,7 @@ public final class JobRunner: JobRunnerType {
         
         // Create a backgroundTask to give the queue the chance to properly be drained
         shutdownBackgroundTask.mutate {
-            $0 = OWSBackgroundTask(labelStr: #function) { [weak queue] state in
+            $0 = SessionBackgroundTask(label: #function) { [weak queue] state in
                 // If the background task didn't succeed then trigger the onComplete (and hope we have
                 // enough time to complete it's logic)
                 guard state != .cancelled else {

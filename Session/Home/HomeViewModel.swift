@@ -29,9 +29,11 @@ public class HomeViewModel {
         let userProfile: Profile
     }
     
+    public let dependencies: Dependencies
+    
     // MARK: - Initialization
     
-    init() {
+    init(using dependencies: Dependencies) {
         typealias InitialData = (
             showViewedSeedBanner: Bool,
             hasHiddenMessageRequests: Bool,
@@ -46,6 +48,7 @@ public class HomeViewModel {
             )
         }
         
+        self.dependencies = dependencies
         self.state = State(
             showViewedSeedBanner: (initialData?.showViewedSeedBanner ?? true),
             hasHiddenMessageRequests: (initialData?.hasHiddenMessageRequests ?? false),

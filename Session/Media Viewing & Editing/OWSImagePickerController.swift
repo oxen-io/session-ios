@@ -10,6 +10,6 @@ import SignalUtilitiesKit
     // MARK: Orientation
 
     override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return DefaultUIInterfaceOrientationMask()
+        return (UIDevice.current.isIPad ? .all : .portrait)
     }
 }

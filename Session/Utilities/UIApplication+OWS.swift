@@ -1,9 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
-import SessionUtilitiesKit
 import UIKit
-import SignalCoreKit
+import SessionUtilitiesKit
 
 @objc public extension UIApplication {
 
@@ -22,7 +20,7 @@ import SignalCoreKit
         else { return nil }
         
         guard let viewController: UIViewController = window.rootViewController else {
-            owsFailDebug("Missing root view controller.")
+            Log.error("[UIApplication] Missing root view controller.")
             return nil
         }
         return viewController.findFrontmostViewController(ignoringAlerts: ignoringAlerts)

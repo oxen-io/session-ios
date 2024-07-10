@@ -3,7 +3,8 @@
 // stringlint:disable
 
 import Foundation
-import SignalCoreKit
+import QuartzCore
+import SessionUtilitiesKit
 
 /// Benchmark async code by calling the passed in block parameter when the work
 /// is done.
@@ -23,7 +24,7 @@ public func BenchAsync(title: String, block: (@escaping () -> Void) -> Void) {
     block {
         let timeElapsed = CACurrentMediaTime() - startTime
         let formattedTime = String(format: "%0.2fms", timeElapsed * 1000)
-        Logger.debug("[Bench] title: \(title), duration: \(formattedTime)")
+        Log.debug("[Bench] title: \(title), duration: \(formattedTime)")
     }
 }
 
@@ -75,7 +76,7 @@ public func BenchEventStart(title: String, eventId: BenchmarkEventId) {
 
 public func BenchEventComplete(eventId: BenchmarkEventId) {
     guard let event = runningEvents.removeValue(forKey: eventId) else {
-        Logger.debug("no active event with id: \(eventId)")
+        Log.debug("[Bench] No active event with id: \(eventId)")
         return
     }
 

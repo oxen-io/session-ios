@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -899,12 +898,15 @@ public extension Interaction {
         if let openGroup: OpenGroup = try? OpenGroup.fetchOne(db, id: threadId) {
             if
                 let userEd25519KeyPair: KeyPair = Identity.fetchUserEd25519KeyPair(db),
-                let blindedKeyPair: KeyPair = dependencies.crypto.generate(
-                    .blindedKeyPair(serverPublicKey: openGroup.publicKey, edKeyPair: userEd25519KeyPair, using: dependencies)
+                let blinded15KeyPair: KeyPair = dependencies.crypto.generate(
+                    .blinded15KeyPair(serverPublicKey: openGroup.publicKey, ed25519SecretKey: userEd25519KeyPair.secretKey)
+                ),
+                let blinded25KeyPair: KeyPair = dependencies.crypto.generate(
+                    .blinded25KeyPair(serverPublicKey: openGroup.publicKey, ed25519SecretKey: userEd25519KeyPair.secretKey)
                 )
             {
-                publicKeysToCheck.append(SessionId(.blinded15, publicKey: blindedKeyPair.publicKey).hexString)
-                publicKeysToCheck.append(SessionId(.blinded25, publicKey: blindedKeyPair.publicKey).hexString)
+                publicKeysToCheck.append(SessionId(.blinded15, publicKey: blinded15KeyPair.publicKey).hexString)
+                publicKeysToCheck.append(SessionId(.blinded25, publicKey: blinded25KeyPair.publicKey).hexString)
             }
         }
         

@@ -1,7 +1,6 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 final class MainAppContext: AppContext {
@@ -10,7 +9,19 @@ final class MainAppContext: AppContext {
     
     let appLaunchTime = Date()
     let isMainApp: Bool = true
-    var isMainAppAndActive: Bool { UIApplication.shared.applicationState == .active }
+    var isMainAppAndActive: Bool {
+        var result: Bool = false
+        
+        switch Thread.isMainThread {
+            case true: result = (UIApplication.shared.applicationState == .active)
+            case false:
+                DispatchQueue.main.sync {
+                    result = (UIApplication.shared.applicationState == .active)
+                }
+        }
+        
+        return result
+    }
     var frontmostViewController: UIViewController? { UIApplication.shared.frontmostViewControllerIgnoringAlerts }
     
     var mainWindow: UIWindow?
@@ -71,7 +82,7 @@ final class MainAppContext: AppContext {
     // MARK: - Notifications
     
     @objc private func applicationWillEnterForeground(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .inactive
 
@@ -82,7 +93,7 @@ final class MainAppContext: AppContext {
     }
 
     @objc private func applicationDidEnterBackground(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
         
         self.reportedApplicationState = .background
 
@@ -93,7 +104,7 @@ final class MainAppContext: AppContext {
     }
 
     @objc private func applicationWillResignActive(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .inactive
 
@@ -104,7 +115,7 @@ final class MainAppContext: AppContext {
     }
 
     @objc private func applicationDidBecomeActive(notification: NSNotification) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         self.reportedApplicationState = .active
 
@@ -197,10 +208,9 @@ final class MainAppContext: AppContext {
                     else { return }
                 }
                 
-                if (!OWSFileSystem.deleteFile(filePath)) {
-                    // This can happen if the app launches before the phone is unlocked.
-                    // Clean up will occur when app becomes active.
-                }
+                // This can happen if the app launches before the phone is unlocked.
+                // Clean up will occur when app becomes active.
+                try? FileSystem.deleteFile(at: filePath)
             }
         }
     }

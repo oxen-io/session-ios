@@ -12,7 +12,7 @@ enum _005_AddJobUniqueHash: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Job.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Add `uniqueHashValue` to the job table
         try db.alter(table: Job.self) { t in
             t.add(.uniqueHashValue, .integer)

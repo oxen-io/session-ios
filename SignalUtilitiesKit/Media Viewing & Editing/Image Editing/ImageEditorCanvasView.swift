@@ -2,7 +2,6 @@
 
 import UIKit
 import SessionUIKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public class EditorTextLayer: CATextLayer {
@@ -16,14 +15,13 @@ public class EditorTextLayer: CATextLayer {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 }
 
 // MARK: -
 
 // A view for previewing an image editor model.
-@objc
 public class ImageEditorCanvasView: UIView {
 
     private let model: ImageEditorModel
@@ -37,9 +35,7 @@ public class ImageEditorCanvasView: UIView {
     // We leave space for 10k items/layers of each type.
     private static let zPositionSpacing: CGFloat = 0.0001
 
-    @objc
-    public required init(model: ImageEditorModel,
-                         itemIdsToIgnore: [String] = []) {
+    public required init(model: ImageEditorModel, itemIdsToIgnore: [String] = []) {
         self.model = model
         self.itemIdsToIgnore = itemIdsToIgnore
 
@@ -50,7 +46,7 @@ public class ImageEditorCanvasView: UIView {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - Views
@@ -70,7 +66,6 @@ public class ImageEditorCanvasView: UIView {
 
     private var imageLayer = CALayer()
 
-    @objc
     public func configureSubviews() {
         self.themeBackgroundColor = .clear
         self.isOpaque = false
@@ -103,7 +98,7 @@ public class ImageEditorCanvasView: UIView {
             strongSelf.updateAllContent()
         }
         clipView.addSubview(contentView)
-        contentView.autoPinEdgesToSuperviewEdges()
+        contentView.pin(to: clipView)
 
         updateLayout()
     }
@@ -121,7 +116,7 @@ public class ImageEditorCanvasView: UIView {
     public class func updateContentLayout(transform: ImageEditorTransform,
                                           contentView: UIView) -> [NSLayoutConstraint] {
         guard let superview = contentView.superview else {
-            owsFailDebug("Content view has no superview.")
+            Log.error("[ImageEditorCanvasView] Content view has no superview.")
             return []
         }
         let outputSizePixels = transform.outputSizePixels
@@ -131,21 +126,17 @@ public class ImageEditorCanvasView: UIView {
 
         let screenSize = UIScreen.main.bounds.size
         let maxScreenSize = max(screenSize.width, screenSize.height)
-        let outputSizePoints = CGSize(width: maxScreenSize, height: maxScreenSize)
         // TODO: Add a "shouldFill" parameter.
         //        let outputSizePoints = CGSizeScale(outputSizePixels, 1.0 / UIScreen.main.scale)
-        NSLayoutConstraint.autoSetPriority(UILayoutPriority.defaultLow) {
-            constraints.append(contentsOf: contentView.autoSetDimensions(to: outputSizePoints))
-        }
+        constraints.append(contentView.set(.width, to: maxScreenSize).setting(priority: .defaultLow))
+        constraints.append(contentView.set(.height, to: maxScreenSize).setting(priority: .defaultLow))
         return constraints
     }
 
-    @objc
     public func loadSrcImage() -> UIImage? {
         return ImageEditorCanvasView.loadSrcImage(model: model)
     }
 
-    @objc
     public class func loadSrcImage(model: ImageEditorModel) -> UIImage? {
         let srcImageData: Data
         do {
@@ -153,21 +144,21 @@ public class ImageEditorCanvasView: UIView {
             let srcImageUrl = URL(fileURLWithPath: srcImagePath)
             srcImageData = try Data(contentsOf: srcImageUrl)
         } catch {
-            owsFailDebug("Couldn't parse srcImageUrl")
+            Log.error("[ImageEditorCanvasView] Couldn't parse srcImageUrl")
             return nil
         }
         // We use this constructor so that we can specify the scale.
         //
         // UIImage(contentsOfFile:) will sometimes use device scale.
         guard let srcImage = UIImage(data: srcImageData, scale: 1.0) else {
-            owsFailDebug("Couldn't load background image.")
+            Log.error("[ImageEditorCanvasView] Couldn't load background image.")
             return nil
         }
         // We normalize the image orientation here for the sake
         // of code simplicity.  We could modify the image layer's
         // transform to handle the normalization, which would
         // have perf benefits.
-        return srcImage.normalized()
+        return srcImage.normalizedImage()
     }
 
     // MARK: - Content
@@ -175,7 +166,7 @@ public class ImageEditorCanvasView: UIView {
     var contentLayerMap = [String: CALayer]()
 
     internal func updateAllContent() {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // Don't animate changes.
         CATransaction.begin()
@@ -223,7 +214,7 @@ public class ImageEditorCanvasView: UIView {
     }
 
     internal func updateContent(changedItemIds: [String]) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // Don't animate changes.
         CATransaction.begin()
@@ -297,11 +288,11 @@ public class ImageEditorCanvasView: UIView {
 
     public class func imageFrame(forViewSize viewSize: CGSize, imageSize: CGSize, transform: ImageEditorTransform) -> CGRect {
         guard viewSize.width > 0, viewSize.height > 0 else {
-            owsFailDebug("Invalid viewSize")
+            Log.error("[ImageEditorCanvasView] Invalid viewSize")
             return .zero
         }
         guard imageSize.width > 0, imageSize.height > 0 else {
-            owsFailDebug("Invalid imageSize")
+            Log.error("[ImageEditorCanvasView] Invalid imageSize")
             return .zero
         }
 
@@ -337,7 +328,7 @@ public class ImageEditorCanvasView: UIView {
                                          transform: ImageEditorTransform,
                                          viewSize: CGSize) -> CALayer? {
         guard let srcImage = loadSrcImage(model: model) else {
-            owsFailDebug("Could not load src image.")
+            Log.error("[ImageEditorCanvasView] Could not load src image.")
             return nil
         }
         let imageLayer = CALayer()
@@ -354,15 +345,15 @@ public class ImageEditorCanvasView: UIView {
                                     model: ImageEditorModel,
                                     transform: ImageEditorTransform,
                                     viewSize: CGSize) -> CALayer? {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         switch item.itemType {
         case .test:
-            owsFailDebug("Unexpected test item.")
+                Log.error("[ImageEditorCanvasView] Unexpected test item.")
             return nil
         case .stroke:
             guard let strokeItem = item as? ImageEditorStrokeItem else {
-                owsFailDebug("Item has unexpected type: \(type(of: item)).")
+                Log.error("[ImageEditorCanvasView] Item has unexpected type: \(type(of: item)).")
                 return nil
             }
             return strokeLayerForItem(item: strokeItem,
@@ -371,7 +362,7 @@ public class ImageEditorCanvasView: UIView {
                                       viewSize: viewSize)
         case .text:
             guard let textItem = item as? ImageEditorTextItem else {
-                owsFailDebug("Item has unexpected type: \(type(of: item)).")
+                Log.error("[ImageEditorCanvasView] Item has unexpected type: \(type(of: item)).")
                 return nil
             }
             return textLayerForItem(item: textItem,
@@ -385,7 +376,7 @@ public class ImageEditorCanvasView: UIView {
                                           model: ImageEditorModel,
                                           transform: ImageEditorTransform,
                                           viewSize: CGSize) -> CALayer? {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         let strokeWidth = ImageEditorStrokeItem.strokeWidth(forUnitStrokeWidth: item.unitStrokeWidth,
                                                             dstSize: viewSize)
@@ -426,18 +417,20 @@ public class ImageEditorCanvasView: UIView {
             } else if index == 0 {
                 // First sample.
                 let nextPoint = points[index + 1]
-                forwardVector = CGPointSubtract(nextPoint, point)
+                forwardVector = nextPoint.subtracting(point)
             } else if index == points.count - 1 {
                 // Last sample.
                 let previousPoint = points[index - 1]
-                forwardVector = CGPointSubtract(point, previousPoint)
+                forwardVector = point.subtracting(previousPoint)
             } else {
                 // Middle samples.
                 let previousPoint = points[index - 1]
-                let previousPointForwardVector = CGPointSubtract(point, previousPoint)
+                let previousPointForwardVector = point.subtracting(previousPoint)
                 let nextPoint = points[index + 1]
-                let nextPointForwardVector = CGPointSubtract(nextPoint, point)
-                forwardVector = CGPointScale(CGPointAdd(previousPointForwardVector, nextPointForwardVector), 0.5)
+                let nextPointForwardVector = nextPoint.subtracting(point)
+                forwardVector = previousForwardVector
+                    .adding(nextPointForwardVector)
+                    .scaled(by: 0.5)
             }
 
             if index == 0 {
@@ -461,8 +454,8 @@ public class ImageEditorCanvasView: UIView {
                 //
                 // TODO: Tune this variable once we have stroke input.
                 let controlPointFactor: CGFloat = 0.25
-                let controlPoint1 = CGPointAdd(previousPoint, CGPointScale(previousForwardVector, +controlPointFactor))
-                let controlPoint2 = CGPointAdd(point, CGPointScale(forwardVector, -controlPointFactor))
+                let controlPoint1 = previousPoint.adding(previousForwardVector.scaled(by: controlPointFactor))
+                let controlPoint2 = point.adding(forwardVector.scaled(by: -controlPointFactor))
                 // We're using Cubic curves.
                 bezierPath.addCurve(to: point, controlPoint1: controlPoint1, controlPoint2: controlPoint2)
             }
@@ -483,7 +476,7 @@ public class ImageEditorCanvasView: UIView {
                                         zPositionBase: CGFloat) -> CGFloat {
         let itemIds = model.itemIds()
         guard let itemIndex = itemIds.firstIndex(of: item.itemId) else {
-            owsFailDebug("Couldn't find index of item.")
+            Log.error("[ImageEditorCanvasView] Couldn't find index of item.")
             return zPositionBase
         }
         return zPositionBase + CGFloat(itemIndex) * zPositionSpacing
@@ -493,7 +486,7 @@ public class ImageEditorCanvasView: UIView {
                                         model: ImageEditorModel,
                                         transform: ImageEditorTransform,
                                         viewSize: CGSize) -> CALayer? {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         let imageFrame = ImageEditorCanvasView.imageFrame(forViewSize: viewSize, imageSize: model.srcImageSizePixels, transform: transform)
 
@@ -501,7 +494,7 @@ public class ImageEditorCanvasView: UIView {
         // using the image width as reference.
         let fontSize = item.font.pointSize * imageFrame.size.width / item.fontReferenceImageWidth
 
-        let text = item.text.filterForDisplay ?? ""
+        let text = item.text.filteredForDisplay
         let attributedString: NSMutableAttributedString = NSMutableAttributedString(
             string: text,
             attributes: [ .font: item.font.withSize(fontSize) ]
@@ -544,7 +537,10 @@ public class ImageEditorCanvasView: UIView {
         // is the bounds of the image specified in "canvas" coordinates,
         // so to transform we can simply convert from image frame units.
         let centerInCanvas = item.unitCenter.fromUnitCoordinates(viewBounds: imageFrame)
-        let layerSize = textBounds.size.ceil
+        let layerSize = CGSize(
+            width: ceil(textBounds.size.width),
+            height: ceil(textBounds.size.height)
+        )
         layer.frame = CGRect(origin: CGPoint(x: centerInCanvas.x - layerSize.width * 0.5,
                                              y: centerInCanvas.y - layerSize.height * 0.5),
                              size: layerSize)
@@ -561,7 +557,7 @@ public class ImageEditorCanvasView: UIView {
     //
     // This (simple) smoothing reduces jitter from the touch sensor.
     private class func applySmoothing(to points: [CGPoint]) -> [CGPoint] {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         var result = [CGPoint]()
 
@@ -579,9 +575,13 @@ public class ImageEditorCanvasView: UIView {
                 let lastPoint = points[index - 1]
                 let nextPoint = points[index + 1]
                 let alpha: CGFloat = 0.1
-                let smoothedPoint = CGPointAdd(CGPointScale(point, 1.0 - 2.0 * alpha),
-                                               CGPointAdd(CGPointScale(lastPoint, alpha),
-                                                          CGPointScale(nextPoint, alpha)))
+                let smoothedPoint = point
+                    .scaled(by: 1.0 - 2.0 * alpha)
+                    .adding(
+                        lastPoint
+                            .scaled(by: alpha)
+                            .adding(nextPoint.scaled(by: alpha))
+                    )
                 result.append(smoothedPoint)
             }
         }
@@ -596,17 +596,16 @@ public class ImageEditorCanvasView: UIView {
     // We render using the transform parameter, not the transform from the model.
     // This allows this same method to be used for rendering "previews" for the
     // crop tool and the final output.
-    @objc
     public class func renderForOutput(model: ImageEditorModel, transform: ImageEditorTransform) -> UIImage? {
         // TODO: Do we want to render off the main thread?
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         // Render output at same size as source image.
         let dstSizePixels = transform.outputSizePixels
         let dstScale: CGFloat = 1.0 // The size is specified in pixels, not in points.
         let viewSize = dstSizePixels
 
-        let hasAlpha = NSData.hasAlpha(forValidImageFilePath: model.srcImagePath)
+        let hasAlpha = Data.hasAlpha(forValidImageFilePath: model.srcImagePath)
 
         // We use an UIImageView + UIView.renderAsImage() instead of a CGGraphicsContext
         // Because CALayer.renderInContext() doesn't honor CALayer properties like frame,
@@ -629,23 +628,18 @@ public class ImageEditorCanvasView: UIView {
 
         contentView.layer.setAffineTransform(transform.affineTransform(viewSize: viewSize))
 
-        guard let imageLayer = imageLayerForItem(model: model,
-                                                 transform: transform,
-                                                 viewSize: viewSize) else {
-                                                    owsFailDebug("Could not load src image.")
-                                                    return nil
+        guard let imageLayer = imageLayerForItem(model: model, transform: transform, viewSize: viewSize) else {
+            Log.error("[ImageEditorCanvasView] Could not load src image.")
+            return nil
         }
         imageLayer.contentsScale = dstScale * transform.scaling
         contentView.layer.addSublayer(imageLayer)
 
         var layers = [CALayer]()
         for item in model.items() {
-            guard let layer = layerForItem(item: item,
-                                           model: model,
-                                           transform: transform,
-                                           viewSize: viewSize) else {
-                                            owsFailDebug("Couldn't create layer for item.")
-                                            continue
+            guard let layer = layerForItem(item: item, model: model, transform: transform, viewSize: viewSize) else {
+                Log.error("[ImageEditorCanvasView] Couldn't create layer for item.")
+                continue
             }
             layer.contentsScale = dstScale * transform.scaling * item.outputScale()
             layers.append(layer)
@@ -705,7 +699,10 @@ public class ImageEditorCanvasView: UIView {
                                         transform: ImageEditorTransform) -> CGPoint {
         let imageFrame = self.imageFrame(forViewSize: viewBounds.size, imageSize: model.srcImageSizePixels, transform: transform)
         let affineTransformStart = transform.affineTransform(viewSize: viewBounds.size)
-        let locationInContent = locationInView.minus(viewBounds.center).applyingInverse(affineTransformStart).plus(viewBounds.center)
+        let locationInContent = locationInView
+            .subtracting(viewBounds.center)
+            .applying(affineTransformStart.inverted())
+            .adding(viewBounds.center)
         let locationImageUnit = locationInContent.toUnitCoordinates(viewBounds: imageFrame, shouldClamp: false)
         return locationImageUnit
     }

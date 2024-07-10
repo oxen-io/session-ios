@@ -16,7 +16,8 @@ class IdentitySpec: QuickSpec {
             customWriter: try! DatabaseQueue(),
             migrationTargets: [
                 SNUtilitiesKit.self
-            ]
+            ],
+            using: Dependencies()
         )
         
         // MARK: - an Identity

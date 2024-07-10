@@ -44,7 +44,7 @@ public extension Message {
         ) throws -> Message.Destination {
             switch threadVariant {
                 case .contact:
-                    let prefix: SessionId.Prefix? = SessionId.Prefix(from: threadId)
+                    let prefix: SessionId.Prefix? = try? SessionId.Prefix(from: threadId)
                     
                     if prefix == .blinded15 || prefix == .blinded25 {
                         guard let lookup: BlindedIdLookup = try? BlindedIdLookup.fetchOne(db, id: threadId) else {

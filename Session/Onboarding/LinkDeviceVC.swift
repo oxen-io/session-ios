@@ -8,6 +8,7 @@ import SessionSnodeKit
 import SignalUtilitiesKit
 
 final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControllerDelegate, QRScannerDelegate {
+    private let dependencies: Dependencies
     private let pageVC = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: nil)
     private var pages: [UIViewController] = []
     private var targetVCIndex: Int?
@@ -49,6 +50,18 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         return result
     }()
     
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     // MARK: - Lifecycle
     
     override func viewDidLoad() {
@@ -66,7 +79,7 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         // Tab bar
         view.addSubview(tabBar)
         tabBar.pin(.leading, to: .leading, of: view)
-        tabBarTopConstraint = tabBar.autoPinEdge(toSuperviewSafeArea: .top)
+        tabBarTopConstraint = tabBar.pin(.top, to: .top, of: view.safeAreaLayoutGuide)
         view.pin(.trailing, to: .trailing, of: tabBar)
         
         // Page VC constraints
@@ -94,7 +107,7 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        tabBarTopConstraint.constant = navigationController!.navigationBar.height()
+        tabBarTopConstraint.constant = navigationController!.navigationBar.bounds.height
     }
     
     // MARK: - General
@@ -155,12 +168,13 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
             .preregister(
                 with: seed,
                 ed25519KeyPair: ed25519KeyPair,
-                x25519KeyPair: x25519KeyPair
+                x25519KeyPair: x25519KeyPair,
+                using: dependencies
             )
         
-            // Otherwise continue on to request push notifications permissions
-            let pnModeVC: PNModeVC = PNModeVC(flow: .link)
-            self.navigationController?.pushViewController(pnModeVC, animated: true)
+        // Otherwise continue on to request push notifications permissions
+        let pnModeVC: PNModeVC = PNModeVC(flow: .link, using: dependencies)
+        self.navigationController?.pushViewController(pnModeVC, animated: true)
     }
 }
 

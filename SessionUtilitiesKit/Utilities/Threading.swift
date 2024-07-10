@@ -2,8 +2,8 @@
 
 import Foundation
 
-@objc public class Threading: NSObject {
-    @objc public static func dispatchMainThreadSafe(_ closure: @escaping () -> ()) {
+public class Threading {
+    public static func dispatchMainThreadSafe(_ closure: @escaping () -> ()) {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { dispatchMainThreadSafe(closure) }
             return
@@ -12,7 +12,7 @@ import Foundation
         closure()
     }
 
-    @objc public static func dispatchSyncMainThreadSafe(_ closure: @escaping () -> ()) {
+    public static func dispatchSyncMainThreadSafe(_ closure: @escaping () -> ()) {
         guard Thread.isMainThread else {
             DispatchQueue.main.sync { dispatchSyncMainThreadSafe(closure) }
             return

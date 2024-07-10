@@ -18,6 +18,8 @@ public class SnodeAuthenticatedRequestBody: Encodable {
     private let subkey: String?
     internal let timestampMs: UInt64?
     
+    var verificationBytes: [UInt8] { preconditionFailure("abstract class - override in subclass") }
+    
     // MARK: - Initialization
 
     public init(
@@ -40,17 +42,14 @@ public class SnodeAuthenticatedRequestBody: Encodable {
         var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
         
         // Generate the signature for the request for encoding
-        let signatureBase64: String = try generateSignature().toBase64()
+        let signature: [UInt8] = try encoder.dependencies.crypto.tryGenerate(
+            .signature(message: verificationBytes, ed25519SecretKey: ed25519SecretKey)
+        )
+        
         try container.encode(pubkey, forKey: .pubkey)
         try container.encodeIfPresent(subkey, forKey: .subkey)
         try container.encodeIfPresent(timestampMs, forKey: .timestampMs)
         try container.encode(ed25519PublicKey.toHexString(), forKey: .ed25519PublicKey)
-        try container.encode(signatureBase64, forKey: .signatureBase64)
-    }
-    
-    // MARK: - Abstract Functions
-    
-    func generateSignature() throws -> [UInt8] {
-        preconditionFailure("abstract class - override in subclass")
+        try container.encode(signature.toBase64(), forKey: .signatureBase64)
     }
 }

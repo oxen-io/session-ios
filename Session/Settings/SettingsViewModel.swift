@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import YYImage
 import DifferenceKit
 import SessionUIKit
 import SessionMessagingKit

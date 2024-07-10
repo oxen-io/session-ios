@@ -520,13 +520,14 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     }
     
     private func addFloatingVideoView() {
-        guard Singleton.hasAppContext else { return }
+        guard
+            Singleton.hasAppContext,
+            let window: UIWindow = Singleton.appContext.mainWindow
+        else { return }
         
-        let safeAreaInsets = UIApplication.shared.keyWindow?.safeAreaInsets
-        Singleton.appContext.mainWindow?.addSubview(floatingViewContainer)
-        floatingViewContainer.autoPinEdge(toSuperviewEdge: .right, withInset: Values.smallSpacing)
-        let topMargin = (safeAreaInsets?.top ?? 0) + Values.veryLargeSpacing
-        floatingViewContainer.autoPinEdge(toSuperviewEdge: .top, withInset: topMargin)
+        window.addSubview(floatingViewContainer)
+        floatingViewContainer.pin(.top, to: .top, of: window, withInset: (window.safeAreaInsets.top + Values.veryLargeSpacing))
+        floatingViewContainer.pin(.right, to: .right, of: window, withInset: -Values.smallSpacing)
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -574,8 +575,8 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         switch UIDevice.current.orientation {
             case .portrait: rotateAllButtons(rotationAngle: 0)
             case .portraitUpsideDown: rotateAllButtons(rotationAngle: .pi)
-            case .landscapeLeft: rotateAllButtons(rotationAngle: .halfPi)
-            case .landscapeRight: rotateAllButtons(rotationAngle: .pi + .halfPi)
+            case .landscapeLeft: rotateAllButtons(rotationAngle: .pi * 0.5)
+            case .landscapeRight: rotateAllButtons(rotationAngle: .pi * 1.5)
             default: break
         }
     }

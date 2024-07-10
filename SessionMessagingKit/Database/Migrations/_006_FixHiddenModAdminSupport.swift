@@ -15,7 +15,7 @@ enum _006_FixHiddenModAdminSupport: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [GroupMember.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try db.alter(table: GroupMember.self) { t in
             t.add(.isHidden, .boolean)
                 .notNull()

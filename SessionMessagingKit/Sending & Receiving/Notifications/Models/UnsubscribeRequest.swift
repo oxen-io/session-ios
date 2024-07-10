@@ -4,6 +4,7 @@
 
 import Foundation
 import SessionSnodeKit
+import SessionUtilitiesKit
 
 extension PushNotificationAPI {
     struct UnsubscribeRequest: Encodable {
@@ -99,9 +100,11 @@ extension PushNotificationAPI {
             
             // TODO: Need to add handling for subkey auth
             guard
-                let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
-                    message: verificationBytes,
-                    secretKey: ed25519SecretKey
+                let signatureBytes: [UInt8] = Singleton.crypto.generate(
+                    .signature(
+                        message: verificationBytes,
+                        ed25519SecretKey: ed25519SecretKey
+                    )
                 )
             else {
                 throw SnodeAPIError.signingFailed

@@ -14,7 +14,7 @@ enum _012_AddFTSIfNeeded: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Fix an issue that the fullTextSearchTable was dropped unintentionally and global search won't work.
         // This issue only happens to internal test users.
         if try db.tableExists(Interaction.fullTextSearchTableName) == false {

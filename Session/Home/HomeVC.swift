@@ -12,7 +12,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     private static let loadingHeaderHeight: CGFloat = 40
     public static let newConversationButtonSize: CGFloat = 60
     
-    private let viewModel: HomeViewModel = HomeViewModel()
+    private let viewModel: HomeViewModel
     private var dataChangeObservable: DatabaseCancellable? {
         didSet { oldValue?.cancel() }   // Cancel the old observable if there was one
     }
@@ -28,7 +28,8 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     
     // MARK: - Intialization
     
-    init() {
+    init(using dependencies: Dependencies) {
+        self.viewModel = HomeViewModel(using: dependencies)
         Storage.shared.addObserver(viewModel.pagedDataObserver)
         
         super.init(nibName: nil, bundle: nil)
@@ -509,7 +510,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         // Container view
         let profilePictureViewContainer = UIView()
         profilePictureViewContainer.addSubview(profilePictureView)
-        profilePictureView.autoPinEdgesToSuperviewEdges()
+        profilePictureView.pin(to: profilePictureViewContainer)
         profilePictureViewContainer.addSubview(pathStatusView)
         pathStatusView.pin(.trailing, to: .trailing, of: profilePictureViewContainer)
         pathStatusView.pin(.bottom, to: .bottom, of: profilePictureViewContainer)
@@ -658,7 +659,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                 // Cannot properly sync outgoing blinded message requests so don't provide the option
                 guard
                     threadViewModel.threadVariant != .contact ||
-                    SessionId(from: section.elements[indexPath.row].threadId)?.prefix == .standard
+                    (try? SessionId(from: section.elements[indexPath.row].threadId))?.prefix == .standard
                 else { return nil }
                 
                 return UIContextualAction.configuration(
@@ -694,7 +695,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                 )
                 
             case .threads:
-                let sessionIdPrefix: SessionId.Prefix? = SessionId(from: threadViewModel.threadId)?.prefix
+                let sessionIdPrefix: SessionId.Prefix? = (try? SessionId(from: threadViewModel.threadId))?.prefix
                 
                 // Cannot properly sync outgoing blinded message requests so only provide valid options
                 let shouldHavePinAction: Bool = (
@@ -782,7 +783,8 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
             ConversationVC(
                 threadId: threadId,
                 threadVariant: variant,
-                focusedInteractionInfo: focusedInteractionInfo
+                focusedInteractionInfo: focusedInteractionInfo,
+                using: viewModel.dependencies
             )
         ].compactMap { $0 }
         
@@ -802,7 +804,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         if let presentedVC = self.presentedViewController {
             presentedVC.dismiss(animated: false, completion: nil)
         }
-        let searchController = GlobalSearchViewController()
+        let searchController = GlobalSearchViewController(using: viewModel.dependencies)
         self.navigationController?.setViewControllers([ self, searchController ], animated: true)
     }
     
