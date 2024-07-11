@@ -234,7 +234,7 @@ public class MediaMessageView: UIView {
                 label.numberOfLines = 2
             }
             else {
-                label.text = "vc_share_link_previews_disabled_title".localized()
+                label.text = "linkPreviewsTurnedOff".localized()
             }
         }
         // Title for everything except these types
@@ -243,10 +243,7 @@ public class MediaMessageView: UIView {
                 label.text = fileName
             }
             else if let fileExtension: String = attachment.fileExtension {
-                label.text = String(
-                    format: "ATTACHMENT_APPROVAL_FILE_EXTENSION_FORMAT".localized(),
-                    fileExtension.uppercased()
-                )
+                label.text = "attachmentsFileType".localized() + " " + fileExtension.uppercased()
             }
             
             label.textAlignment = .center
@@ -284,7 +281,7 @@ public class MediaMessageView: UIView {
             if let linkPreviewURL: String = linkPreviewInfo?.url {
                 if let targetUrl: URL = URL(string: linkPreviewURL), targetUrl.scheme?.lowercased() != "https" {
                     label.font = UIFont.systemFont(ofSize: Values.verySmallFontSize)
-                    label.text = "vc_share_link_previews_unsecure".localized()
+                    label.text = "linkPreviewsErrorUnsecure".localized()
                     label.themeTextColor = (mode == .attachmentApproval ?
                         .textSecondary :
                         .primary
@@ -293,7 +290,9 @@ public class MediaMessageView: UIView {
             }
             // If we have no link preview info at this point then assume link previews are disabled
             else {
-                label.text = "vc_share_link_previews_disabled_explanation".localized()
+                label.text = "linkPreviewsTurnedOffDescription"
+                    .put(key: "app_name", value: Singleton.appName)
+                    .localized()
                 label.themeTextColor = .textPrimary
                 label.textAlignment = .center
                 label.numberOfLines = 0
@@ -512,7 +511,7 @@ public class MediaMessageView: UIView {
                             }
                             else {
                                 self?.subtitleLabel.font = UIFont.systemFont(ofSize: Values.verySmallFontSize)
-                                self?.subtitleLabel.text = "vc_share_link_previews_error".localized()
+                                self?.subtitleLabel.text = "linkPreviewsErrorLoad".localized()
                                 self?.subtitleLabel.themeTextColor = (self?.mode == .attachmentApproval ?
                                     .textSecondary :
                                     .primary

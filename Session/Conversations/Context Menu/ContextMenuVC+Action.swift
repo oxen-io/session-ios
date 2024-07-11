@@ -16,11 +16,16 @@ extension ContextMenuVC {
         let title: String
         let expirationInfo: ExpirationInfo?
         let themeColor: ThemeValue
-        let isEmojiAction: Bool
-        let isEmojiPlus: Bool
-        let isDismissAction: Bool
+        let actionType: ActionType
         let accessibilityLabel: String?
         let work: () -> Void
+        
+        enum ActionType {
+            case emoji
+            case emojiPlus
+            case dismiss
+            case generic
+        }
         
         // MARK: - Initialization
         
@@ -29,9 +34,7 @@ extension ContextMenuVC {
             title: String = "",
             expirationInfo: ExpirationInfo? = nil,
             themeColor: ThemeValue = .textPrimary,
-            isEmojiAction: Bool = false,
-            isEmojiPlus: Bool = false,
-            isDismissAction: Bool = false,
+            actionType: ActionType = .generic,
             accessibilityLabel: String? = nil,
             work: @escaping () -> Void
         ) {
@@ -39,9 +42,7 @@ extension ContextMenuVC {
             self.title = title
             self.expirationInfo = expirationInfo
             self.themeColor = themeColor
-            self.isEmojiAction = isEmojiAction
-            self.isEmojiPlus = isEmojiPlus
-            self.isDismissAction = isDismissAction
+            self.actionType = actionType
             self.accessibilityLabel = accessibilityLabel
             self.work = work
         }
@@ -51,7 +52,7 @@ extension ContextMenuVC {
         static func info(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 icon: UIImage(named: "ic_info"),
-                title: "context_menu_info".localized(),
+                title: "info".localized(),
                 accessibilityLabel: "Message info"
             ) { delegate?.info(cellViewModel, using: dependencies) }
         }
@@ -60,8 +61,8 @@ extension ContextMenuVC {
             return Action(
                 icon: UIImage(systemName: "arrow.triangle.2.circlepath"),
                 title: (cellViewModel.state == .failedToSync ?
-                    "context_menu_resync".localized() :
-                    "context_menu_resend".localized()
+                    "resync".localized() :
+                    "resend".localized()
                 ),
                 accessibilityLabel: (cellViewModel.state == .failedToSync ? "Resync message" : "Resend message")
             ) { delegate?.retry(cellViewModel, using: dependencies) }
@@ -70,7 +71,7 @@ extension ContextMenuVC {
         static func reply(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 icon: UIImage(named: "ic_reply"),
-                title: "context_menu_reply".localized(),
+                title: "reply".localized(),
                 accessibilityLabel: "Reply to message"
             ) { delegate?.reply(cellViewModel, using: dependencies) }
         }
@@ -86,7 +87,7 @@ extension ContextMenuVC {
         static func copySessionID(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?) -> Action {
             return Action(
                 icon: UIImage(named: "ic_copy"),
-                title: "vc_conversation_settings_copy_session_id_button_title".localized(),
+                title: "accountIDCopy".localized(),
                 accessibilityLabel: "Copy Session ID"
                 
             ) { delegate?.copySessionID(cellViewModel) }
@@ -95,7 +96,7 @@ extension ContextMenuVC {
         static func delete(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 icon: UIImage(named: "ic_trash"),
-                title: "TXT_DELETE_TITLE".localized(),
+                title: "delete".localized(),
                 expirationInfo: ExpirationInfo(
                     expiresStartedAtMs: cellViewModel.expiresStartedAtMs,
                     expiresInSeconds: cellViewModel.expiresInSeconds
@@ -108,7 +109,7 @@ extension ContextMenuVC {
         static func save(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 icon: UIImage(named: "ic_download"),
-                title: "context_menu_save".localized(),
+                title: "save".localized(),
                 accessibilityLabel: "Save attachment"
             ) { delegate?.save(cellViewModel, using: dependencies) }
         }
@@ -116,7 +117,7 @@ extension ContextMenuVC {
         static func ban(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 icon: UIImage(named: "ic_block"),
-                title: "context_menu_ban_user".localized(),
+                title: "banUser".localized(),
                 themeColor: .danger,
                 accessibilityLabel: "Ban user"
             ) { delegate?.ban(cellViewModel, using: dependencies) }
@@ -125,7 +126,7 @@ extension ContextMenuVC {
         static func banAndDeleteAllMessages(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 icon: UIImage(named: "ic_block"),
-                title: "context_menu_ban_and_delete_all".localized(),
+                title: "banDeleteAll".localized(),
                 themeColor: .danger,
                 accessibilityLabel: "Ban user and delete"
             ) { delegate?.banAndDeleteAllMessages(cellViewModel, using: dependencies) }
@@ -134,20 +135,20 @@ extension ContextMenuVC {
         static func react(_ cellViewModel: MessageViewModel, _ emoji: EmojiWithSkinTones, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
                 title: emoji.rawValue,
-                isEmojiAction: true
+                actionType: .emoji
             ) { delegate?.react(cellViewModel, with: emoji, using: dependencies) }
         }
         
         static func emojiPlusButton(_ cellViewModel: MessageViewModel, _ delegate: ContextMenuActionDelegate?, using dependencies: Dependencies) -> Action {
             return Action(
-                isEmojiPlus: true,
+                actionType: .emojiPlus,
                 accessibilityLabel: "Add emoji"
             ) { delegate?.showFullEmojiKeyboard(cellViewModel, using: dependencies) }
         }
         
         static func dismiss(_ delegate: ContextMenuActionDelegate?) -> Action {
             return Action(
-                isDismissAction: true
+                actionType: .dismiss
             ) { delegate?.contextMenuDismissed() }
         }
     }

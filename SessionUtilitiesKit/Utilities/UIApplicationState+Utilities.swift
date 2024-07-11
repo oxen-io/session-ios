@@ -1,5 +1,7 @@
 // Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
 
+// stringlint:disable
+
 import UIKit.UIApplication
 
 public extension UIApplication.State {

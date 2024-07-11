@@ -3,6 +3,7 @@
 import SwiftUI
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 struct OpenGroupInvitationView_SwiftUI: View {
     private let name: String
@@ -68,7 +69,7 @@ struct OpenGroupInvitationView_SwiftUI: View {
                     .font(.system(size: Values.largeFontSize))
                     .foregroundColor(themeColor: textColor)
                 
-                Text("view_open_group_invitation_description".localized())
+                Text("communityInvitation".localized())
                     .font(.system(size: Values.smallFontSize))
                     .foregroundColor(themeColor: textColor)
                     .padding(.bottom, 2)
@@ -86,7 +87,7 @@ struct OpenGroupInvitationView_SwiftUI: View {
 struct OpenGroupInvitationView_SwiftUI_Previews: PreviewProvider {
     static var previews: some View {
         OpenGroupInvitationView_SwiftUI(
-            name: "Session",
+            name: Singleton.appName,
             url: "http://open.getsession.org/session?public_key=a03c383cf63c3c4efe67acc52112a6dd734b3a946b9545f488aaa93da7991238",
             textColor: .messageBubble_outgoingText,
             isOutgoing: true

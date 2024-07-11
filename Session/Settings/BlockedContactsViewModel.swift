@@ -94,8 +94,8 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     
     // MARK: - Content
     
-    let title: String = "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_TITLE".localized()
-    let emptyStateTextPublisher: AnyPublisher<String?, Never> = Just("CONVERSATION_SETTINGS_BLOCKED_CONTACTS_EMPTY_STATE".localized())
+    let title: String = "conversationsBlockedContacts".localized()
+    let emptyStateTextPublisher: AnyPublisher<String?, Never> = Just("blockBlockedNone".localized())
             .eraseToAnyPublisher()
     
     lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = selectedContactIdsSubject
@@ -103,7 +103,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
         .map { selectedContactIds in
             SessionButton.Info(
                 style: .destructive,
-                title: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK".localized(),
+                title: "blockUnblock".localized(),
                 isEnabled: !selectedContactIds.isEmpty,
                 onTap: { [weak self] in self?.unblockTapped() }
             )
@@ -179,57 +179,27 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                 return info.title?.text
             }
         let confirmationTitle: String = {
-            guard contactNames.count > 1 else {
-                // Show a single users name
-                return String(
-                    format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_SINGLE".localized(),
-                    (
-                        contactNames.first ??
-                        "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_FALLBACK".localized()
-                    )
-                )
+            let name: String = contactNames.first ?? "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_FALLBACK".localized()
+            switch contactNames.count {
+            case 1:
+                return "blockUnblockDescription"
+                    .put(key: "name", value: name)
+                    .localized()
+            case 2:
+                return "blockUnblockNameTwo"
+                    .put(key: "name", value: name)
+                    .localized()
+            default:
+                return "blockUnblockNameMultiple"
+                    .put(key: "name", value: name)
+                    .put(key: "count", value: contactNames.count - 1)
+                    .localized()
             }
-            guard contactNames.count > 3 else {
-                // Show up to three users names
-                let initialNames: [String] = Array(contactNames.prefix(upTo: (contactNames.count - 1)))
-                let lastName: String = contactNames[contactNames.count - 1]
-                
-                return [
-                    String(
-                        format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_1".localized(),
-                        initialNames.joined(separator: ", ")
-                    ),
-                    String(
-                        format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_2_SINGLE".localized(),
-                        lastName
-                    )
-                ]
-                .reversed(if: Singleton.hasAppContext && Singleton.appContext.isRTL)
-                .joined(separator: " ")
-            }
-            
-            // If we have exactly 4 users, show the first two names followed by 'and X others', for
-            // more than 4 users, show the first 3 names followed by 'and X others'
-            let numNamesToShow: Int = (contactNames.count == 4 ? 2 : 3)
-            let initialNames: [String] = Array(contactNames.prefix(upTo: numNamesToShow))
-            
-            return [
-                String(
-                    format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_1".localized(),
-                    initialNames.joined(separator: ", ")
-                ),
-                String(
-                    format: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_TITLE_MULTIPLE_3".localized(),
-                    (contactNames.count - numNamesToShow)
-                )
-            ]
-            .reversed(if: Singleton.hasAppContext && Singleton.appContext.isRTL)
-            .joined(separator: " ")
         }()
         let confirmationModal: ConfirmationModal = ConfirmationModal(
             info: ConfirmationModal.Info(
                 title: confirmationTitle,
-                confirmTitle: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_UNBLOCK_CONFIRMATION_ACTON".localized(),
+                confirmTitle: "blockUnblock".localized(),
                 confirmStyle: .danger,
                 cancelStyle: .alert_text
             ) { [weak self] _ in

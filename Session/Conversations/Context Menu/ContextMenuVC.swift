@@ -37,7 +37,7 @@ final class ContextMenuVC: UIViewController {
     
     private lazy var emojiPlusButton: EmojiPlusButton = {
         let result: EmojiPlusButton = EmojiPlusButton(
-            action: self.actions.first(where: { $0.isEmojiPlus }),
+            action: self.actions.first(where: { $0.actionType == .emojiPlus }),
             dismiss: snDismiss
         )
         result.clipsToBounds = true
@@ -140,7 +140,7 @@ final class ContextMenuVC: UIViewController {
         
         let emojiBarStackView = UIStackView(
             arrangedSubviews: actions
-                .filter { $0.isEmojiAction }
+                .filter { $0.actionType == .emoji }
                 .map { action -> EmojiReactsView in EmojiReactsView(for: action, dismiss: snDismiss) }
         )
         emojiBarStackView.axis = .horizontal
@@ -165,7 +165,7 @@ final class ContextMenuVC: UIViewController {
         
         let menuStackView = UIStackView(
             arrangedSubviews: actions
-                .filter { !$0.isEmojiAction && !$0.isEmojiPlus && !$0.isDismissAction }
+                .filter { $0.actionType == .generic }
                 .map { action -> ActionView in
                     ActionView(for: action, dismiss: snDismiss)
                 }
@@ -407,7 +407,7 @@ final class ContextMenuVC: UIViewController {
             },
             completion: { [weak self] _ in
                 self?.dismiss()
-                self?.actions.first(where: { $0.isDismissAction })?.work()
+                self?.actions.first(where: { $0.actionType == .dismiss })?.work()
             }
         )
     }

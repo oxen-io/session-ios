@@ -2,6 +2,8 @@
 //
 // stringlint:disable
 
+// stringlint:disable
+
 import Foundation
 
 public enum OpenGroupAPIError: LocalizedError {

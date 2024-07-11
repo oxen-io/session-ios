@@ -48,7 +48,8 @@ public extension UIContextualAction {
         indexPath: IndexPath,
         tableView: UITableView,
         threadViewModel: SessionThreadViewModel,
-        viewController: UIViewController?
+        viewController: UIViewController?,
+        navigatableStateHolder: NavigatableStateHolder?
     ) -> [UIContextualAction]? {
         guard !actions.isEmpty else { return nil }
         
@@ -84,8 +85,8 @@ public extension UIContextualAction {
                         
                         return UIContextualAction(
                             title: (isUnread ?
-                                "MARK_AS_READ".localized() :
-                                "MARK_AS_UNREAD".localized()
+                                "messageMarkRead".localized() :
+                                "messageMarkUnread".localized()
                             ),
                             icon: (isUnread ?
                                 UIImage(systemName: "envelope.open") :
@@ -117,7 +118,7 @@ public extension UIContextualAction {
                         
                     case .hide:
                         return UIContextualAction(
-                            title: "TXT_HIDE_TITLE".localized(),
+                            title: "hide".localized(),
                             icon: UIImage(systemName: "eye.slash"),
                             themeTintColor: .white,
                             themeBackgroundColor: themeBackgroundColor,
@@ -134,7 +135,7 @@ public extension UIContextualAction {
                                 default:
                                     let confirmationModalExplanation: NSAttributedString = {
                                         let message = String(
-                                            format: "hide_note_to_self_confirmation_alert_message".localized(),
+                                            format: "noteToSelfHideDescription".localized(),
                                             threadViewModel.displayName
                                         )
                                         
@@ -149,9 +150,9 @@ public extension UIContextualAction {
                                     
                                     let confirmationModal: ConfirmationModal = ConfirmationModal(
                                         info: ConfirmationModal.Info(
-                                            title: "hide_note_to_self_confirmation_alert_title".localized(),
+                                            title: "noteToSelfHide".localized(),
                                             body: .attributedText(confirmationModalExplanation),
-                                            confirmTitle: "TXT_HIDE_TITLE".localized(),
+                                            confirmTitle: "hide".localized(),
                                             confirmAccessibility: Accessibility(
                                                 identifier: "Hide"
                                             ),
@@ -185,8 +186,8 @@ public extension UIContextualAction {
                     case .pin:
                         return UIContextualAction(
                             title: (threadViewModel.threadPinnedPriority > 0 ?
-                                "UNPIN_BUTTON_TEXT".localized() :
-                                "PIN_BUTTON_TEXT".localized()
+                                "pinUnpin".localized() :
+                                "pin".localized()
                             ),
                             icon: (threadViewModel.threadPinnedPriority > 0 ?
                                 UIImage(systemName: "pin.slash") :
@@ -224,8 +225,8 @@ public extension UIContextualAction {
                     case .mute:
                         return UIContextualAction(
                             title: (threadViewModel.threadMutedUntilTimestamp == nil ?
-                                "mute_button_text".localized() :
-                                "unmute_button_text".localized()
+                                "notificationsMute".localized() :
+                                "notificationsMuteUnmute".localized()
                             ),
                             icon: (threadViewModel.threadMutedUntilTimestamp == nil ?
                                 UIImage(systemName: "speaker.slash") :
@@ -274,8 +275,8 @@ public extension UIContextualAction {
                     case .block:
                         return UIContextualAction(
                             title: (threadViewModel.threadIsBlocked == true ?
-                                "BLOCK_LIST_UNBLOCK_BUTTON".localized() :
-                                "BLOCK_LIST_BLOCK_BUTTON".localized()
+                                "blockUnblock".localized() :
+                                "block".localized()
                             ),
                             icon: UIImage(named: "table_ic_block"),
                             iconHeight: Values.mediumFontSize,
@@ -339,8 +340,10 @@ public extension UIContextualAction {
                                 case true:
                                     let confirmationModal: ConfirmationModal = ConfirmationModal(
                                         info: ConfirmationModal.Info(
-                                            title: "MESSAGE_REQUESTS_BLOCK_CONFIRMATION_ACTON".localized(),
-                                            confirmTitle: "BLOCK_LIST_BLOCK_BUTTON".localized(),
+                                            title: "blockDescription"
+                                                .put(key: "name", value: threadViewModel.displayName)
+                                                .localized(),
+                                            confirmTitle: "block".localized(),
                                             confirmAccessibility: Accessibility(
                                                 identifier: "Block"
                                             ),
@@ -362,7 +365,7 @@ public extension UIContextualAction {
 
                     case .leave:
                         return UIContextualAction(
-                            title: "LEAVE_BUTTON_TITLE".localized(),
+                            title: "leave".localized(),
                             icon: UIImage(systemName: "rectangle.portrait.and.arrow.right"),
                             iconHeight: Values.mediumFontSize,
                             themeTintColor: .white,
@@ -375,36 +378,29 @@ public extension UIContextualAction {
                             let confirmationModalTitle: String = {
                                 switch threadViewModel.threadVariant {
                                     case .legacyGroup, .group:
-                                        return "leave_group_confirmation_alert_title".localized()
+                                        return "groupLeave".localized()
                                         
-                                    default: return "leave_community_confirmation_alert_title".localized()
+                                    default: return "communityLeave".localized()
                                 }
                             }()
                             
                             let confirmationModalExplanation: NSAttributedString = {
                                 if threadViewModel.currentUserIsClosedGroupAdmin == true {
-                                    return NSAttributedString(string: "admin_group_leave_warning".localized())
+                                    return "groupOnlyAdmin"
+                                        .put(key: "group_name", value: threadViewModel.displayName)
+                                        .localizedFormatted(baseFont: .boldSystemFont(ofSize: Values.smallFontSize))
                                 }
                                 
-                                let mutableAttributedString = NSMutableAttributedString(
-                                    string: String(
-                                        format: "leave_community_confirmation_alert_message".localized(),
-                                        threadViewModel.displayName
-                                    )
-                                )
-                                mutableAttributedString.addAttribute(
-                                    .font,
-                                    value: UIFont.boldSystemFont(ofSize: Values.smallFontSize),
-                                    range: (mutableAttributedString.string as NSString).range(of: threadViewModel.displayName)
-                                )
-                                return mutableAttributedString
+                                return "communityLeaveDescription"
+                                    .put(key: "community_name", value: threadViewModel.displayName)
+                                    .localizedFormatted(baseFont: .boldSystemFont(ofSize: Values.smallFontSize))
                             }()
                             
                             let confirmationModal: ConfirmationModal = ConfirmationModal(
                                 info: ConfirmationModal.Info(
                                     title: confirmationModalTitle,
                                     body: .attributedText(confirmationModalExplanation),
-                                    confirmTitle: "LEAVE_BUTTON_TITLE".localized(),
+                                    confirmTitle: "leave".localized(),
                                     confirmAccessibility: Accessibility(
                                         identifier: "Leave"
                                     ),
@@ -413,13 +409,36 @@ public extension UIContextualAction {
                                     dismissOnConfirm: true,
                                     onConfirm: { _ in
                                         Storage.shared.writeAsync { db in
-                                            try SessionThread.deleteOrLeave(
-                                                db,
-                                                threadId: threadViewModel.threadId,
-                                                threadVariant: threadViewModel.threadVariant,
-                                                groupLeaveType: .standard,
-                                                calledFromConfigHandling: false
-                                            )
+                                            do {
+                                                try SessionThread.deleteOrLeave(
+                                                    db,
+                                                    threadId: threadViewModel.threadId,
+                                                    threadVariant: threadViewModel.threadVariant,
+                                                    groupLeaveType: .standard,
+                                                    calledFromConfigHandling: false
+                                                )
+                                            } catch {
+                                                DispatchQueue.main.async {
+                                                    let toastBody: String = {
+                                                        switch threadViewModel.threadVariant {
+                                                            case .legacyGroup, .group:
+                                                                return "groupLeaveErrorFailed"
+                                                                    .put(key: "group_name", value: threadViewModel.displayName)
+                                                                    .localized()
+                                                                
+                                                            default:
+                                                                return "communityLeaveError"
+                                                                    .put(key: "community_name", value: threadViewModel.displayName)
+                                                                    .localized()
+                                                        }
+                                                    }()
+                                                    navigatableStateHolder?.showToast(
+                                                        text: toastBody,
+                                                        backgroundColor: .backgroundSecondary
+                                                    )
+                                                }
+                                            }
+                                            
                                         }
                                         viewController?.dismiss(animated: true, completion: nil)
                                         
@@ -436,7 +455,7 @@ public extension UIContextualAction {
                         
                     case .delete:
                         return UIContextualAction(
-                            title: "TXT_DELETE_TITLE".localized(),
+                            title: "delete".localized(),
                             icon: UIImage(named: "icon_bin"),
                             iconHeight: Values.mediumFontSize,
                             themeTintColor: .white,
@@ -449,60 +468,51 @@ public extension UIContextualAction {
                             let isMessageRequest: Bool = (threadViewModel.threadIsMessageRequest == true)
                             let confirmationModalTitle: String = {
                                 switch (threadViewModel.threadVariant, isMessageRequest) {
-                                    case (_, true): return "TXT_DELETE_TITLE".localized()
+                                    case (_, true): return "delete".localized()
                                     case (.contact, _):
-                                        return "delete_conversation_confirmation_alert_title".localized()
+                                        return "conversationsDelete".localized()
                                         
                                     case (.legacyGroup, _), (.group, _):
-                                        return "delete_group_confirmation_alert_title".localized()
+                                        return "groupDelete".localized()
                                         
-                                    case (.community, _): return "TXT_DELETE_TITLE".localized()
+                                    case (.community, _): return "delete".localized()
                                 }
                             }()
                             let confirmationModalExplanation: NSAttributedString = {
                                 guard !isMessageRequest else {
                                     return NSAttributedString(
-                                        string: "MESSAGE_REQUESTS_DELETE_CONFIRMATION_ACTON".localized()
+                                        string: "messageRequestsDelete".localized()
                                     )
                                 }
                                 guard threadViewModel.currentUserIsClosedGroupAdmin == false else {
-                                    return NSAttributedString(
-                                        string: "admin_group_leave_warning".localized()
-                                    )
+                                    return "groupOnlyAdmin"
+                                        .put(key: "group_name", value: threadViewModel.displayName)
+                                        .localizedFormatted(baseFont: .boldSystemFont(ofSize: Values.smallFontSize))
                                 }
                                 
-                                let message = String(
-                                    format: {
-                                        switch threadViewModel.threadVariant {
-                                            case .contact:
-                                                return
-                                                    "delete_conversation_confirmation_alert_message".localized()
-                                                
-                                            case .legacyGroup, .group:
-                                                return
-                                                    "delete_group_confirmation_alert_message".localized()
-                                                
-                                            case .community:
-                                                return "leave_community_confirmation_alert_message".localized()
-                                        }
-                                    }(),
-                                    threadViewModel.displayName
-                                )
-                                
-                                return NSAttributedString(string: message)
-                                    .adding(
-                                        attributes: [
-                                            .font: UIFont.boldSystemFont(ofSize: Values.smallFontSize)
-                                        ],
-                                        range: (message as NSString).range(of: threadViewModel.displayName)
-                                    )
+                                switch threadViewModel.threadVariant {
+                                    case .contact:
+                                        return "conversationsDeleteDescription"
+                                            .put(key: "name", value: threadViewModel.displayName)
+                                            .localizedFormatted(baseFont: .boldSystemFont(ofSize: Values.smallFontSize))
+                                        
+                                    case .legacyGroup, .group:
+                                        return "groupDeleteDescription"
+                                            .put(key: "group_name", value: threadViewModel.displayName)
+                                            .localizedFormatted(baseFont: .boldSystemFont(ofSize: Values.smallFontSize))
+                                        
+                                    case .community:
+                                        return "communityLeaveDescription"
+                                            .put(key: "community_name", value: threadViewModel.displayName)
+                                            .localizedFormatted(baseFont: .boldSystemFont(ofSize: Values.smallFontSize))
+                                }
                             }()
                             
                             let confirmationModal: ConfirmationModal = ConfirmationModal(
                                 info: ConfirmationModal.Info(
                                     title: confirmationModalTitle,
                                     body: .attributedText(confirmationModalExplanation),
-                                    confirmTitle: "TXT_DELETE_TITLE".localized(),
+                                    confirmTitle: "delete".localized(),
                                     confirmAccessibility: Accessibility(
                                         identifier: "Confirm delete"
                                     ),

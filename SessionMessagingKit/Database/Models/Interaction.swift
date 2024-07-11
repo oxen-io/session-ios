@@ -35,7 +35,7 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
     ) -> SQL {
         let halfResolution: Double = LinkPreview.timstampResolution
 
-        return "(\(interaction[.timestampMs]) BETWEEN (\(linkPreview[.timestamp]) - \(halfResolution)) * 1000 AND (\(linkPreview[.timestamp]) + \(halfResolution)) * 1000)"
+        return "(\(interaction[.timestampMs]) BETWEEN (\(linkPreview[.timestamp]) - \(halfResolution)) * 1000 AND (\(linkPreview[.timestamp]) + \(halfResolution)) * 1000)" // stringlint:disable
     }
     public static let recipientStates = hasMany(RecipientState.self, using: RecipientState.interactionForeignKey)
     
@@ -925,7 +925,7 @@ public extension Interaction {
         return publicKeysToCheck.contains { publicKey in
             (
                 body != nil &&
-                (body ?? "").contains("@\(publicKey)")
+                (body ?? "").contains("@\(publicKey)") // stringlint:disable
             ) || (
                 quoteAuthorId == publicKey
             )
@@ -1007,7 +1007,7 @@ public extension Interaction {
                 }
                 
                 if isOpenGroupInvitation {
-                    return "😎 Open group invitation"
+                    return "communityInvitation".localized()
                 }
                 
                 // TODO: We should do better here
@@ -1015,17 +1015,21 @@ public extension Interaction {
                 
             case .infoMediaSavedNotification:
                 // TODO: Use referencedAttachmentTimestamp to tell the user * which * media was saved
-                return String(format: "media_saved".localized(), authorDisplayName)
+                return "attachmentsMediaSaved"
+                    .put(key: "name", value: authorDisplayName)
+                    .localized()
                 
             case .infoScreenshotNotification:
-                return String(format: "screenshot_taken".localized(), authorDisplayName)
+                return "screenshotTaken"
+                    .put(key: "name", value: authorDisplayName)
+                    .localized()
                 
-            case .infoClosedGroupCreated: return "GROUP_CREATED".localized()
-            case .infoClosedGroupCurrentUserLeft: return "GROUP_YOU_LEFT".localized()
-            case .infoClosedGroupCurrentUserLeaving: return "group_you_leaving".localized()
-            case .infoClosedGroupCurrentUserErrorLeaving: return "group_unable_to_leave".localized()
-            case .infoClosedGroupUpdated: return (body ?? "GROUP_UPDATED".localized())
-            case .infoMessageRequestAccepted: return (body ?? "MESSAGE_REQUESTS_ACCEPTED".localized())
+            case .infoClosedGroupCreated: return (body ?? "") // Deprecated
+            case .infoClosedGroupCurrentUserLeft: return "groupMemberYouLeft".localized()
+            case .infoClosedGroupCurrentUserLeaving: return "leaving".localized()
+            case .infoClosedGroupCurrentUserErrorLeaving: return (body ?? "")
+            case .infoClosedGroupUpdated: return (body ?? "groupUpdated".localized())
+            case .infoMessageRequestAccepted: return (body ?? "messageRequestsAccepted".localized())
             
             case .infoDisappearingMessagesUpdate:
                 guard

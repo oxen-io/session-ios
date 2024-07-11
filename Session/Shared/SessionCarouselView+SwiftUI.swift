@@ -30,6 +30,7 @@ public struct SessionCarouselView_SwiftUI: View {
                     MediaView_SwiftUI(
                         attachment: attachment,
                         isOutgoing: self.isOutgoing,
+                        shouldSupressControls: true,
                         cornerRadius: 0
                     )
                 }
@@ -201,11 +202,7 @@ struct SessionCarouselView_SwiftUI_Previews: PreviewProvider {
     @State static var index = 1
     static var previews: some View {
         ZStack {
-            if #available(iOS 14.0, *) {
-                Color.black.ignoresSafeArea()
-            } else {
-                Color.black
-            }
+            Color.black.ignoresSafeArea()
             
             SessionCarouselView_SwiftUI(
                 index: $index,

@@ -44,7 +44,7 @@ public final class SessionCallManager: NSObject, CallManagerProtocol {
     }
     
     static func buildProviderConfiguration(useSystemCallLog: Bool) -> CXProviderConfiguration {
-        let providerConfiguration = CXProviderConfiguration(localizedName: "Session")
+        let providerConfiguration = CXProviderConfiguration(localizedName: "Session") // stringlint:disable
         providerConfiguration.supportsVideo = true
         providerConfiguration.maximumCallGroups = 1
         providerConfiguration.maximumCallsPerCallGroup = 1

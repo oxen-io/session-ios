@@ -9,7 +9,7 @@ public extension View {
         )
     }
     
-    func background(themeColor: ThemeValue) -> some View {
+    func backgroundColor(themeColor: ThemeValue) -> some View {
         if #available(iOSApplicationExtension 14.0, *) {
             return self.background(
                 ThemeManager.currentTheme.colorSwiftUI(for: themeColor)?.ignoresSafeArea()
@@ -26,6 +26,13 @@ public extension Shape {
     func fill(themeColor: ThemeValue) -> some View {
         return self.fill(
             ThemeManager.currentTheme.colorSwiftUI(for: themeColor) ?? Color.primary
+        )
+    }
+    
+    func stroke(themeColor: ThemeValue, lineWidth: CGFloat = 1) -> some View {
+        return self.stroke(
+            ThemeManager.currentTheme.colorSwiftUI(for: themeColor) ?? Color.primary,
+            lineWidth: lineWidth
         )
     }
     

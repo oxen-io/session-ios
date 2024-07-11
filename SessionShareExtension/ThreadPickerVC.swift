@@ -30,7 +30,9 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
     private lazy var titleLabel: UILabel = {
         let titleLabel: UILabel = UILabel()
         titleLabel.font = .boldSystemFont(ofSize: Values.veryLargeFontSize)
-        titleLabel.text = "vc_share_title".localized()
+        titleLabel.text = "shareToSession"
+            .put(key: "app_name", value: Singleton.appName)
+            .localized()
         titleLabel.themeTextColor = .textPrimary
         
         return titleLabel
@@ -39,7 +41,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
     private lazy var databaseErrorLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .systemFont(ofSize: Values.mediumFontSize)
-        result.text = "database_inaccessible_error".localized()
+        result.text = "shareExtensionDatabaseError".localized()
         result.textAlignment = .center
         result.themeTextColor = .textPrimary
         result.numberOfLines = 0
@@ -219,7 +221,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
             (
                 (messageText?.isEmpty == true || (attachments[0].text() == messageText) ?
                     attachments[0].text() :
-                    "\(attachments[0].text() ?? "")\n\n\(messageText ?? "")"
+                    "\(attachments[0].text() ?? "")\n\n\(messageText ?? "")" // stringlint:disable
                 )
             ) :
             messageText
@@ -227,7 +229,7 @@ final class ThreadPickerVC: UIViewController, UITableViewDataSource, UITableView
         
         shareNavController?.dismiss(animated: true, completion: nil)
         
-        ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "vc_share_sending_message".localized()) { activityIndicator in
+        ModalActivityIndicatorViewController.present(fromViewController: shareNavController!, canCancel: false, message: "sending".localized()) { activityIndicator in
             Storage.resumeDatabaseAccess()
             LibSession.resumeNetworkAccess()
             

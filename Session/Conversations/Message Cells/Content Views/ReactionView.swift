@@ -88,7 +88,7 @@ final class ReactionButton: UIView {
         emojiLabel.text = viewModel.emoji.rawValue
         numberLabel.text = (viewModel.number < 1000 ?
             "\(viewModel.number)" :
-            String(format: "%.1f", Float(viewModel.number) / 1000) + "k"
+            String(format: "%.1f", Float(viewModel.number) / 1000) + "k" // stringlint:disable
         )
         numberLabel.isHidden = (!showNumber && viewModel.number <= 1)
         

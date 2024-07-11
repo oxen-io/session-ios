@@ -58,7 +58,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
     }()
     
     internal lazy var audioTrack: RTCAudioTrack = {
-        return factory.audioTrack(with: audioSource, trackId: "ARDAMSa0")
+        return factory.audioTrack(with: audioSource, trackId: "ARDAMSa0") // stringlint:disable
     }()
     
     // Video
@@ -69,7 +69,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
     }()
     
     internal lazy var localVideoTrack: RTCVideoTrack = {
-        return factory.videoTrack(with: localVideoSource, trackId: "ARDAMSv0")
+        return factory.videoTrack(with: localVideoSource, trackId: "ARDAMSv0") // stringlint:disable
     }()
     
     internal lazy var remoteVideoTrack: RTCVideoTrack? = {
@@ -86,7 +86,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         
         public var errorDescription: String? {
             switch self {
-                case .noThread: return "Couldn't find thread for contact."
+                case .noThread: return "Couldn't find thread for contact." // stringlint:disable
             }
         }
     }
@@ -103,7 +103,7 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
         
         super.init()
         
-        let mediaStreamTrackIDS = ["ARDAMS"]
+        let mediaStreamTrackIDS = ["ARDAMS"] // stringlint:disable
         
         peerConnection?.add(audioTrack, streamIds: mediaStreamTrackIDS)
         peerConnection?.add(localVideoTrack, streamIds: mediaStreamTrackIDS)
@@ -394,8 +394,8 @@ public final class WebRTCSession : NSObject, RTCPeerConnectionDelegate {
     
     private func correctSessionDescription(sdp: RTCSessionDescription?) -> RTCSessionDescription? {
         guard let sdp = sdp else { return nil }
-        let cbrSdp = sdp.sdp.description.replace(regex: "(a=fmtp:111 ((?!cbr=).)*)\r?\n", with: "$1;cbr=1\r\n")
-        let finalSdp = cbrSdp.replace(regex: ".+urn:ietf:params:rtp-hdrext:ssrc-audio-level.*\r?\n", with: "")
+        let cbrSdp = sdp.sdp.description.replace(regex: "(a=fmtp:111 ((?!cbr=).)*)\r?\n", with: "$1;cbr=1\r\n") // stringlint:disable
+        let finalSdp = cbrSdp.replace(regex: ".+urn:ietf:params:rtp-hdrext:ssrc-audio-level.*\r?\n", with: "") // stringlint:disable
         return RTCSessionDescription(type: sdp.type, sdp: finalSdp)
     }
     
@@ -480,15 +480,15 @@ extension WebRTCSession {
     
     public func turnOffVideo() {
         localVideoTrack.isEnabled = false
-        sendJSON(["video": false])
+        sendJSON(["video": false]) // stringlint:disable
     }
     
     public func turnOnVideo() {
         localVideoTrack.isEnabled = true
-        sendJSON(["video": true])
+        sendJSON(["video": true]) // stringlint:disable
     }
     
     public func hangUp() {
-        sendJSON(["hangup": true])
+        sendJSON(["hangup": true]) // stringlint:disable
     }
 }

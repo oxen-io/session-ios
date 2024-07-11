@@ -137,31 +137,30 @@ public class NotificationPresenter: NotificationsProtocol {
         
         switch previewType {
             case .noNameNoPreview:
-                notificationTitle = "Session"
+                notificationTitle = Singleton.appName
                 
             case .nameNoPreview, .nameAndPreview:
                 switch thread.variant {
                     case .contact:
-                        notificationTitle = (isMessageRequest ? "Session" : senderName)
+                        notificationTitle = (isMessageRequest ? Singleton.appName : senderName)
                         
                     case .legacyGroup, .group, .community:
-                        notificationTitle = String(
-                            format: NotificationStrings.incomingGroupMessageTitleFormat,
-                            senderName,
-                            groupName
-                        )
+                        notificationTitle = "notificationsIosGroup"
+                            .put(key: "name", value: senderName)
+                            .put(key: "conversation_name", value: groupName)
+                            .localized()
                 }
         }
         
         switch previewType {
-            case .noNameNoPreview, .nameNoPreview: notificationBody = NotificationStrings.incomingMessageBody
+            case .noNameNoPreview, .nameNoPreview: notificationBody = "messageNewYouveGotA".localized()
             case .nameAndPreview: notificationBody = messageText
         }
         
         // If it's a message request then overwrite the body to be something generic (only show a notification
         // when receiving a new message request if there aren't any others or the user had hidden them)
         if isMessageRequest {
-            notificationBody = "MESSAGE_REQUESTS_NOTIFICATION".localized()
+            notificationBody = "messageRequestsNew".localized()
         }
 
         guard notificationBody != nil || notificationTitle != nil else {
@@ -256,20 +255,18 @@ public class NotificationPresenter: NotificationsProtocol {
             AppNotificationUserInfoKey.threadVariantRaw: thread.variant.rawValue
         ]
         
-        let notificationTitle: String = "Session"
+        let notificationTitle: String = Singleton.appName
         let senderName: String = Profile.displayName(db, id: interaction.authorId, threadVariant: thread.variant)
         let notificationBody: String? = {
             switch messageInfo.state {
                 case .permissionDenied:
-                    return String(
-                        format: "modal_call_missed_tips_explanation".localized(),
-                        senderName
-                    )
+                    return "callsYouMissedCallPermissions"
+                        .put(key: "name", value: senderName)
+                        .localized()
                 case .missed:
-                    return String(
-                        format: "call_missed".localized(),
-                        senderName
-                    )
+                    return "callsMissedCallFrom"
+                        .put(key: "name", value: senderName)
+                        .localized()
                 default:
                     return nil
             }
@@ -315,8 +312,11 @@ public class NotificationPresenter: NotificationsProtocol {
         guard !isMessageRequest else { return }
         
         let senderName: String = Profile.displayName(db, id: reaction.authorId, threadVariant: thread.variant)
-        let notificationTitle = "Session"
-        var notificationBody = String(format: "EMOJI_REACTS_NOTIFICATION".localized(), senderName, reaction.emoji)
+        let notificationTitle = Singleton.appName
+        var notificationBody = "emojiReactsHoverName"
+            .put(key: "name", value: senderName)
+            .put(key: "emoji", value: reaction.emoji)
+            .localized()
         
         // Title & body
         let previewType: Preferences.NotificationPreviewType = db[.preferencesNotificationPreviewType]
@@ -324,7 +324,7 @@ public class NotificationPresenter: NotificationsProtocol {
         
         switch previewType {
             case .nameAndPreview: break
-            default: notificationBody = NotificationStrings.incomingMessageBody
+            default: notificationBody = "messageNewYouveGotA".localized()
         }
         
         let category = AppNotificationCategory.incomingMessage
@@ -390,7 +390,7 @@ public class NotificationPresenter: NotificationsProtocol {
             case .nameNoPreview, .nameAndPreview: notificationTitle = threadName
         }
 
-        let notificationBody = NotificationStrings.failedToSendBody
+        let notificationBody = "messageErrorDelivery".localized()
 
         let userInfo: [AnyHashable: Any] = [
             AppNotificationUserInfoKey.threadId: thread.id,

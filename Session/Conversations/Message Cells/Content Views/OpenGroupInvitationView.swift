@@ -40,7 +40,7 @@ final class OpenGroupInvitationView: UIView {
         // Subtitle
         let subtitleLabel = UILabel()
         subtitleLabel.font = .systemFont(ofSize: Values.smallFontSize)
-        subtitleLabel.text = "view_open_group_invitation_description".localized()
+        subtitleLabel.text = "communityInvitation".localized()
         subtitleLabel.themeTextColor = textColor
         subtitleLabel.lineBreakMode = .byTruncatingTail
         
@@ -48,7 +48,7 @@ final class OpenGroupInvitationView: UIView {
         let urlLabel = UILabel()
         urlLabel.font = .systemFont(ofSize: Values.verySmallFontSize)
         urlLabel.text = {
-            if let range = rawUrl.range(of: "?public_key=") {
+            if let range = rawUrl.range(of: "?public_key=") { // stringlint:disable
                 return String(rawUrl[..<range.lowerBound])
             }
 
@@ -64,7 +64,7 @@ final class OpenGroupInvitationView: UIView {
         
         // Icon
         let iconSize = OpenGroupInvitationView.iconSize
-        let iconName = (isOutgoing ? "Globe" : "Plus")
+        let iconName = (isOutgoing ? "Globe" : "Plus") // stringlint:disable
         let iconImageViewSize = OpenGroupInvitationView.iconImageViewSize
         let iconImageView = UIImageView(
             image: UIImage(named: iconName)?

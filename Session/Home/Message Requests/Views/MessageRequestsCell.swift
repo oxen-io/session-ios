@@ -5,7 +5,7 @@ import SessionUIKit
 import SignalUtilitiesKit
 
 class MessageRequestsCell: UITableViewCell {
-    static let reuseIdentifier = "MessageRequestsCell"
+    static let reuseIdentifier = "MessageRequestsCell" // stringlint:disable
     
     // MARK: - Initialization
     
@@ -49,7 +49,7 @@ class MessageRequestsCell: UITableViewCell {
         result.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         result.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         result.font = .boldSystemFont(ofSize: Values.mediumFontSize)
-        result.text = "MESSAGE_REQUESTS_TITLE".localized()
+        result.text = "sessionMessageRequests".localized()
         result.themeTextColor = .textPrimary
         result.lineBreakMode = .byTruncatingTail
         

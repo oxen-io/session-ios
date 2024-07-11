@@ -106,18 +106,4 @@ public extension Network {
             { throw NetworkError.invalidURL }()
         )
     }
-    
-//case file
-//case fileIndividual(fileId: String)
-//case sessionVersion
-//
-//public static var name: String { "FileServerAPI.Endpoint" }
-//
-//public var path: String {
-//    switch self {
-//        case .file: return "file"
-//        case .fileIndividual(let fileId): return "file/\(fileId)"
-//        case .sessionVersion: return "session_version"
-//    }
-//}
 }

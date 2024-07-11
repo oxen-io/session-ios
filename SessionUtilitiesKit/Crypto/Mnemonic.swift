@@ -66,17 +66,7 @@ public enum Mnemonic {
     }
     
     public enum DecodingError : LocalizedError {
-        case generic, inputTooShort, missingLastWord, invalidWord, verificationFailed
-        
-        public var errorDescription: String? {
-            switch self {
-                case .generic: return "RECOVERY_PHASE_ERROR_GENERIC".localized()
-                case .inputTooShort: return "RECOVERY_PHASE_ERROR_LENGTH".localized()
-                case .missingLastWord: return "RECOVERY_PHASE_ERROR_LAST_WORD".localized()
-                case .invalidWord: return "RECOVERY_PHASE_ERROR_INVALID_WORD".localized()
-                case .verificationFailed: return "RECOVERY_PHASE_ERROR_FAILED".localized()
-            }
-        }
+        case generic, inputTooShort, invalidWord, verificationFailed
     }
     
     public static func hash(hexEncodedString string: String, language: Language = .english) -> String {
@@ -127,8 +117,8 @@ public enum Mnemonic {
         let n = truncatedWordSet.count
         
         // Check preconditions
-        guard words.count >= 12 else { throw DecodingError.inputTooShort }
-        guard !words.count.isMultiple(of: 3) else { throw DecodingError.missingLastWord }
+        guard words.count > 12 else { throw DecodingError.inputTooShort }
+        guard words.count < 14 else { throw DecodingError.generic }
         
         // Get checksum word
         let checksumWord = words.popLast()!

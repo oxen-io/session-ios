@@ -317,7 +317,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         result.textAlignment = .center
         result.isHidden = call.hasConnected
         
-        if call.hasStartedConnecting { result.text = "Connecting..." }
+        if call.hasStartedConnecting { result.text = "callsConnecting".localized() }
         
         return result
     }()
@@ -362,7 +362,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         
         self.call.hasStartedConnectingDidChange = {
             DispatchQueue.main.async {
-                self.callInfoLabel.text = "Connecting..."
+                self.callInfoLabel.text = "callsConnecting".localized()
                 self.answerButton.alpha = 0
                 
                 UIView.animate(
@@ -383,7 +383,6 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
             DispatchQueue.main.async {
                 CallRingTonePlayer.shared.stopPlayingRingTone()
                 
-                self?.callInfoLabel.text = "Connected"
                 self?.minimizeButton.isHidden = false
                 self?.durationTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                     self?.updateDuration()
@@ -405,7 +404,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
             DispatchQueue.main.async {
                 self?.callInfoLabel.isHidden = false
                 self?.callDurationLabel.isHidden = true
-                self?.callInfoLabel.text = "Reconnecting..."
+                self?.callInfoLabel.text = "callsReconnecting".localized()
             }
         }
         
@@ -433,11 +432,11 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         AppEnvironment.shared.callManager.startCall(call) { [weak self] error in
             DispatchQueue.main.async {
                 if let _ = error {
-                    self?.callInfoLabel.text = "Can't start a call."
+                    self?.callInfoLabel.text = "callsErrorStart".localized()
                     self?.endCall()
                 }
                 else {
-                    self?.callInfoLabel.text = "Ringing..."
+                    self?.callInfoLabel.text = "callsRinging".localized()
                     self?.answerButton.isHidden = true
                 }
             }
@@ -582,14 +581,14 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     
     // MARK: Call signalling
     func handleAnswerMessage(_ message: CallMessage) {
-        callInfoLabel.text = "Connecting..."
+        callInfoLabel.text = "callsConnecting".localized()
     }
     
     func handleEndCallMessage() {
         SNLog("[Calls] Ending call.")
         self.callInfoLabel.isHidden = false
         self.callDurationLabel.isHidden = true
-        self.callInfoLabel.text = "Call Ended"
+        self.callInfoLabel.text = "callsEnded".localized()
         
         UIView.animate(withDuration: 0.25) {
             let remoteVideoView: RemoteVideoView = self.floatingViewVideoSource == .remote ? self.floatingRemoteVideoView : self.fullScreenRemoteVideoView
@@ -609,7 +608,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         AppEnvironment.shared.callManager.answerCall(call) { [weak self] error in
             DispatchQueue.main.async {
                 if let _ = error {
-                    self?.callInfoLabel.text = "Can't answer the call."
+                    self?.callInfoLabel.text = "callsErrorAnswer".localized()
                     self?.endCall()
                 }
             }
@@ -631,7 +630,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     }
     
     @objc private func updateDuration() {
-        callDurationLabel.text = String(format: "%.2d:%.2d", duration/60, duration%60)
+        callDurationLabel.text = String(format: "%.2d:%.2d", duration/60, duration%60) // stringlint:disable
         duration += 1
     }
     

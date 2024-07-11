@@ -150,54 +150,34 @@ public enum ThemeManager {
         ThemeManager.mainWindow?.tintColor = textPrimary
         ThemeManager.mainWindow?.rootViewController?.setNeedsStatusBarAppearanceUpdate()
         
-        // Update the nav bars to use the right colours (we default to the 'primary' value)
-        UINavigationBar.appearance().barTintColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
-        UINavigationBar.appearance().isTranslucent = false
-        UINavigationBar.appearance().tintColor = textPrimary
-        UINavigationBar.appearance().shadowImage = ThemeManager.currentTheme.color(for: .backgroundPrimary)?.toImage()
-        UINavigationBar.appearance().titleTextAttributes = [
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
+        appearance.shadowImage = ThemeManager.currentTheme.color(for: .backgroundPrimary)?.toImage()
+        appearance.titleTextAttributes = [
             NSAttributedString.Key.foregroundColor: textPrimary
         ]
-        UINavigationBar.appearance().largeTitleTextAttributes = [
+        appearance.largeTitleTextAttributes = [
             NSAttributedString.Key.foregroundColor: textPrimary
         ]
         
-        // Update the bar button item appearance
-        UIBarButtonItem.appearance().tintColor = textPrimary
+        // Apply the button item appearance as well
+        let barButtonItemAppearance = UIBarButtonItemAppearance(style: .plain)
+        barButtonItemAppearance.normal.titleTextAttributes = [ .foregroundColor: textPrimary ]
+        barButtonItemAppearance.disabled.titleTextAttributes = [ .foregroundColor: textPrimary ]
+        barButtonItemAppearance.highlighted.titleTextAttributes = [ .foregroundColor: textPrimary ]
+        barButtonItemAppearance.focused.titleTextAttributes = [ .foregroundColor: textPrimary ]
+        appearance.buttonAppearance = barButtonItemAppearance
+        appearance.backButtonAppearance = barButtonItemAppearance
+        appearance.doneButtonAppearance = barButtonItemAppearance
+        
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
 
         // Update toolbars to use the right colours
         UIToolbar.appearance().barTintColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
         UIToolbar.appearance().isTranslucent = false
         UIToolbar.appearance().tintColor = textPrimary
-        
-        // Note: Looks like there were changes to the appearance behaviour in iOS 15, unfortunately
-        // this breaks parts of the old 'UINavigationBar.appearance()' logic so we need to do everything
-        // again using the new API...
-        if #available(iOS 15.0, *) {
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
-            appearance.shadowImage = ThemeManager.currentTheme.color(for: .backgroundPrimary)?.toImage()
-            appearance.titleTextAttributes = [
-                NSAttributedString.Key.foregroundColor: textPrimary
-            ]
-            appearance.largeTitleTextAttributes = [
-                NSAttributedString.Key.foregroundColor: textPrimary
-            ]
-            
-            // Apply the button item appearance as well
-            let barButtonItemAppearance = UIBarButtonItemAppearance(style: .plain)
-            barButtonItemAppearance.normal.titleTextAttributes = [ .foregroundColor: textPrimary ]
-            barButtonItemAppearance.disabled.titleTextAttributes = [ .foregroundColor: textPrimary ]
-            barButtonItemAppearance.highlighted.titleTextAttributes = [ .foregroundColor: textPrimary ]
-            barButtonItemAppearance.focused.titleTextAttributes = [ .foregroundColor: textPrimary ]
-            appearance.buttonAppearance = barButtonItemAppearance
-            appearance.backButtonAppearance = barButtonItemAppearance
-            appearance.doneButtonAppearance = barButtonItemAppearance
-            
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
-        }
         
         // Note: 'UINavigationBar.appearance' only affects newly created nav bars so we need
         // to force-update any current navigation bar (unfortunately the only way to do this
@@ -251,28 +231,20 @@ public enum ThemeManager {
             let navigationBackground: ThemeValue = (navController.viewControllers.first as? ThemedNavigation)?.navigationBackground
         else { return }
         
-        navController.navigationBar.barTintColor = ThemeManager.currentTheme.color(for: navigationBackground)
-        navController.navigationBar.shadowImage = ThemeManager.currentTheme.color(for: navigationBackground)?.toImage()
+        let textPrimary: UIColor = (ThemeManager.currentTheme.color(for: .textPrimary) ?? .white)
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = ThemeManager.currentTheme.color(for: navigationBackground)
+        appearance.shadowImage = ThemeManager.currentTheme.color(for: navigationBackground)?.toImage()
+        appearance.titleTextAttributes = [
+            NSAttributedString.Key.foregroundColor: textPrimary
+        ]
+        appearance.largeTitleTextAttributes = [
+            NSAttributedString.Key.foregroundColor: textPrimary
+        ]
         
-        // Note: Looks like there were changes to the appearance behaviour in iOS 15, unfortunately
-        // this breaks parts of the old 'UINavigationBar.appearance()' logic so we need to do everything
-        // again using the new API...
-        if #available(iOS 15.0, *) {
-            let textPrimary: UIColor = (ThemeManager.currentTheme.color(for: .textPrimary) ?? .white)
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = ThemeManager.currentTheme.color(for: navigationBackground)
-            appearance.shadowImage = ThemeManager.currentTheme.color(for: navigationBackground)?.toImage()
-            appearance.titleTextAttributes = [
-                NSAttributedString.Key.foregroundColor: textPrimary
-            ]
-            appearance.largeTitleTextAttributes = [
-                NSAttributedString.Key.foregroundColor: textPrimary
-            ]
-            
-            navController.navigationBar.standardAppearance = appearance
-            navController.navigationBar.scrollEdgeAppearance = appearance
-        }
+        navController.navigationBar.standardAppearance = appearance
+        navController.navigationBar.scrollEdgeAppearance = appearance
     }
     
     private static func retrieveNavigationController(from viewController: UIViewController) -> UINavigationController? {

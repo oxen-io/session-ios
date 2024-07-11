@@ -40,7 +40,7 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel, ObservableTableSour
 
     // MARK: - Content
 
-    let title: String = "NOTIFICATIONS_STYLE_SOUND_TITLE".localized()
+    let title: String = "notificationsSound".localized()
 
     lazy var observation: TargetObservation = ObservationBuilder
         .subject(photoCollections)

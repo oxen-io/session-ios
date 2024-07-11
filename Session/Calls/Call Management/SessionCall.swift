@@ -182,7 +182,7 @@ public final class SessionCall: CurrentCallProtocol, WebRTCSessionDelegate {
     
     func reportIncomingCallIfNeeded(completion: @escaping (Error?) -> Void) {
         guard case .answer = mode else {
-            SessionCallManager.reportFakeCall(info: "Call not in answer mode")
+            SessionCallManager.reportFakeCall(info: "Call not in answer mode") // stringlint:disable
             return
         }
         

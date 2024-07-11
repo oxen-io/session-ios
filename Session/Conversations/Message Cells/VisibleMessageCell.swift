@@ -625,6 +625,7 @@ final class VisibleMessageCell: MessageCell, TappableLabelDelegate {
                 albumView.set(.width, to: size.width)
                 albumView.set(.height, to: size.height)
                 albumView.loadMedia()
+                albumView.accessibilityLabel = "contentDescriptionMediaMessage".localized()
                 snContentView.addArrangedSubview(albumView)
         
                 unloadContent = { albumView.unloadMedia() }

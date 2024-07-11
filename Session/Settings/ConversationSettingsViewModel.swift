@@ -30,8 +30,8 @@ class ConversationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
         
         var title: String? {
             switch self {
-                case .messageTrimming: return "CONVERSATION_SETTINGS_SECTION_MESSAGE_TRIMMING".localized()
-                case .audioMessages: return "CONVERSATION_SETTINGS_SECTION_AUDIO_MESSAGES".localized()
+                case .messageTrimming: return "conversationsMessageTrimming".localized()
+                case .audioMessages: return "conversationsAudioMessages".localized()
                 case .blockedContacts: return nil
             }
         }
@@ -51,7 +51,7 @@ class ConversationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
         let shouldAutoPlayConsecutiveAudioMessages: Bool
     }
     
-    let title: String = "CONVERSATION_SETTINGS_TITLE".localized()
+    let title: String = "sessionConversations".localized()
     
     lazy var observation: TargetObservation = ObservationBuilder
         .databaseObservation(self) { [weak self] db -> State in
@@ -67,8 +67,8 @@ class ConversationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                     elements: [
                         SessionCell.Info(
                             id: .messageTrimming,
-                            title: "CONVERSATION_SETTINGS_MESSAGE_TRIMMING_TITLE".localized(),
-                            subtitle: "CONVERSATION_SETTINGS_MESSAGE_TRIMMING_DESCRIPTION".localized(),
+                            title: "conversationsMessageTrimmingTrimCommunities".localized(),
+                            subtitle: "conversationsMessageTrimmingTrimCommunitiesDescription".localized(),
                             rightAccessory: .toggle(
                                 .boolValue(
                                     key: .trimOpenGroupMessagesOlderThanSixMonths,
@@ -89,8 +89,8 @@ class ConversationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                     elements: [
                         SessionCell.Info(
                             id: .audioMessages,
-                            title: "CONVERSATION_SETTINGS_AUDIO_MESSAGES_AUTOPLAY_TITLE".localized(),
-                            subtitle: "CONVERSATION_SETTINGS_AUDIO_MESSAGES_AUTOPLAY_DESCRIPTION".localized(),
+                            title: "conversationsAutoplayAudioMessage".localized(),
+                            subtitle: "conversationsAutoplayAudioMessageDescription".localized(),
                             rightAccessory: .toggle(
                                 .boolValue(
                                     key: .shouldAutoPlayConsecutiveAudioMessages,
@@ -111,7 +111,7 @@ class ConversationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                     elements: [
                         SessionCell.Info(
                             id: .blockedContacts,
-                            title: "CONVERSATION_SETTINGS_BLOCKED_CONTACTS_TITLE".localized(),
+                            title: "conversationsBlockedContacts".localized(),
                             styling: SessionCell.StyleInfo(
                                 tintColor: .danger,
                                 backgroundStyle: .noBackground

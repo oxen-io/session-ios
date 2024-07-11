@@ -65,6 +65,8 @@ internal enum Theme_ClassicLight: ThemeColors {
         .sessionButton_destructiveBackground: .clear,
         .sessionButton_destructiveHighlight: .dangerLight.withAlphaComponent(0.3),
         .sessionButton_destructiveBorder: .dangerLight,
+        .sessionButton_primaryFilledText: .classicLight0,
+        .sessionButton_primaryFilledBackground: .primary,
         
         // SolidButton
         .solidButton_background: .classicLight3,
@@ -81,6 +83,7 @@ internal enum Theme_ClassicLight: ThemeColors {
         .alert_text: .classicLight0,
         .alert_background: .classicLight6,
         .alert_buttonBackground: .classicLight6,
+        .toast_background: .classicLight4,
         
         // ConversationButton
         .conversationButton_background: .classicLight6,
@@ -183,6 +186,8 @@ internal enum Theme_ClassicLight: ThemeColors {
         .sessionButton_destructiveBackground: .clear,
         .sessionButton_destructiveHighlight: .dangerLight.opacity(0.3),
         .sessionButton_destructiveBorder: .dangerLight,
+        .sessionButton_primaryFilledText: .classicLight0,
+        .sessionButton_primaryFilledBackground: .primary,
         
         // SolidButton
         .solidButton_background: .classicLight3,
@@ -199,6 +204,7 @@ internal enum Theme_ClassicLight: ThemeColors {
         .alert_text: .classicLight0,
         .alert_background: .classicLight6,
         .alert_buttonBackground: .classicLight6,
+        .toast_background: .classicLight4,
         
         // ConversationButton
         .conversationButton_background: .classicLight6,

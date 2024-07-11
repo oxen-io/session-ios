@@ -63,11 +63,11 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
         
         var title: String? {
             switch self {
-                case .type: return "DISAPPERING_MESSAGES_TYPE_TITLE".localized()
+                case .type: return "disappearingMessagesDeleteType".localized()
                 // We need to keep these although the titles of them are the same
                 // because we need them to trigger timer section to refresh when
                 // the user selects different disappearing messages type
-                case .timerLegacy, .timerDisappearAfterSend, .timerDisappearAfterRead: return "DISAPPERING_MESSAGES_TIMER_TITLE".localized()
+                case .timerLegacy, .timerDisappearAfterSend, .timerDisappearAfterRead: return "disappearingMessagesTimer".localized()
                 case .noteToSelf: return nil
                 case .group: return nil
             }
@@ -77,7 +77,7 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
         
         var footer: String? {
             switch self {
-                case .group: return "DISAPPERING_MESSAGES_GROUP_WARNING_ADMIN_ONLY".localized()
+                case .group: return "disappearingMessagesOnlyAdmins".localized()
                 default: return nil
             }
         }
@@ -85,17 +85,17 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
     
     // MARK: - Content
     
-    let title: String = "DISAPPEARING_MESSAGES".localized()
+    let title: String = "disappearingMessages".localized()
     lazy var subtitle: String? = {
         guard Features.useNewDisappearingMessagesConfig else {
-            return (isNoteToSelf ? nil : "DISAPPERING_MESSAGES_SUBTITLE_LEGACY".localized())
+            return (isNoteToSelf ? nil : "disappearingMessagesDescription".localized())
         }
         
         if threadVariant == .contact && !isNoteToSelf {
-            return "DISAPPERING_MESSAGES_SUBTITLE_CONTACTS".localized()
+            return "disappearingMessagesDescription1".localized()
         }
         
-        return "DISAPPERING_MESSAGES_SUBTITLE_GROUPS".localized()
+        return "disappearingMessagesDisappearAfterSendDescription".localized()
     }()
     
     lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = shouldShowConfirmButton
@@ -105,7 +105,7 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
             
             return SessionButton.Info(
                 style: .bordered,
-                title: "DISAPPERING_MESSAGES_SAVE_TITLE".localized(),
+                title: "set".localized(),
                 isEnabled: true,
                 accessibility: Accessibility(
                     identifier: "Set button",
@@ -130,8 +130,8 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                             model: .type,
                             elements: [
                                 SessionCell.Info(
-                                    id: "DISAPPEARING_MESSAGES_OFF".localized(),
-                                    title: "DISAPPEARING_MESSAGES_OFF".localized(),
+                                    id: "off".localized(),
+                                    title: "off".localized(),
                                     rightAccessory: .radio(
                                         isSelected: { (self?.currentSelection.value.isEnabled == false) }
                                     ),
@@ -151,9 +151,9 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                 ),
                                 (Features.useNewDisappearingMessagesConfig ? nil :
                                     SessionCell.Info(
-                                        id: "DISAPPEARING_MESSAGES_TYPE_LEGACY_TITLE".localized(),
-                                        title: "DISAPPEARING_MESSAGES_TYPE_LEGACY_TITLE".localized(),
-                                        subtitle: "DISAPPEARING_MESSAGES_TYPE_LEGACY_DESCRIPTION".localized(),
+                                        id: "deleteAfterLegacyDisappearingMessagesLegacy".localized(),
+                                        title: "deleteAfterLegacyDisappearingMessagesLegacy".localized(),
+                                        subtitle: "deleteAfterLegacyDisappearingMessagesOriginal".localized(),
                                         rightAccessory: .radio(
                                             isSelected: {
                                                 (self?.currentSelection.value.isEnabled == true) &&
@@ -178,9 +178,9 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                     )
                                 ),
                                 SessionCell.Info(
-                                    id: "DISAPPERING_MESSAGES_TYPE_AFTER_READ_TITLE".localized(),
-                                    title: "DISAPPERING_MESSAGES_TYPE_AFTER_READ_TITLE".localized(),
-                                    subtitle: "DISAPPERING_MESSAGES_TYPE_AFTER_READ_DESCRIPTION".localized(),
+                                    id: "disappearingMessagesDisappearAfterRead".localized(),
+                                    title: "disappearingMessagesDisappearAfterRead".localized(),
+                                    subtitle: "disappearingMessagesDisappearAfterReadDescription".localized(),
                                     rightAccessory: .radio(
                                         isSelected: {
                                             (self?.currentSelection.value.isEnabled == true) &&
@@ -216,9 +216,9 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                     }
                                 ),
                                 SessionCell.Info(
-                                    id: "DISAPPERING_MESSAGES_TYPE_AFTER_SEND_TITLE".localized(),
-                                    title: "DISAPPERING_MESSAGES_TYPE_AFTER_SEND_TITLE".localized(),
-                                    subtitle: "DISAPPERING_MESSAGES_TYPE_AFTER_SEND_DESCRIPTION".localized(),
+                                    id: "disappearingMessagesDisappearAfterSend".localized(),
+                                    title: "disappearingMessagesDisappearAfterSend".localized(),
+                                    subtitle: "disappearingMessagesDisappearAfterSendDescription".localized(),
                                     rightAccessory: .radio(
                                         isSelected: {
                                             (self?.currentSelection.value.isEnabled == true) &&
@@ -305,8 +305,8 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                 model: .type,
                                 elements: [
                                     SessionCell.Info(
-                                        id: "DISAPPEARING_MESSAGES_OFF".localized(),
-                                        title: "DISAPPEARING_MESSAGES_OFF".localized(),
+                                        id: "off".localized(),
+                                        title: "off".localized(),
                                         rightAccessory: .radio(
                                             isSelected: { (self?.currentSelection.value.isEnabled == false) }
                                         ),
@@ -329,9 +329,9 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                         }
                                     ),
                                     SessionCell.Info(
-                                        id: "DISAPPEARING_MESSAGES_TYPE_LEGACY_TITLE".localized(),
-                                        title: "DISAPPEARING_MESSAGES_TYPE_LEGACY_TITLE".localized(),
-                                        subtitle: "DISAPPEARING_MESSAGES_TYPE_LEGACY_DESCRIPTION".localized(),
+                                        id: "deleteAfterLegacyDisappearingMessagesLegacy".localized(),
+                                        title: "deleteAfterLegacyDisappearingMessagesLegacy".localized(),
+                                        subtitle: "deleteAfterLegacyDisappearingMessagesOriginal".localized(),
                                         rightAccessory: .radio(
                                             isSelected: {
                                                 (self?.currentSelection.value.isEnabled == true) &&
@@ -359,9 +359,9 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                         }
                                     ),
                                     SessionCell.Info(
-                                        id: "DISAPPERING_MESSAGES_TYPE_AFTER_SEND_TITLE".localized(),
-                                        title: "DISAPPERING_MESSAGES_TYPE_AFTER_SEND_TITLE".localized(),
-                                        subtitle: "DISAPPERING_MESSAGES_TYPE_AFTER_SEND_DESCRIPTION".localized(),
+                                        id: "disappearingMessagesDisappearAfterSend".localized(),
+                                        title: "disappearingMessagesDisappearAfterSend".localized(),
+                                        subtitle: "disappearingMessagesDisappearAfterSendDescription".localized(),
                                         rightAccessory: .radio(isSelected: { false }),
                                         styling: SessionCell.StyleInfo(tintColor: .disabled),
                                         isEnabled: false
@@ -384,8 +384,8 @@ class ThreadDisappearingMessagesSettingsViewModel: SessionTableViewModel, Naviga
                                 elements: [
                                     (!Features.useNewDisappearingMessagesConfig ? nil :
                                         SessionCell.Info(
-                                            id: "DISAPPEARING_MESSAGES_OFF".localized(),
-                                            title: "DISAPPEARING_MESSAGES_OFF".localized(),
+                                            id: "off".localized(),
+                                            title: "off".localized(),
                                             rightAccessory: .radio(
                                                 isSelected: { (self?.currentSelection.value.isEnabled == false) }
                                             ),

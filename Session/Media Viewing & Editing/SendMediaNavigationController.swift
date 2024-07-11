@@ -243,23 +243,7 @@ class SendMediaNavigationController: UINavigationController {
     }
 
     private func didRequestExit() {
-        guard attachmentDraftCollection.count > 0 else {
-            self.sendMediaNavDelegate?.sendMediaNavDidCancel(self)
-            return
-        }
-        
-        let modal: ConfirmationModal = ConfirmationModal(
-            info: ConfirmationModal.Info(
-                title: "SEND_MEDIA_ABANDON_TITLE".localized(),
-                confirmTitle: "SEND_MEDIA_CONFIRM_ABANDON_ALBUM".localized(),
-                confirmStyle: .danger,
-                cancelStyle: .alert_text,
-                onConfirm: { [weak self] _ in
-                    self?.sendMediaNavDelegate?.sendMediaNavDidCancel(self)
-                }
-            )
-        )
-        self.present(modal, animated: true)
+        self.sendMediaNavDelegate?.sendMediaNavDidCancel(self)
     }
 }
 
@@ -346,7 +330,7 @@ extension SendMediaNavigationController: ImagePickerGridControllerDelegate {
                                         targetView: self?.view,
                                         info: ConfirmationModal.Info(
                                             title: "IMAGE_PICKER_FAILED_TO_PROCESS_ATTACHMENTS".localized(),
-                                            cancelTitle: "BUTTON_OK".localized(),
+                                            cancelTitle: "okay".localized(),
                                             cancelStyle: .alert_text
                                         )
                                     )
@@ -403,7 +387,7 @@ extension SendMediaNavigationController: ImagePickerGridControllerDelegate {
             targetView: self.view,
             info: ConfirmationModal.Info(
                 title: "IMAGE_PICKER_FAILED_TO_PROCESS_ATTACHMENTS".localized(),
-                cancelTitle: "BUTTON_OK".localized(),
+                cancelTitle: "okay".localized(),
                 cancelStyle: .alert_text
             )
         )

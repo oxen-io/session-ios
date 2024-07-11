@@ -1234,7 +1234,7 @@ public extension SessionThreadViewModel {
     }
     
     static func standardQuotes(_ term: String) -> String {
-        // Apple like to use the special '”“' quote characters when typing so replace them with normal ones
+        // Apple like to use the special '""' quote characters when typing so replace them with normal ones
         return term
             .replacingOccurrences(of: "”", with: "\"")
             .replacingOccurrences(of: "“", with: "\"")
@@ -1417,7 +1417,7 @@ public extension SessionThreadViewModel {
         let closedGroupFullTextSearch: TypedTableAlias<ClosedGroup.FullTextSearch> = TypedTableAlias(name: ClosedGroup.fullTextSearchTableName)
         let openGroupFullTextSearch: TypedTableAlias<OpenGroup.FullTextSearch> = TypedTableAlias(name: OpenGroup.fullTextSearchTableName)
         
-        let noteToSelfLiteral: SQL = SQL(stringLiteral: "NOTE_TO_SELF".localized().lowercased())
+        let noteToSelfLiteral: SQL = SQL(stringLiteral: "noteToSelf".localized().lowercased())
         let searchTermLiteral: SQL = SQL(stringLiteral: searchTerm.lowercased())
         
         /// **Note:** The `numColumnsBeforeProfiles` value **MUST** match the number of fields before
@@ -1819,6 +1819,50 @@ public extension SessionThreadViewModel {
                 .closedGroupProfileFront: adapters[2],
                 .closedGroupProfileBack: adapters[3],
                 .closedGroupProfileBackFallback: adapters[4]
+            ])
+        }
+    }
+    
+    static func defaultContactsQuery(userPublicKey: String) -> AdaptedFetchRequest<SQLRequest<SessionThreadViewModel>> {
+        let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
+        let contactProfile: TypedTableAlias<Profile> = TypedTableAlias(ViewModel.self, column: .contactProfile)
+        
+        /// **Note:** The `numColumnsBeforeProfiles` value **MUST** match the number of fields before
+        /// the `contactProfile` entry below otherwise the query will fail to parse and might throw
+        let numColumnsBeforeProfiles: Int = 8
+        let request: SQLRequest<ViewModel> = """
+            SELECT
+                100 AS \(Column.rank),
+                
+                \(thread[.rowId]) AS \(ViewModel.Columns.rowId),
+                \(thread[.id]) AS \(ViewModel.Columns.threadId),
+                \(thread[.variant]) AS \(ViewModel.Columns.threadVariant),
+                \(thread[.creationDateTimestamp]) AS \(ViewModel.Columns.threadCreationDateTimestamp),
+                '' AS \(ViewModel.Columns.threadMemberNames),
+                
+                (\(SQL("\(thread[.id]) = \(userPublicKey)"))) AS \(ViewModel.Columns.threadIsNoteToSelf),
+                IFNULL(\(thread[.pinnedPriority]), 0) AS \(ViewModel.Columns.threadPinnedPriority),
+                
+                \(contactProfile.allColumns),
+                
+                \(SQL("\(userPublicKey)")) AS \(ViewModel.Columns.currentUserPublicKey)
+
+            FROM \(SessionThread.self)
+            LEFT JOIN \(contactProfile) ON \(contactProfile[.id]) = \(thread[.id])
+        
+            WHERE \(SQL("\(thread[.variant]) = \(SessionThread.Variant.contact)"))
+        """
+        
+        // Add adapters which will group the various 'Profile' columns so they can be decoded
+        // as instances of 'Profile' types
+        return request.adapted { db in
+            let adapters = try splittingRowAdapters(columnCounts: [
+                numColumnsBeforeProfiles,
+                Profile.numberOfSelectedColumns(db)
+            ])
+            
+            return ScopeAdapter.with(ViewModel.self, [
+                .contactProfile: adapters[1]
             ])
         }
     }

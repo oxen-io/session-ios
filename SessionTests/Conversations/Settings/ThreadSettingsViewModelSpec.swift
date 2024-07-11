@@ -160,7 +160,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 
                 // MARK: ---- has the correct title
                 it("has the correct title") {
-                    expect(viewModel.title).to(equal("vc_settings_title".localized()))
+                    expect(viewModel.title).to(equal("sessionSettings".localized()))
                 }
                 
                 // MARK: ---- starts in the standard nav state
@@ -307,7 +307,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 
                 // MARK: ---- has the correct title
                 it("has the correct title") {
-                    expect(viewModel.title).to(equal("vc_settings_title".localized()))
+                    expect(viewModel.title).to(equal("sessionSettings".localized()))
                 }
                 
                 // MARK: ---- starts in the standard nav state
@@ -457,7 +457,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 
                 // MARK: ---- has the correct title
                 it("has the correct title") {
-                    expect(viewModel.title).to(equal("vc_group_settings_title".localized()))
+                    expect(viewModel.title).to(equal("deleteAfterGroupPR1GroupSettings".localized()))
                 }
                 
                 // MARK: ---- starts in the standard nav state
@@ -502,7 +502,7 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                 
                 // MARK: ---- has the correct title
                 it("has the correct title") {
-                    expect(viewModel.title).to(equal("vc_group_settings_title".localized()))
+                    expect(viewModel.title).to(equal("deleteAfterGroupPR1GroupSettings".localized()))
                 }
                 
                 // MARK: ---- starts in the standard nav state

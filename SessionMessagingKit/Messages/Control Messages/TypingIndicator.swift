@@ -34,8 +34,8 @@ public final class TypingIndicator: ControlMessage {
         
         public var description: String {
             switch self {
-                case .started: return "started"
-                case .stopped: return "stopped"
+                case .started: return "started" // stringlint:disable
+                case .stopped: return "stopped" // stringlint:disable
             }
         }
     }

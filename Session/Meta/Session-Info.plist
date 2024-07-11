@@ -81,6 +81,8 @@
 				<false/>
 			</dict>
 		</dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Session needs to use Apple Music to play media attachments.</string>

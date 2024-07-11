@@ -15,7 +15,7 @@ public final class InputTextView: UITextView, UITextViewDelegate {
     private lazy var placeholderLabel: UILabel = {
         let result = UILabel()
         result.font = .systemFont(ofSize: Values.mediumFontSize)
-        result.text = "vc_conversation_input_prompt".localized()
+        result.text = "message".localized()
         result.themeTextColor = .textSecondary
         
         return result
@@ -37,7 +37,7 @@ public final class InputTextView: UITextView, UITextViewDelegate {
         setUpViewHierarchy()
         self.delegate = self
         self.isAccessibilityElement = true
-        self.accessibilityLabel = "vc_conversation_input_prompt".localized()
+        self.accessibilityLabel = "Message"
     }
     
     public override init(frame: CGRect, textContainer: NSTextContainer?) {
