@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 public final class InputTextView: UITextView, UITextViewDelegate {
     private weak var snDelegate: InputTextViewDelegate?

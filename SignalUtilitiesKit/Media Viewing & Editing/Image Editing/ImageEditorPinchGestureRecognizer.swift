@@ -1,7 +1,6 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 
 import UIKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public struct ImageEditorPinchState {
@@ -83,7 +82,7 @@ public class ImageEditorPinchGestureRecognizer: UIGestureRecognizer {
                     // If the initial touch moves too much without a second touch,
                     // this GR needs to fail - the gesture looks like a pan/swipe/etc.,
                     // not a pinch.
-                    let distance = CGPointDistance(location, gestureBeganLocation)
+                    let distance = location.distance(to: gestureBeganLocation)
                     let maxDistance: CGFloat = 10.0
                     guard distance <= maxDistance else {
                         failAndReset()
@@ -139,7 +138,7 @@ public class ImageEditorPinchGestureRecognizer: UIGestureRecognizer {
 
     private func touchState(for event: UIEvent) -> TouchState {
         guard let allTouches = event.allTouches else {
-            owsFailDebug("Missing allTouches")
+            Log.error("[ImageEditorPinchGestureRecognizer] Missing allTouches")
             return .invalid
         }
         // Note that we use _all_ touches.
@@ -154,7 +153,7 @@ public class ImageEditorPinchGestureRecognizer: UIGestureRecognizer {
 
     private func pinchState() -> ImageEditorPinchState? {
         guard let referenceView = referenceView else {
-            owsFailDebug("Missing view")
+            Log.error("[ImageEditorPinchGestureRecognizer] Missing view")
             return nil
         }
         guard numberOfTouches == 2 else {
@@ -165,12 +164,12 @@ public class ImageEditorPinchGestureRecognizer: UIGestureRecognizer {
         let location0 = location(ofTouch: 0, in: referenceView)
         let location1 = location(ofTouch: 1, in: referenceView)
 
-        let centroid = CGPointScale(CGPointAdd(location0, location1), 0.5)
-        let distance = CGPointDistance(location0, location1)
+        let centroid = location0.adding(location1).scaled(by: 0.5)
+        let distance = location0.distance(to: location1)
 
         // The valence of the angle doesn't matter; we're only going to be using
         // changes to the angle.
-        let delta = CGPointSubtract(location1, location0)
+        let delta = location1.subtracting(location0)
         let angleRadians = atan2(delta.y, delta.x)
         return ImageEditorPinchState(centroid: centroid,
                                      distance: distance,
@@ -179,7 +178,7 @@ public class ImageEditorPinchGestureRecognizer: UIGestureRecognizer {
 
     private func centroid(forTouches touches: Set<UITouch>?) -> CGPoint {
         guard let view = self.view else {
-            owsFailDebug("Missing view")
+            Log.error("[ImageEditorPinchGestureRecognizer] Missing view")
             return .zero
         }
         guard let touches = touches else {
@@ -191,10 +190,10 @@ public class ImageEditorPinchGestureRecognizer: UIGestureRecognizer {
         var sum = CGPoint.zero
         for touch in touches {
             let location = touch.location(in: view)
-            sum = CGPointAdd(sum, location)
+            sum = sum.adding(location)
         }
 
-        let centroid = CGPointScale(sum, 1 / CGFloat(touches.count))
+        let centroid = sum.scaled(by: 1 / CGFloat(touches.count))
         return centroid
     }
 }

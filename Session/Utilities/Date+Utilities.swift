@@ -40,6 +40,10 @@ public extension Date {
         
         return formatter.string(from: self)
     }
+    
+    var formattedForBanner: String {
+        return Date.dateOnlyFormatter.string(from: self)
+    }
 }
 
 // MARK: - Formatters
@@ -81,6 +85,16 @@ fileprivate extension Date {
         
         // 9:10 am
         result.dateFormat = hourFormat
+        
+        return result
+    }()
+    
+    static let dateOnlyFormatter: DateFormatter = {
+        let result: DateFormatter = DateFormatter()
+        result.locale = Locale.current
+        
+        // 6 Jun 2023
+        result.dateFormat = "d MMM YYYY"
         
         return result
     }()

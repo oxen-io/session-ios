@@ -2,7 +2,6 @@
 
 import SwiftUI
 import UIKit
-import SessionUtilitiesKit
 
 struct ViewControllerHolder {
     weak var value: UIViewController?
@@ -10,7 +9,7 @@ struct ViewControllerHolder {
 
 struct ViewControllerKey: EnvironmentKey {
     static var defaultValue: ViewControllerHolder {
-        return ViewControllerHolder(value: Singleton.appContext.mainWindow?.rootViewController)
+        return ViewControllerHolder(value: SNUIKit.mainWindow?.rootViewController)
     }
 }
 
@@ -39,7 +38,8 @@ public struct UIView_SwiftUI: UIViewRepresentable {
     }
 }
 
-// MARK: MaxWidthEqualizer
+// MARK: - MaxWidthEqualizer
+
 /// PreferenceKey to report the max width of the view.
 struct MaxWidthPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0.0

@@ -44,7 +44,8 @@ final class DateHeaderCell: MessageCell {
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
         guard cellViewModel.cellType == .dateHeader else { return }
         

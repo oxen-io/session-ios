@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtilitiesKit
 
 extension SnodeAPI {
     public class UpdateExpiryAllRequest: SnodeAuthenticatedRequestBody {
@@ -20,23 +21,32 @@ extension SnodeAPI {
         /// only (namespace 0)
         let namespace: SnodeAPI.Namespace?
         
+        override var verificationBytes: [UInt8] {
+            /// Ed25519 signature of `("expire_all" || namespace || expiry)`, signed by `pubkey`.  Must be
+            /// base64 encoded (json) or bytes (OMQ).  namespace should be the stringified namespace for
+            /// non-default namespace expiries (i.e. "42", "-99", "all"), or an empty string for the default
+            /// namespace (whether or not explicitly provided).
+            SnodeAPI.Endpoint.expireAll.path.bytes
+                .appending(
+                    contentsOf: (namespace == nil ?
+                        "all" :
+                        namespace?.verificationString
+                    )?.bytes
+                )
+                .appending(contentsOf: "\(expiryMs)".data(using: .ascii)?.bytes)
+        }
+        
         // MARK: - Init
         
         public init(
             expiryMs: UInt64,
             namespace: SnodeAPI.Namespace?,
-            pubkey: String,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8]
+            authMethod: AuthenticationMethod
         ) {
             self.expiryMs = expiryMs
             self.namespace = namespace
             
-            super.init(
-                pubkey: pubkey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey
-            )
+            super.init(authMethod: authMethod)
         }
         
         // MARK: - Coding
@@ -54,34 +64,6 @@ extension SnodeAPI {
             }
             
             try super.encode(to: encoder)
-        }
-        
-        // MARK: - Abstract Methods
-        
-        override func generateSignature() throws -> [UInt8] {
-            /// Ed25519 signature of `("expire_all" || namespace || expiry)`, signed by `pubkey`.  Must be
-            /// base64 encoded (json) or bytes (OMQ).  namespace should be the stringified namespace for
-            /// non-default namespace expiries (i.e. "42", "-99", "all"), or an empty string for the default
-            /// namespace (whether or not explicitly provided).
-            let verificationBytes: [UInt8] = SnodeAPI.Endpoint.expireAll.path.bytes
-                .appending(
-                    contentsOf: (namespace == nil ?
-                        "all" :
-                        namespace?.verificationString
-                    )?.bytes
-                )
-                .appending(contentsOf: "\(expiryMs)".data(using: .ascii)?.bytes)
-            
-            guard
-                let signatureBytes: [UInt8] = sodium.wrappedValue.sign.signature(
-                    message: verificationBytes,
-                    secretKey: ed25519SecretKey
-                )
-            else {
-                throw SnodeAPIError.signingFailed
-            }
-            
-            return signatureBytes
         }
     }
 }

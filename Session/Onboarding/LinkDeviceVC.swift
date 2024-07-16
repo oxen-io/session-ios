@@ -8,6 +8,7 @@ import SessionSnodeKit
 import SignalUtilitiesKit
 
 final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControllerDelegate, QRScannerDelegate {
+    private let dependencies: Dependencies
     private let pageVC = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: nil)
     private var pages: [UIViewController] = []
     private var targetVCIndex: Int?
@@ -37,7 +38,7 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
     }()
     
     private lazy var scanQRCodePlaceholderVC: ScanQRCodePlaceholderVC = {
-        let result = ScanQRCodePlaceholderVC()
+        let result = ScanQRCodePlaceholderVC(using: dependencies)
         result.linkDeviceVC = self
         return result
     }()
@@ -48,6 +49,18 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         result.delegate = self
         return result
     }()
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - Lifecycle
     
@@ -66,7 +79,7 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         // Tab bar
         view.addSubview(tabBar)
         tabBar.pin(.leading, to: .leading, of: view)
-        tabBarTopConstraint = tabBar.autoPinEdge(toSuperviewSafeArea: .top)
+        tabBarTopConstraint = tabBar.pin(.top, to: .top, of: view.safeAreaLayoutGuide)
         view.pin(.trailing, to: .trailing, of: tabBar)
         
         // Page VC constraints
@@ -86,15 +99,9 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
         scanQRCodePlaceholderVC.constrainHeight(to: height)
     }
     
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        
-        Onboarding.Flow.register.unregister()
-    }
-    
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        tabBarTopConstraint.constant = navigationController!.navigationBar.height()
+        tabBarTopConstraint.constant = navigationController!.navigationBar.bounds.height
     }
     
     // MARK: - General
@@ -136,11 +143,11 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
     }
     
     func continueWithSeed(_ seed: Data, onError: (() -> ())?) {
-        if (seed.count != 16) {
+        func showError(title: String, message: String = "") {
             let modal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
-                    title: "invalid_recovery_phrase".localized(),
-                    body: .text("INVALID_RECOVERY_PHRASE_MESSAGE".localized()),
+                    title: title,
+                    body: .text(message),
                     cancelTitle: "BUTTON_OK".localized(),
                     cancelStyle: .alert_text,
                     afterClosed: onError
@@ -149,18 +156,24 @@ final class LinkDeviceVC: BaseVC, UIPageViewControllerDataSource, UIPageViewCont
             present(modal, animated: true)
             return
         }
-        let (ed25519KeyPair, x25519KeyPair) = try! Identity.generate(from: seed)
         
-        Onboarding.Flow.link
-            .preregister(
-                with: seed,
-                ed25519KeyPair: ed25519KeyPair,
-                x25519KeyPair: x25519KeyPair
+        if (seed.count != 16) {
+            return showError(
+                title: "invalid_recovery_phrase".localized(),
+                message: "INVALID_RECOVERY_PHRASE_MESSAGE".localized()
             )
+        }
         
-            // Otherwise continue on to request push notifications permissions
-            let pnModeVC: PNModeVC = PNModeVC(flow: .link)
-            self.navigationController?.pushViewController(pnModeVC, animated: true)
+        do {
+            try dependencies.mutate(cache: .onboarding) { try $0.setSeedData(seed) }
+        }
+        catch let error {
+            return showError(title: Mnemonic.DecodingError.generic.errorDescription!)
+        }
+        
+        // Continue on to request push notifications permissions
+        let pnModeVC: PNModeVC = PNModeVC(using: dependencies)
+        self.navigationController?.pushViewController(pnModeVC, animated: true)
     }
 }
 
@@ -323,7 +336,22 @@ private final class RecoveryPhraseVC: UIViewController {
 }
 
 private final class ScanQRCodePlaceholderVC: UIViewController {
+    private let dependencies: Dependencies
     weak var linkDeviceVC: LinkDeviceVC!
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Lifecycle
     
     override func viewDidLoad() {
         // Remove background color
@@ -365,7 +393,7 @@ private final class ScanQRCodePlaceholderVC: UIViewController {
     }
     
     @objc private func requestCameraAccess() {
-        Permissions.requestCameraPermissionIfNeeded { [weak self] in
+        Permissions.requestCameraPermissionIfNeeded(using: dependencies) { [weak self] in
             self?.linkDeviceVC.handleCameraAccessGranted()
         }
     }

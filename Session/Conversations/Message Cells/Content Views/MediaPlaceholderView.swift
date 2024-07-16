@@ -46,7 +46,7 @@ final class MediaPlaceholderView: UIView {
         // Image view
         let imageView = UIImageView(
             image: UIImage(named: iconName)?
-                .resizedImage(
+                .resized(
                     to: CGSize(
                         width: MediaPlaceholderView.iconSize,
                         height: MediaPlaceholderView.iconSize

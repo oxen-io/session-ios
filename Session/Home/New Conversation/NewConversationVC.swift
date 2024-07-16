@@ -4,11 +4,24 @@ import UIKit
 import GRDB
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 import SignalUtilitiesKit
 
 final class NewConversationVC: BaseVC, ThemedNavigation, UITableViewDelegate, UITableViewDataSource {
-    private let newConversationViewModel = NewConversationViewModel()
+    private let viewModel: NewConversationViewModel
     private var groupedContacts: OrderedDictionary<String, [Profile]> = OrderedDictionary()
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.viewModel = NewConversationViewModel(using: dependencies)
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - UI
     
@@ -63,11 +76,11 @@ final class NewConversationVC: BaseVC, ThemedNavigation, UITableViewDelegate, UI
     private lazy var contactsTitleLabel: UILabel = {
         let result: UILabel = UILabel()
         result.font = .systemFont(ofSize: Values.mediumFontSize)
-        result.text = (newConversationViewModel.sectionData.isEmpty ?
+        result.text = (viewModel.sectionData.isEmpty ?
             "vc_create_closed_group_empty_state_message".localized() :
             "NEW_CONVERSATION_CONTACTS_SECTION_TITLE".localized()
         )
-        result.themeTextColor = (newConversationViewModel.sectionData.isEmpty ?
+        result.themeTextColor = (viewModel.sectionData.isEmpty ?
             .textSecondary :
             .textPrimary
         )
@@ -130,27 +143,28 @@ final class NewConversationVC: BaseVC, ThemedNavigation, UITableViewDelegate, UI
     // MARK: - UITableViewDataSource
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return newConversationViewModel.sectionData.count
+        return viewModel.sectionData.count
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return newConversationViewModel.sectionData[section].contacts.count
+        return viewModel.sectionData[section].contacts.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell: SessionCell = tableView.dequeue(type: SessionCell.self, for: indexPath)
-        let profile = newConversationViewModel.sectionData[indexPath.section].contacts[indexPath.row]
+        let profile = viewModel.sectionData[indexPath.section].contacts[indexPath.row]
         cell.update(
             with: SessionCell.Info(
                 id: profile,
                 position: Position.with(
                     indexPath.row,
-                    count: newConversationViewModel.sectionData[indexPath.section].contacts.count
+                    count: viewModel.sectionData[indexPath.section].contacts.count
                 ),
-                leftAccessory: .profile(id: profile.id, profile: profile),
+                leadingAccessory: .profile(id: profile.id, profile: profile),
                 title: profile.displayName(),
                 styling: SessionCell.StyleInfo(backgroundStyle: .edgeToEdge)
-            )
+            ),
+            using: viewModel.dependencies
         )
         
         return cell
@@ -159,7 +173,7 @@ final class NewConversationVC: BaseVC, ThemedNavigation, UITableViewDelegate, UI
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         let label: UILabel = UILabel()
         label.font = .systemFont(ofSize: Values.smallFontSize)
-        label.text = newConversationViewModel.sectionData[section].sectionName
+        label.text = viewModel.sectionData[section].sectionName
         label.themeTextColor = .textPrimary
         
         let headerView: UIView = UIView()
@@ -178,9 +192,9 @@ final class NewConversationVC: BaseVC, ThemedNavigation, UITableViewDelegate, UI
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         
-        let sessionId = newConversationViewModel.sectionData[indexPath.section].contacts[indexPath.row].id
+        let sessionId = viewModel.sectionData[indexPath.section].contacts[indexPath.row].id
         
-        SessionApp.presentConversationCreatingIfNeeded(
+        viewModel.dependencies[singleton: .app].presentConversationCreatingIfNeeded(
             for: sessionId,
             variant: .contact,
             dismissing: navigationController,
@@ -213,17 +227,17 @@ final class NewConversationVC: BaseVC, ThemedNavigation, UITableViewDelegate, UI
     }
     
     @objc func createNewDM() {
-        let newDMVC = NewDMVC()
+        let newDMVC = NewDMVC(using: viewModel.dependencies)
         self.navigationController?.pushViewController(newDMVC, animated: true)
     }
     
     @objc func createClosedGroup() {
-        let newClosedGroupVC = NewClosedGroupVC()
+        let newClosedGroupVC = NewClosedGroupVC(using: viewModel.dependencies)
         self.navigationController?.pushViewController(newClosedGroupVC, animated: true)
     }
     
     @objc func joinOpenGroup() {
-        let joinOpenGroupVC: JoinOpenGroupVC = JoinOpenGroupVC()
+        let joinOpenGroupVC: JoinOpenGroupVC = JoinOpenGroupVC(using: viewModel.dependencies)
         self.navigationController?.pushViewController(joinOpenGroupVC, animated: true)
     }
 }

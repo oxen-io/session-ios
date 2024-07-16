@@ -16,7 +16,7 @@ enum _016_MakeBrokenProfileTimestampsNullable: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Profile.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         /// SQLite doesn't support altering columns after creation so we need to create a new table with the setup we
         /// want, copy data from the old table over, drop the old table and rename the new table
         struct TmpProfile: Codable, TableRecord, FetchableRecord, PersistableRecord, ColumnExpressible {
@@ -76,6 +76,6 @@ enum _016_MakeBrokenProfileTimestampsNullable: Migration {
         try db.drop(table: Profile.self)
         try db.rename(table: TmpProfile.databaseTableName, to: Profile.databaseTableName)
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

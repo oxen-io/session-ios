@@ -28,7 +28,13 @@ final class InputViewButton: UIView {
     
     // MARK: - Lifecycle
     
-    init(icon: UIImage?, isSendButton: Bool = false, delegate: InputViewButtonDelegate? = nil, hasOpaqueBackground: Bool = false, onTap: (() -> Void)? = nil) {
+    init(
+        icon: UIImage?,
+        isSendButton: Bool = false,
+        delegate: InputViewButtonDelegate? = nil,
+        hasOpaqueBackground: Bool = false,
+        onTap: (() -> Void)? = nil
+    ) {
         self.icon = icon
         self.isSendButton = isSendButton
         self.delegate = delegate
@@ -138,9 +144,7 @@ final class InputViewButton: UIView {
     
     // We want to detect both taps and long presses
     
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) { onTouchesBegan() }
-    
-    private func onTouchesBegan(using dependencies: Dependencies = Dependencies()) {
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard isUserInteractionEnabled else { return }
         
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
@@ -148,7 +152,7 @@ final class InputViewButton: UIView {
         invalidateLongPressIfNeeded()
         longPressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false, block: { [weak self] _ in
             self?.isLongPress = true
-            self?.delegate?.handleInputViewButtonLongPressBegan(self, using: dependencies)
+            self?.delegate?.handleInputViewButtonLongPressBegan(self)
         })
     }
 
@@ -188,13 +192,13 @@ final class InputViewButton: UIView {
 
 protocol InputViewButtonDelegate: AnyObject {
     func handleInputViewButtonTapped(_ inputViewButton: InputViewButton)
-    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?, using dependencies: Dependencies)
+    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?)
     func handleInputViewButtonLongPressMoved(_ inputViewButton: InputViewButton, with touch: UITouch?)
     func handleInputViewButtonLongPressEnded(_ inputViewButton: InputViewButton, with touch: UITouch?)
 }
 
 extension InputViewButtonDelegate {    
-    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?, using dependencies: Dependencies) { }
+    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?) { }
     func handleInputViewButtonLongPressMoved(_ inputViewButton: InputViewButton, with touch: UITouch?) { }
     func handleInputViewButtonLongPressEnded(_ inputViewButton: InputViewButton, with touch: UITouch?) { }
 }

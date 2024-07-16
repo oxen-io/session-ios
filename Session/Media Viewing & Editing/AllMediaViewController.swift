@@ -5,10 +5,11 @@ import QuartzCore
 import GRDB
 import DifferenceKit
 import SessionUIKit
+import SessionUtilitiesKit
 import SignalUtilitiesKit
-import SignalCoreKit
 
 public class AllMediaViewController: UIViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+    private let dependencies: Dependencies
     private let pageVC = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: nil)
     private var pages: [UIViewController] = []
     private var targetVCIndex: Int?
@@ -39,7 +40,8 @@ public class AllMediaViewController: UIViewController, UIPageViewControllerDataS
     private var mediaTitleViewController: MediaTileViewController
     private var documentTitleViewController: DocumentTileViewController
     
-    init(mediaTitleViewController: MediaTileViewController, documentTitleViewController: DocumentTileViewController) {
+    init(mediaTitleViewController: MediaTileViewController, documentTitleViewController: DocumentTileViewController, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.mediaTitleViewController = mediaTitleViewController
         self.documentTitleViewController = documentTitleViewController
         
@@ -53,7 +55,7 @@ public class AllMediaViewController: UIViewController, UIPageViewControllerDataS
     }
     
     required init?(coder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
     
     // MARK: Lifecycle
@@ -64,7 +66,7 @@ public class AllMediaViewController: UIViewController, UIPageViewControllerDataS
         
         // Add a custom back button if this is the only view controller
         if self.navigationController?.viewControllers.first == self {
-            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: dependencies)
             self.navigationItem.leftBarButtonItem = backButton
         }
         

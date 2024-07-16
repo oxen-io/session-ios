@@ -2,6 +2,8 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 //
 
+import UIKit
+
 // A simple LRU cache bounded by the number of entries.
 public class LRUCache<KeyType: Hashable & Equatable, ValueType> {
 
@@ -13,14 +15,18 @@ public class LRUCache<KeyType: Hashable & Equatable, ValueType> {
     public init(maxSize: Int) {
         self.maxSize = maxSize
 
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(didReceiveMemoryWarning),
-                                               name: UIApplication.didReceiveMemoryWarningNotification,
-                                               object: nil)
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(didEnterBackground),
-                                               name: .sessionDidEnterBackground,
-                                               object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didReceiveMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didEnterBackground),
+            name: .sessionDidEnterBackground,
+            object: nil
+        )
     }
 
     deinit {

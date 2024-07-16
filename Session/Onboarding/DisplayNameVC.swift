@@ -4,9 +4,10 @@ import UIKit
 import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
+import SessionUtilitiesKit
 
 final class DisplayNameVC: BaseVC {
-    private let flow: Onboarding.Flow
+    private let dependencies: Dependencies
     
     private var spacer1HeightConstraint: NSLayoutConstraint!
     private var spacer2HeightConstraint: NSLayoutConstraint!
@@ -15,8 +16,8 @@ final class DisplayNameVC: BaseVC {
     
     // MARK: - Initialization
     
-    init(flow: Onboarding.Flow) {
-        self.flow = flow
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         
         super.init(nibName: nil, bundle: nil)
     }
@@ -183,29 +184,37 @@ final class DisplayNameVC: BaseVC {
         guard !displayName.isEmpty else {
             return showError(title: "vc_display_name_display_name_missing_error".localized())
         }
-        guard !ProfileManager.isToLong(profileName: displayName) else {
+        guard !Profile.isTooLong(profileName: displayName) else {
             return showError(title: "vc_display_name_display_name_too_long_error".localized())
         }
         
-        // Try to save the user name but ignore the result
-        ProfileManager.updateLocal(
-            queue: .global(qos: .default),
-            profileName: displayName
-        )
+        // Store the new name in the onboarding cache
+        dependencies.mutate(cache: .onboarding) { $0.setDisplayName(displayName) }
         
         // If we are not in the registration flow then we are finished and should go straight
         // to the home screen
-        guard self.flow == .register else {
-            self.flow.completeRegistration()
-            
-            // Go to the home screen
-            let homeVC: HomeVC = HomeVC()
-            self.navigationController?.setViewControllers([ homeVC ], animated: true)
-            return
+        guard dependencies[cache: .onboarding].initialFlow == .register else {
+            return dependencies.mutate(cache: .onboarding) { [weak self, dependencies] onboarding in
+                // If the `initialFlow` is `none` then it means the user is just providing a missing displayName
+                // and so shouldn't change the APNS setting, otherwise we should base it on the users selection
+                // during the onboarding process
+                let shouldSyncPushTokens: Bool = (onboarding.initialFlow != .none && onboarding.useAPNS)
+                
+                onboarding.completeRegistration {
+                    // Trigger the 'SyncPushTokensJob' directly as we don't want to wait for paths to build
+                    // before requesting the permission from the user
+                    if shouldSyncPushTokens { SyncPushTokensJob.run(uploadOnlyIfStale: false, using: dependencies) }
+                    
+                    // Go to the home screen
+                    let homeVC: HomeVC = HomeVC(using: dependencies)
+                    dependencies[singleton: .app].setHomeViewController(homeVC)
+                    self?.navigationController?.setViewControllers([ homeVC ], animated: true)
+                }
+            }
         }
         
         // Need to get the PN mode if registering
-        let pnModeVC = PNModeVC(flow: .register)
+        let pnModeVC = PNModeVC(using: dependencies)
         navigationController?.pushViewController(pnModeVC, animated: true)
     }
 }

@@ -6,6 +6,7 @@ import SessionUtilitiesKit
 import SignalUtilitiesKit
 
 final class RestoreVC: BaseVC {
+    private let dependencies: Dependencies
     private var spacer1HeightConstraint: NSLayoutConstraint!
     private var spacer2HeightConstraint: NSLayoutConstraint!
     private var spacer3HeightConstraint: NSLayoutConstraint!
@@ -44,6 +45,18 @@ final class RestoreVC: BaseVC {
         
         return result
     }()
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - Lifecycle
     
@@ -128,12 +141,6 @@ final class RestoreVC: BaseVC {
         notificationCenter.addObserver(self, selector: #selector(handleKeyboardWillHideNotification(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
     }
     
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        
-        Onboarding.Flow.register.unregister()
-    }
-    
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
@@ -201,14 +208,10 @@ final class RestoreVC: BaseVC {
             present(modal, animated: true)
         }
         
-        let seed: Data
-        let keyPairs: (ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair)
-        
         do {
             let mnemonic: String = (mnemonicTextView.text ?? "").lowercased()
             let hexEncodedSeed: String = try Mnemonic.decode(mnemonic: mnemonic)
-            seed = Data(hex: hexEncodedSeed)
-            keyPairs = try Identity.generate(from: seed)
+            try dependencies.mutate(cache: .onboarding) { try $0.setSeedData(Data(hex: hexEncodedSeed)) }
         }
         catch let error {
             let error = error as? Mnemonic.DecodingError ?? Mnemonic.DecodingError.generic
@@ -216,17 +219,10 @@ final class RestoreVC: BaseVC {
             return
         }
         
-        // Load in the user config and progress to the next screen
+        // Progress to the next screen
         mnemonicTextView.resignFirstResponder()
         
-        Onboarding.Flow.recover
-            .preregister(
-                with: seed,
-                ed25519KeyPair: keyPairs.ed25519KeyPair,
-                x25519KeyPair: keyPairs.x25519KeyPair
-            )
-        
-        let pnModeVC: PNModeVC = PNModeVC(flow: .recover)
+        let pnModeVC: PNModeVC = PNModeVC(using: dependencies)
         self.navigationController?.pushViewController(pnModeVC, animated: true)
     }
     

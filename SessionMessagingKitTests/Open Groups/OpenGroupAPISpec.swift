@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import Sodium
 import SessionSnodeKit
 import SessionUtilitiesKit
 
@@ -16,12 +15,16 @@ class OpenGroupAPISpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var mockStorage: Storage! = SynchronousStorage(
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies.dateNow = Date(timeIntervalSince1970: 1234567890)
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
             customWriter: try! DatabaseQueue(),
             migrationTargets: [
                 SNUtilitiesKit.self,
                 SNMessagingKit.self
             ],
+            using: dependencies,
             initialData: { db in
                 try Identity(variant: .x25519PublicKey, data: Data.data(fromHex: TestConstants.publicKey)!).insert(db)
                 try Identity(variant: .x25519PrivateKey, data: Data.data(fromHex: TestConstants.privateKey)!).insert(db)
@@ -45,56 +48,38 @@ class OpenGroupAPISpec: QuickSpec {
                 try Capability(openGroupServer: "testserver", variant: .sogs, isMissing: false).insert(db)
             }
         )
-        @TestState var mockNetwork: MockNetwork! = MockNetwork()
-        @TestState var mockCrypto: MockCrypto! = MockCrypto(
+        @TestState(singleton: .network, in: dependencies) var mockNetwork: MockNetwork! = MockNetwork()
+        @TestState(singleton: .crypto, in: dependencies) var mockCrypto: MockCrypto! = MockCrypto(
             initialSetup: { crypto in
                 crypto
-                    .when { try $0.perform(.hash(message: anyArray(), outputLength: any())) }
+                    .when { $0.generate(.hash(message: .any, key: .any, length: .any)) }
                     .thenReturn([])
                 crypto
-                    .when { crypto in
-                        crypto.generate(
-                            .blindedKeyPair(serverPublicKey: any(), edKeyPair: any(), using: any())
-                        )
-                    }
+                    .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                     .thenReturn(
                         KeyPair(
-                            publicKey: Data.data(fromHex: TestConstants.publicKey)!.bytes,
-                            secretKey: Data.data(fromHex: TestConstants.edSecretKey)!.bytes
+                            publicKey: Data(hex: TestConstants.publicKey).bytes,
+                            secretKey: Data(hex: TestConstants.edSecretKey).bytes
                         )
                     )
                 crypto
-                    .when {
-                        try $0.perform(
-                            .sogsSignature(
-                                message: anyArray(),
-                                secretKey: anyArray(),
-                                blindedSecretKey: anyArray(),
-                                blindedPublicKey: anyArray()
-                            )
-                        )
-                    }
+                    .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                     .thenReturn("TestSogsSignature".bytes)
                 crypto
-                    .when { try $0.perform(.signature(message: anyArray(), secretKey: anyArray())) }
-                    .thenReturn("TestSignature".bytes)
+                    .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
+                    .thenReturn(Authentication.Signature.standard(signature: "TestSignature".bytes))
                 crypto
-                    .when { try $0.perform(.signEd25519(data: anyArray(), keyPair: any())) }
+                    .when { $0.generate(.signatureXed25519(data: .any, curve25519PrivateKey: .any)) }
                     .thenReturn("TestStandardSignature".bytes)
                 crypto
-                    .when { try $0.perform(.generateNonce16()) }
-                    .thenReturn(Data(base64Encoded: "pK6YRtQApl4NhECGizF0Cg==")!.bytes)
+                    .when { $0.generate(.randomBytes(16)) }
+                    .thenReturn(Array(Data(base64Encoded: "pK6YRtQApl4NhECGizF0Cg==")!))
                 crypto
-                    .when { try $0.perform(.generateNonce24()) }
-                    .thenReturn(Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!.bytes)
+                    .when { $0.generate(.randomBytes(24)) }
+                    .thenReturn(Array(Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!))
             }
         )
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: mockStorage,
-            network: mockNetwork,
-            crypto: mockCrypto,
-            dateNow: Date(timeIntervalSince1970: 1234567890)
-        )
+        
         @TestState var disposables: [AnyCancellable]! = []
         @TestState var error: Error?
         
@@ -453,7 +438,7 @@ class OpenGroupAPISpec: QuickSpec {
                 // MARK: ---- processes a valid response correctly
                 it("processes a valid response correctly") {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .when { $0.send(.selectedNetworkRequest(.any, to: .any, with: .any), using: dependencies) }
                         .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomResponse)
                     
                     var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomResponse)?
@@ -482,7 +467,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a room response
                     it("errors when not given a room response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.selectedNetworkRequest(.any, to: .any, with: .any, using: .any)) }
                             .thenReturn(Network.BatchResponse.mockCapabilitiesAndBanResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomResponse)?
@@ -508,7 +493,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a capabilities response
                     it("errors when not given a capabilities response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.selectedNetworkRequest(.any, to: .any, with: .any, using: .any)) }
                             .thenReturn(Network.BatchResponse.mockBanAndRoomResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomResponse)?
@@ -560,7 +545,7 @@ class OpenGroupAPISpec: QuickSpec {
                 // MARK: ---- processes a valid response correctly
                 it("processes a valid response correctly") {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .when { $0.send(.selectedNetworkRequest(.any, to: .any, with: .any, using: .any)) }
                         .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomsResponse)
                     
                     var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomsResponse)?
@@ -588,7 +573,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a room response
                     it("errors when not given a room response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.selectedNetworkRequest(.any, to: .any, with: .any, using: .any)) }
                             .thenReturn(Network.BatchResponse.mockCapabilitiesAndBanResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomsResponse)?
@@ -613,7 +598,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a capabilities response
                     it("errors when not given a capabilities response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.selectedNetworkRequest(.any, to: .any, with: .any, using: .any)) }
                             .thenReturn(Network.BatchResponse.mockBanAndRoomsResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomsResponse)?
@@ -753,7 +738,7 @@ class OpenGroupAPISpec: QuickSpec {
                     it("fails to sign if no signature is generated") {
                         mockCrypto.reset() // The 'keyPair' value doesn't equate so have to explicitly reset
                         mockCrypto
-                            .when { try $0.perform(.signEd25519(data: anyArray(), keyPair: any())) }
+                            .when { $0.generate(.signatureXed25519(data: .any, curve25519PrivateKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -876,16 +861,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails to sign if no signature is generated
                     it("fails to sign if no signature is generated") {
                         mockCrypto
-                            .when {
-                                try $0.perform(
-                                    .sogsSignature(
-                                        message: anyArray(),
-                                        secretKey: anyArray(),
-                                        blindedSecretKey: anyArray(),
-                                        blindedPublicKey: anyArray()
-                                    )
-                                )
-                            }
+                            .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1056,7 +1032,7 @@ class OpenGroupAPISpec: QuickSpec {
                     it("fails to sign if no signature is generated") {
                         mockCrypto.reset() // The 'keyPair' value doesn't equate so have to explicitly reset
                         mockCrypto
-                            .when { try $0.perform(.signEd25519(data: anyArray(), keyPair: any())) }
+                            .when { $0.generate(.signatureXed25519(data: .any, curve25519PrivateKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1175,16 +1151,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails to sign if no signature is generated
                     it("fails to sign if no signature is generated") {
                         mockCrypto
-                            .when {
-                                try $0.perform(
-                                    .sogsSignature(
-                                        message: anyArray(),
-                                        secretKey: anyArray(),
-                                        blindedSecretKey: anyArray(),
-                                        blindedPublicKey: anyArray()
-                                    )
-                                )
-                            }
+                            .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1433,6 +1400,58 @@ class OpenGroupAPISpec: QuickSpec {
                             x25519PublicKey: TestConstants.publicKey
                         )
                     ))
+                }
+            }
+            
+            // MARK: -- when preparing an inbox request
+            context("when preparing an inbox request") {
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<[OpenGroupAPI.DirectMessage]?>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedInbox(
+                            db,
+                            on: "testserver",
+                            using: dependencies
+                        )
+                    }
+                    
+                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/inbox"))
+                    expect(preparedRequest?.request.httpMethod).to(equal("GET"))
+                }
+            }
+            
+            // MARK: -- when preparing an inbox since request
+            context("when preparing an inbox since request") {
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<[OpenGroupAPI.DirectMessage]?>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedInboxSince(
+                            db,
+                            id: 1,
+                            on: "testserver",
+                            using: dependencies
+                        )
+                    }
+                    
+                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/inbox/since/1"))
+                    expect(preparedRequest?.request.httpMethod).to(equal("GET"))
+                }
+            }
+            
+            // MARK: -- when preparing a clear inbox request
+            context("when preparing an inbox since request") {
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<OpenGroupAPI.DeleteInboxResponse>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedClearInbox(
+                            db,
+                            on: "testserver",
+                            using: dependencies
+                        )
+                    }
+                    
+                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/inbox"))
+                    expect(preparedRequest?.request.httpMethod).to(equal("DELETE"))
                 }
             }
             
@@ -1801,8 +1820,8 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails when the signature is not generated
                     it("fails when the signature is not generated") {
                         mockCrypto
-                            .when { try $0.perform(.signature(message: anyArray(), secretKey: anyArray())) }
-                            .thenReturn(nil)
+                            .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
+                            .thenThrow(CryptoError.failedToGenerateOutput)
                         
                         var preparationError: Error?
                         let preparedRequest: Network.PreparedRequest<[OpenGroupAPI.Room]>? = mockStorage.read { db in
@@ -1862,15 +1881,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails when the blindedKeyPair is not generated
                     it("fails when the blindedKeyPair is not generated") {
                         mockCrypto
-                            .when { [dependencies = dependencies!] in
-                                $0.generate(
-                                    .blindedKeyPair(
-                                        serverPublicKey: any(),
-                                        edKeyPair: any(),
-                                        using: dependencies
-                                    )
-                                )
-                            }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1895,15 +1906,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails when the sogsSignature is not generated
                     it("fails when the sogsSignature is not generated") {
                         mockCrypto
-                            .when { [dependencies = dependencies!] in
-                                $0.generate(
-                                    .blindedKeyPair(
-                                        serverPublicKey: any(),
-                                        edKeyPair: any(),
-                                        using: dependencies
-                                    )
-                                )
-                            }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?

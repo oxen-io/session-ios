@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import NVActivityIndicatorView
 import SessionMessagingKit
 import SessionUIKit
@@ -12,9 +13,9 @@ final class PathVC: BaseVC {
     public static let expandedDotSize: CGFloat = 16
     private static let rowHeight: CGFloat = (isIPhone5OrSmaller ? 52 : 75)
     
-    private var pathUpdateId: UUID?
-    private var cacheUpdateId: UUID?
+    private let dependencies: Dependencies
     private var lastPath: [LibSession.Snode] = []
+    private var disposables: Set<AnyCancellable> = Set()
 
     // MARK: - Components
     
@@ -52,12 +53,19 @@ final class PathVC: BaseVC {
         return result
     }()
 
-    // MARK: - Lifecycle
+    // MARK: - Initialization
     
-    deinit {
-        LibSession.removeNetworkChangedCallback(callbackId: pathUpdateId)
-        IP2Country.removeCacheLoadedCallback(id: cacheUpdateId)
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(nibName: nil, bundle: nil)
     }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    // MARK: - Lifecycle
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -119,22 +127,40 @@ final class PathVC: BaseVC {
         // Set up spacer constraints
         topSpacer.heightAnchor.constraint(equalTo: bottomSpacer.heightAnchor).isActive = true
         
-        // Register for status updates (will be called immediately with current paths)
-        pathUpdateId = LibSession.onPathsChanged { [weak self] paths, _ in
-            DispatchQueue.main.async {
-                self?.update(paths: paths, force: false)
-            }
-        }
-        
         // Register for path country updates
-        cacheUpdateId = IP2Country.onCacheLoaded { [weak self] in
-            DispatchQueue.main.async {
-                self?.update(paths: (self?.lastPath.map { [$0] } ?? []), force: true)
-            }
-        }
+        dependencies[cache: .ip2Country].cacheLoaded
+            .receive(on: DispatchQueue.main, using: dependencies)
+            .sink(receiveValue: { [weak self] _ in
+                switch (self?.lastPath, self?.lastPath.isEmpty == true) {
+                    case (.none, _), (_, true): self?.update(paths: [], force: true)
+                    case (.some(let lastPath), _): self?.update(paths: [lastPath], force: true)
+                }
+            })
+            .store(in: &disposables)
+        
+        // Register for network updates
+        registerNetworkObservables()
     }
 
     // MARK: - Updating
+    
+    private func registerNetworkObservables() {
+        /// Register for status updates (will be called immediately with current paths)
+        dependencies[cache: .libSessionNetwork].paths
+            .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
+            .receive(on: DispatchQueue.main, using: dependencies)
+            .sink(
+                receiveCompletion: { [weak self] _ in
+                    /// If the stream completes it means the network cache was reset in which case we want to
+                    /// re-register for updates in the next run loop (as the new cache should be created by then)
+                    DispatchQueue.global(qos: .background).async {
+                        self?.registerNetworkObservables()
+                    }
+                },
+                receiveValue: { [weak self] paths in self?.update(paths: paths, force: false) }
+            )
+            .store(in: &disposables)
+    }
     
     private func update(paths: [[LibSession.Snode]], force: Bool) {
         guard let pathToDisplay: [LibSession.Snode] = paths.first else {
@@ -194,7 +220,8 @@ final class PathVC: BaseVC {
         let lineView = LineView(
             location: location,
             dotAnimationStartDelay: dotAnimationStartDelay,
-            dotAnimationRepeatInterval: dotAnimationRepeatInterval
+            dotAnimationRepeatInterval: dotAnimationRepeatInterval,
+            using: dependencies
         )
         lineView.set(.width, to: PathVC.expandedDotSize)
         lineView.set(.height, to: PathVC.rowHeight)
@@ -226,17 +253,12 @@ final class PathVC: BaseVC {
     }
 
     private func getPathRow(snode: LibSession.Snode, location: LineView.Location, dotAnimationStartDelay: Double, dotAnimationRepeatInterval: Double, isGuardSnode: Bool) -> UIStackView {
-        let country: String = (IP2Country.isInitialized.wrappedValue ?
-            IP2Country.countryNamesCache.wrappedValue[snode.ip].defaulting(to: "Resolving...") :
-            "Resolving..."
-        )
-        
         return getPathRow(
             title: (isGuardSnode ?
                 "vc_path_guard_node_row_title".localized() :
                 "vc_path_service_node_row_title".localized()
             ),
-            subtitle: country,
+            subtitle: dependencies[cache: .ip2Country].country(for: snode.ip),
             location: location,
             dotAnimationStartDelay: dotAnimationStartDelay,
             dotAnimationRepeatInterval: dotAnimationRepeatInterval
@@ -261,12 +283,39 @@ private final class LineView: UIView {
     private var dotViewWidthConstraint: NSLayoutConstraint!
     private var dotViewHeightConstraint: NSLayoutConstraint!
     private var dotViewAnimationTimer: Timer!
-    private var networkStatusCallbackId: UUID?
+    private var disposables: Set<AnyCancellable> = Set()
 
     enum Location {
         case top, middle, bottom
     }
-
+    
+    // MARK: - Initialization
+    
+    init(location: Location, dotAnimationStartDelay: Double, dotAnimationRepeatInterval: Double, using dependencies: Dependencies) {
+        self.location = location
+        self.dotAnimationStartDelay = dotAnimationStartDelay
+        self.dotAnimationRepeatInterval = dotAnimationRepeatInterval
+        
+        super.init(frame: CGRect.zero)
+        
+        setUpViewHierarchy()
+        registerObservers(using: dependencies)
+    }
+    
+    override init(frame: CGRect) {
+        preconditionFailure("Use init(location:dotAnimationStartDelay:dotAnimationRepeatInterval:) instead.")
+    }
+    
+    required init?(coder: NSCoder) {
+        preconditionFailure("Use init(location:dotAnimationStartDelay:dotAnimationRepeatInterval:) instead.")
+    }
+    
+    deinit {
+        dotViewAnimationTimer?.invalidate()
+    }
+    
+    // MARK: - Components
+    
     private lazy var dotView: UIView = {
         let result = UIView()
         result.themeBackgroundColor = .path_connected
@@ -288,29 +337,7 @@ private final class LineView: UIView {
         return result
     }()
     
-    init(location: Location, dotAnimationStartDelay: Double, dotAnimationRepeatInterval: Double) {
-        self.location = location
-        self.dotAnimationStartDelay = dotAnimationStartDelay
-        self.dotAnimationRepeatInterval = dotAnimationRepeatInterval
-        
-        super.init(frame: CGRect.zero)
-        
-        setUpViewHierarchy()
-        registerObservers()
-    }
-    
-    override init(frame: CGRect) {
-        preconditionFailure("Use init(location:dotAnimationStartDelay:dotAnimationRepeatInterval:) instead.")
-    }
-    
-    required init?(coder: NSCoder) {
-        preconditionFailure("Use init(location:dotAnimationStartDelay:dotAnimationRepeatInterval:) instead.")
-    }
-    
-    deinit {
-        LibSession.removeNetworkChangedCallback(callbackId: networkStatusCallbackId)
-        dotViewAnimationTimer?.invalidate()
-    }
+    // MARK: - Layout
     
     private func setUpViewHierarchy() {
         let lineView = UIView()
@@ -346,13 +373,21 @@ private final class LineView: UIView {
         }
     }
     
-    private func registerObservers() {
-        // Register for status updates (will be called immediately with current status)
-        networkStatusCallbackId = LibSession.onNetworkStatusChanged { [weak self] status in
-            DispatchQueue.main.async {
-                self?.setStatus(to: status)
-            }
-        }
+    private func registerObservers(using dependencies: Dependencies) {
+        /// Register for status updates (will be called immediately with current status)
+        dependencies[cache: .libSessionNetwork].networkStatus
+            .receive(on: DispatchQueue.main, using: dependencies)
+            .sink(
+                receiveCompletion: { [weak self] _ in
+                    /// If the stream completes it means the network cache was reset in which case we want to
+                    /// re-register for updates in the next run loop (as the new cache should be created by then)
+                    DispatchQueue.global(qos: .background).async {
+                        self?.registerObservers(using: dependencies)
+                    }
+                },
+                receiveValue: { [weak self] status in self?.setStatus(to: status) }
+            )
+            .store(in: &disposables)
     }
 
     private func animate() {
@@ -365,17 +400,20 @@ private final class LineView: UIView {
 
     private func expandDot() {
         UIView.animate(withDuration: 0.5) { [weak self] in
-            self?.dotView.transform = CGAffineTransform.scale(PathVC.expandedDotSize / PathVC.dotSize)
+            self?.dotView.transform = CGAffineTransform(
+                scaleX: PathVC.expandedDotSize / PathVC.dotSize,
+                y: PathVC.expandedDotSize / PathVC.dotSize
+            )
         }
     }
 
     private func collapseDot() {
         UIView.animate(withDuration: 0.5) { [weak self] in
-            self?.dotView.transform = CGAffineTransform.scale(1)
+            self?.dotView.transform = CGAffineTransform(scaleX: 1, y: 1)
         }
     }
     
-    private func setStatus(to status: LibSession.NetworkStatus) {
+    private func setStatus(to status: NetworkStatus) {
         dotView.themeBackgroundColor = status.themeColor
         dotView.layer.themeShadowColor = status.themeColor
     }

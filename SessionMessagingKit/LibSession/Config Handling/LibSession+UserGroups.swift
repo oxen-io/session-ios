@@ -2,7 +2,6 @@
 
 import Foundation
 import GRDB
-import Sodium
 import SessionUtil
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -10,36 +9,47 @@ import SessionSnodeKit
 // MARK: - Size Restrictions
 
 public extension LibSession {
-    static var libSessionMaxGroupNameByteLength: Int { GROUP_NAME_MAX_LENGTH }
-    static var libSessionMaxGroupBaseUrlByteLength: Int { COMMUNITY_BASE_URL_MAX_LENGTH }
-    static var libSessionMaxGroupFullUrlByteLength: Int { COMMUNITY_FULL_URL_MAX_LENGTH }
-    static var libSessionMaxCommunityRoomByteLength: Int { COMMUNITY_ROOM_MAX_LENGTH }
+    static var sizeMaxGroupNameBytes: Int { GROUP_NAME_MAX_LENGTH }
+    static var sizeMaxCommunityBaseUrlBytes: Int { COMMUNITY_BASE_URL_MAX_LENGTH }
+    static var sizeMaxCommunityFullUrlBytes: Int { COMMUNITY_FULL_URL_MAX_LENGTH }
+    static var sizeMaxCommunityRoomBytes: Int { COMMUNITY_ROOM_MAX_LENGTH }
+ 
+    static var sizeCommunityPubkeyBytes: Int { 32 }
+    static var sizeLegacyGroupPubkeyBytes: Int { 32 }
+    static var sizeLegacyGroupSecretKeyBytes: Int { 32 }
+    static var sizeGroupSecretKeyBytes: Int { 64 }
+    static var sizeGroupAuthDataBytes: Int { 100 }
 }
 
 // MARK: - UserGroups Handling
 
 internal extension LibSession {
     static let columnsRelatedToUserGroups: [ColumnExpression] = [
-        ClosedGroup.Columns.name
+        ClosedGroup.Columns.name,
+        ClosedGroup.Columns.authData,
+        ClosedGroup.Columns.groupIdentityPrivateKey
     ]
-    
-    // MARK: - Incoming Changes
-    
-    static func handleGroupsUpdate(
+}
+
+// MARK: - Incoming Changes
+
+internal extension LibSessionCacheType {
+    func handleUserGroupsUpdate(
         _ db: Database,
-        in conf: UnsafeMutablePointer<config_object>?,
-        mergeNeedsDump: Bool,
-        latestConfigSentTimestampMs: Int64,
-        using dependencies: Dependencies = Dependencies()
+        in config: LibSession.Config?,
+        serverTimestampMs: Int64,
+        using dependencies: Dependencies
     ) throws {
-        guard mergeNeedsDump else { return }
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        guard config.needsDump(using: dependencies) else { return }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         var infiniteLoopGuard: Int = 0
-        var communities: [PrioritisedData<OpenGroupUrlInfo>] = []
-        var legacyGroups: [LegacyGroupInfo] = []
+        var communities: [PrioritisedData<LibSession.OpenGroupUrlInfo>] = []
+        var legacyGroups: [LibSession.LegacyGroupInfo] = []
+        var groups: [LibSession.GroupInfo] = []
         var community: ugroups_community_info = ugroups_community_info()
         var legacyGroup: ugroups_legacy_group_info = ugroups_legacy_group_info()
+        var group: ugroups_group_info = ugroups_group_info()
         let groupsIterator: OpaquePointer = user_groups_iterator_new(conf)
         
         while !user_groups_iterator_done(groupsIterator) {
@@ -51,13 +61,13 @@ internal extension LibSession {
                 
                 communities.append(
                     PrioritisedData(
-                        data: OpenGroupUrlInfo(
+                        data: LibSession.OpenGroupUrlInfo(
                             threadId: OpenGroup.idFor(roomToken: roomToken, server: server),
                             server: server,
                             roomToken: roomToken,
                             publicKey: Data(
                                 libSessionVal: community.pubkey,
-                                count: OpenGroup.pubkeyByteLength
+                                count: LibSession.sizeCommunityPubkeyBytes
                             ).toHexString()
                         ),
                         priority: community.priority
@@ -69,20 +79,20 @@ internal extension LibSession {
                 let members: [String: Bool] = LibSession.memberInfo(in: &legacyGroup)
                 
                 legacyGroups.append(
-                    LegacyGroupInfo(
+                    LibSession.LegacyGroupInfo(
                         id: groupId,
                         name: String(libSessionVal: legacyGroup.name),
                         lastKeyPair: ClosedGroupKeyPair(
                             threadId: groupId,
                             publicKey: Data(
                                 libSessionVal: legacyGroup.enc_pubkey,
-                                count: ClosedGroup.pubkeyByteLength
+                                count: LibSession.sizeLegacyGroupPubkeyBytes
                             ),
                             secretKey: Data(
                                 libSessionVal: legacyGroup.enc_seckey,
-                                count: ClosedGroup.secretKeyByteLength
+                                count: LibSession.sizeLegacyGroupSecretKeyBytes
                             ),
-                            receivedTimestamp: (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000)
+                            receivedTimestamp: (dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000)
                         ),
                         disappearingConfig: DisappearingMessagesConfiguration
                             .defaultWith(groupId)
@@ -98,6 +108,7 @@ internal extension LibSession {
                                     groupId: groupId,
                                     profileId: memberId,
                                     role: .standard,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
@@ -108,16 +119,45 @@ internal extension LibSession {
                                     groupId: groupId,
                                     profileId: memberId,
                                     role: .admin,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
                         priority: legacyGroup.priority,
-                        joinedAt: legacyGroup.joined_at
+                        joinedAt: TimeInterval(legacyGroup.joined_at)
+                    )
+                )
+            }
+            else if user_groups_it_is_group(groupsIterator, &group) {
+                let groupSessionId: String = String(libSessionVal: group.id)
+                
+                groups.append(
+                    LibSession.GroupInfo(
+                        groupSessionId: groupSessionId,
+                        groupIdentityPrivateKey: (!group.have_secretkey ? nil :
+                            Data(
+                                libSessionVal: group.secretkey,
+                                count: LibSession.sizeGroupSecretKeyBytes,
+                                nullIfEmpty: true
+                            )
+                        ),
+                        name: String(libSessionVal: group.name),
+                        authData: (!group.have_auth_data ? nil :
+                            Data(
+                                libSessionVal: group.auth_data,
+                                count: LibSession.sizeGroupAuthDataBytes,
+                                nullIfEmpty: true
+                            )
+                        ),
+                        priority: group.priority,
+                        joinedAt: TimeInterval(group.joined_at),
+                        invited: group.invited,
+                        wasKickedFromGroup: ugroups_group_is_kicked(&group)
                     )
                 )
             }
             else {
-                SNLog("Ignoring unknown conversation type when iterating through volatile conversation info update")
+                SNLog("[LibSession] Ignoring unknown conversation type when iterating through volatile conversation info update")
             }
             
             user_groups_iterator_advance(groupsIterator)
@@ -125,7 +165,7 @@ internal extension LibSession {
         user_groups_iterator_free(groupsIterator) // Need to free the iterator
         
         // Extract all community/legacyGroup/group thread priorities
-        let existingThreadInfo: [String: PriorityVisibilityInfo] = (try? SessionThread
+        let existingThreadInfo: [String: LibSession.PriorityVisibilityInfo] = (try? SessionThread
             .select(.id, .variant, .pinnedPriority, .shouldBeVisible)
             .filter(
                 [
@@ -134,7 +174,7 @@ internal extension LibSession {
                     SessionThread.Variant.group
                 ].contains(SessionThread.Columns.variant)
             )
-            .asRequest(of: PriorityVisibilityInfo.self)
+            .asRequest(of: LibSession.PriorityVisibilityInfo.self)
             .fetchAll(db))
             .defaulting(to: [])
             .reduce(into: [:]) { result, next in result[next.id] = next }
@@ -143,25 +183,25 @@ internal extension LibSession {
         
         // Add any new communities (via the OpenGroupManager)
         communities.forEach { community in
-            let successfullyAddedGroup: Bool = OpenGroupManager.shared
-                .add(
-                    db,
-                    roomToken: community.data.roomToken,
-                    server: community.data.server,
-                    publicKey: community.data.publicKey,
-                    calledFromConfigHandling: true
-                )
+            let successfullyAddedGroup: Bool = dependencies[singleton: .openGroupManager].add(
+                db,
+                roomToken: community.data.roomToken,
+                server: community.data.server,
+                publicKey: community.data.publicKey,
+                calledFromConfig: .userGroups
+            )
             
             if successfullyAddedGroup {
                 db.afterNextTransactionNested { _ in
-                    OpenGroupManager.shared.performInitialRequestsAfterAdd(
+                    dependencies[singleton: .openGroupManager].performInitialRequestsAfterAdd(
+                        queue: DispatchQueue.global(qos: .userInitiated),
                         successfullyAddedGroup: successfullyAddedGroup,
                         roomToken: community.data.roomToken,
                         server: community.data.server,
                         publicKey: community.data.publicKey,
-                        calledFromConfigHandling: false
+                        calledFromConfig: nil   // Happens after the transaction so don't provide
                     )
-                    .subscribe(on: OpenGroupAPI.workQueue)
+                    .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                     .sinkUntilComplete()
                 }
             }
@@ -171,9 +211,11 @@ internal extension LibSession {
             if existingThreadInfo[community.data.threadId]?.pinnedPriority != community.priority {
                 _ = try? SessionThread
                     .filter(id: community.data.threadId)
-                    .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                    .updateAllAndConfig(
                         db,
-                        SessionThread.Columns.pinnedPriority.set(to: community.priority)
+                        SessionThread.Columns.pinnedPriority.set(to: community.priority),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
                     )
             }
         }
@@ -185,7 +227,7 @@ internal extension LibSession {
             .subtracting(communities.map { $0.data.threadId })
         
         if !communityIdsToRemove.isEmpty {
-            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove))
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(
@@ -193,7 +235,9 @@ internal extension LibSession {
                     threadIds: Array(communityIdsToRemove),
                     threadVariant: .community,
                     groupLeaveType: .forced,
-                    calledFromConfigHandling: true
+                    calledFromConfig: .userGroups,
+                    cacheToRemoveStateFrom: self,
+                    using: dependencies
                 )
         }
         
@@ -218,14 +262,14 @@ internal extension LibSession {
                 let lastKeyPair: ClosedGroupKeyPair = group.lastKeyPair,
                 let members: [GroupMember] = group.groupMembers,
                 let updatedAdmins: Set<GroupMember> = group.groupAdmins?.asSet(),
-                let joinedAt: Int64 = group.joinedAt
+                let joinedAt: TimeInterval = group.joinedAt
             else { return }
             
             if !existingLegacyGroupIds.contains(group.id) {
                 // Add a new group if it doesn't already exist
-                try MessageReceiver.handleNewClosedGroup(
+                try MessageReceiver.handleNewLegacyClosedGroup(
                     db,
-                    groupPublicKey: group.id,
+                    legacyGroupSessionId: group.id,
                     name: name,
                     encryptionKeyPair: KeyPair(
                         publicKey: lastKeyPair.publicKey.bytes,
@@ -237,8 +281,8 @@ internal extension LibSession {
                         .map { $0.profileId },
                     admins: updatedAdmins.map { $0.profileId },
                     expirationTimer: UInt32(group.disappearingConfig?.durationSeconds ?? 0),
-                    formationTimestampMs: UInt64((group.joinedAt.map { $0 * 1000 } ?? latestConfigSentTimestampMs)),
-                    calledFromConfigHandling: true,
+                    formationTimestamp: TimeInterval((group.joinedAt ?? (Double(serverTimestampMs) / 1000))),
+                    calledFromConfig: .userGroups,
                     using: dependencies
                 )
             }
@@ -257,9 +301,11 @@ internal extension LibSession {
                 if !groupChanges.isEmpty {
                     _ = try? ClosedGroup
                         .filter(id: group.id)
-                        .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                        .updateAllAndConfig(
                             db,
-                            groupChanges
+                            groupChanges,
+                            calledFromConfig: .userGroups,
+                            using: dependencies
                         )
                 }
                 
@@ -282,7 +328,8 @@ internal extension LibSession {
                         .saved(db)
                         .clearUnrelatedControlMessages(
                             db,
-                            threadVariant: .legacyGroup
+                            threadVariant: .legacyGroup,
+                            using: dependencies
                         )
                 }
                 
@@ -294,6 +341,7 @@ internal extension LibSession {
                                 groupId: admin.groupId,
                                 profileId: admin.profileId,
                                 role: .standard,
+                                roleStatus: .accepted,  // Legacy group members don't have role statuses
                                 isHidden: false
                             )
                         }
@@ -307,7 +355,7 @@ internal extension LibSession {
                     existingMembers != updatedMembers
                 {
                     // Add in any new members and remove any removed members
-                    try updatedMembers.forEach { try $0.save(db) }
+                    try updatedMembers.forEach { try $0.upsert(db) }
                     try existingMembers
                         .filter { !updatedMembers.contains($0) }
                         .forEach { member in
@@ -330,7 +378,7 @@ internal extension LibSession {
                     existingAdmins != updatedAdmins
                 {
                     // Add in any new admins and remove any removed admins
-                    try updatedAdmins.forEach { try $0.save(db) }
+                    try updatedAdmins.forEach { try $0.upsert(db) }
                     try existingAdmins
                         .filter { !updatedAdmins.contains($0) }
                         .forEach { member in
@@ -349,9 +397,11 @@ internal extension LibSession {
             if existingThreadInfo[group.id]?.pinnedPriority != group.priority {
                 _ = try? SessionThread
                     .filter(id: group.id)
-                    .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                    .updateAllAndConfig(
                         db,
-                        SessionThread.Columns.pinnedPriority.set(to: group.priority)
+                        SessionThread.Columns.pinnedPriority.set(to: group.priority),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
                     )
             }
         }
@@ -361,7 +411,7 @@ internal extension LibSession {
             .subtracting(legacyGroups.map { $0.id })
         
         if !legacyGroupIdsToRemove.isEmpty {
-            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(legacyGroupIdsToRemove))
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(legacyGroupIdsToRemove), using: dependencies)
             
             try SessionThread
                 .deleteOrLeave(
@@ -369,14 +419,169 @@ internal extension LibSession {
                     threadIds: Array(legacyGroupIdsToRemove),
                     threadVariant: .legacyGroup,
                     groupLeaveType: .forced,
-                    calledFromConfigHandling: true
+                    calledFromConfig: .userGroups,
+                    cacheToRemoveStateFrom: self,
+                    using: dependencies
                 )
         }
         
         // MARK: -- Handle Group Changes
         
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
+        let existingGroupSessionIds: Set<String> = Set(existingThreadInfo
+            .filter { $0.value.variant == .group }
+            .keys)
+        let existingGroups: [String: ClosedGroup] = (try? ClosedGroup
+            .fetchAll(db, ids: existingGroupSessionIds))
+            .defaulting(to: [])
+            .reduce(into: [:]) { result, next in result[next.id] = next }
+        
+        try groups.forEach { group in
+            switch (existingGroups[group.groupSessionId], existingGroupSessionIds.contains(group.groupSessionId)) {
+                case (.none, _), (_, false):
+                    // Add a new group if it doesn't already exist
+                    try MessageReceiver.handleNewGroup(
+                        db,
+                        groupSessionId: group.groupSessionId,
+                        groupIdentityPrivateKey: group.groupIdentityPrivateKey,
+                        name: group.name,
+                        authData: group.authData,
+                        joinedAt: group.joinedAt,
+                        invited: group.invited,
+                        calledFromConfig: .userGroups,
+                        cacheToLoadStateInto: self,
+                        config: config,
+                        using: dependencies
+                    )
+                    
+                    /// If the thread didn't already exist, or the user had previously been kicked but has since been re-added to the group, then insert
+                    /// a fallback 'invited' info message
+                    if
+                        (group.authData != nil || group.groupIdentityPrivateKey != nil) &&
+                        (existingGroups[group.groupSessionId] == nil || group.wasKickedFromGroup == true)
+                    {
+                        _ = try Interaction(
+                            threadId: group.groupSessionId,
+                            threadVariant: .group,
+                            authorId: group.groupSessionId,
+                            variant: .infoGroupInfoInvited,
+                            body: {
+                                switch group.groupIdentityPrivateKey {
+                                    case .none:
+                                        return ClosedGroup.MessageInfo
+                                            .invitedFallback(group.name)
+                                            .infoString(using: dependencies)
+                                    
+                                    case .some:
+                                        return ClosedGroup.MessageInfo
+                                            .invitedAdminFallback(group.name)
+                                            .infoString(using: dependencies)
+                                }
+                            }(),
+                            timestampMs: Int64(group.joinedAt * 1000),
+                            wasRead: timestampAlreadyRead(
+                                threadId: group.groupSessionId,
+                                threadVariant: .group,
+                                timestampMs: Int64(group.joinedAt * 1000),
+                                userSessionId: userSessionId,
+                                openGroup: nil
+                            ),
+                            using: dependencies
+                        ).inserted(db)
+                    }
+                    
+                case (.some(let existingGroup), _):
+                    /// Otherwise update the existing group
+                    ///
+                    /// **Note:** We only include the `name` value here if the user was kicked from the group (as we update the value
+                    /// before removing the group state), if the user hasn't been kicked from the group then we assume we will get the
+                    /// proper name by polling for the `GROUP_INFO` instead of via syncing the `USER_GROUPS` data
+                    let groupChanges: [ConfigColumnAssignment] = [
+                        (!group.wasKickedFromGroup || existingGroup.name == group.name ? nil :
+                            ClosedGroup.Columns.name.set(to: group.name)
+                        ),
+                        (existingGroup.formationTimestamp == group.joinedAt ? nil :
+                            ClosedGroup.Columns.formationTimestamp.set(to: TimeInterval(group.joinedAt))
+                        ),
+                        (existingGroup.authData == group.authData ? nil :
+                            ClosedGroup.Columns.authData.set(to: group.authData)
+                        ),
+                        (existingGroup.groupIdentityPrivateKey == group.groupIdentityPrivateKey ? nil :
+                            ClosedGroup.Columns.groupIdentityPrivateKey.set(to: group.groupIdentityPrivateKey)
+                        ),
+                        (existingGroup.invited == group.invited ? nil :
+                            ClosedGroup.Columns.invited.set(to: group.invited)
+                        )
+                    ].compactMap { $0 }
+
+                    // Apply any group changes
+                    if !groupChanges.isEmpty {
+                        _ = try? ClosedGroup
+                            .filter(id: group.groupSessionId)
+                            .updateAllAndConfig(
+                                db,
+                                groupChanges,
+                                calledFromConfig: .userGroups,
+                                using: dependencies
+                            )
+                    }
+            }
+
+            // Make any thread-specific changes if needed
+            if existingThreadInfo[group.groupSessionId]?.pinnedPriority != group.priority {
+                _ = try? SessionThread
+                    .filter(id: group.groupSessionId)
+                    .updateAllAndConfig(
+                        db,
+                        SessionThread.Columns.pinnedPriority.set(to: group.priority),
+                        calledFromConfig: .userGroups,
+                        using: dependencies
+                    )
+            }
+        }
+        
+        // Remove any groups which are no longer in the config
+        let groupSessionIdsToRemove: Set<String> = existingGroupSessionIds
+            .subtracting(groups.map { $0.groupSessionId })
+        
+        if !groupSessionIdsToRemove.isEmpty {
+            LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(groupSessionIdsToRemove), using: dependencies)
+            
+            try SessionThread
+                .deleteOrLeave(
+                    db,
+                    threadIds: Array(groupSessionIdsToRemove),
+                    threadVariant: .group,
+                    groupLeaveType: .forced,
+                    calledFromConfig: .userGroups,
+                    cacheToRemoveStateFrom: self,
+                    using: dependencies
+                )
+            
+            groupSessionIdsToRemove.forEach { groupSessionId in
+                removeGroupStateIfNeeded(db, groupSessionId: SessionId(.group, hex: groupSessionId))
+            }
+        }
     }
     
+    func wasKickedFromGroup(
+        groupSessionId: SessionId,
+        config: LibSession.Config?
+    ) -> Bool {
+        guard
+            case .object(let conf) = config,
+            var cGroupId: [CChar] = groupSessionId.hexString.cString(using: .utf8)
+        else { return false }
+        
+        // If the group doesn't exist then assume the user hasn't been kicked
+        var userGroup: ugroups_group_info = ugroups_group_info()
+        guard user_groups_get_group(conf, &userGroup, &cGroupId) else { return false }
+        
+        return ugroups_group_is_kicked(&userGroup)
+    }
+}
+
+internal extension LibSession {
     fileprivate static func memberInfo(in legacyGroup: UnsafeMutablePointer<ugroups_legacy_group_info>) -> [String: Bool] {
         let membersIt: OpaquePointer = ugroups_legacy_members_begin(legacyGroup)
         var members: [String: Bool] = [:]
@@ -398,14 +603,18 @@ internal extension LibSession {
     
     static func upsert(
         legacyGroups: [LegacyGroupInfo],
-        in conf: UnsafeMutablePointer<config_object>?
+        in config: Config?,
+        using dependencies: Dependencies
     ) throws {
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         guard !legacyGroups.isEmpty else { return }
         
         try legacyGroups
             .forEach { legacyGroup in
-                var cGroupId: [CChar] = try legacyGroup.id.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
+                var cGroupId: [CChar] = try legacyGroup.id.cString(using: .utf8) ?? {
+                    throw LibSessionError.invalidCConversion
+                }()
+                
                 guard let userGroup: UnsafeMutablePointer<ugroups_legacy_group_info> = user_groups_get_or_construct_legacy_group(conf, &cGroupId) else {
                     /// It looks like there are some situations where this object might not get created correctly (and
                     /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
@@ -497,7 +706,7 @@ internal extension LibSession {
                     }
                 }
                 
-                if let joinedAt: Int64 = legacyGroup.joinedAt {
+                if let joinedAt: Int64 = legacyGroup.joinedAt.map({ Int64($0) }) {
                     userGroup.pointee.joined_at = joinedAt
                 }
                 
@@ -511,10 +720,68 @@ internal extension LibSession {
     }
     
     static func upsert(
-        communities: [CommunityInfo],
-        in conf: UnsafeMutablePointer<config_object>?
+        groups: [GroupUpdateInfo],
+        in config: Config?,
+        using dependencies: Dependencies
     ) throws {
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+        guard !groups.isEmpty else { return }
+        
+        try groups
+            .forEach { group in
+                var userGroup: ugroups_group_info = ugroups_group_info()
+                var cGroupId: [CChar] = try group.groupSessionId.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
+                
+                guard user_groups_get_or_construct_group(conf, &userGroup, &cGroupId) else {
+                    /// It looks like there are some situations where this object might not get created correctly (and
+                    /// will throw due to the implicit unwrapping) as a result we put it in a guard and throw instead
+                    throw LibSessionError(
+                        config,
+                        fallbackError: .getOrConstructFailedUnexpectedly,
+                        logMessage: "Unable to upsert group conversation to LibSession"
+                    )
+                }
+                
+                /// Assign the non-admin auth data (if it exists)
+                if let authData: Data = group.authData {
+                    userGroup.auth_data = authData.toLibSession()
+                    userGroup.have_auth_data = true
+                }
+
+                /// Assign the admin key (if it exists)
+                ///
+                /// **Note:** We do this after assigning the `auth_data` as generally the values are mutually
+                /// exclusive and if we have a `groupIdentityPrivateKey` we want that to take priority
+                if let privateKey: Data = group.groupIdentityPrivateKey {
+                    userGroup.secretkey = privateKey.toLibSession()
+                    userGroup.have_secretkey = true
+
+                    // Store the updated group (needs to happen before variables go out of scope)
+                    user_groups_set_group(conf, &userGroup)
+                }
+                
+                /// Assign the group name
+                if let name: String = group.name {
+                    userGroup.name = name.toLibSession()
+                    
+                    // Store the updated group (needs to happen before variables go out of scope)
+                    user_groups_set_group(conf, &userGroup)
+                }
+
+                // Store the updated group (can't be sure if we made any changes above)
+                userGroup.invited = (group.invited ?? userGroup.invited)
+                userGroup.joined_at = (group.joinedAt.map { Int64($0) } ?? userGroup.joined_at)
+                userGroup.priority = (group.priority ?? userGroup.priority)
+                user_groups_set_group(conf, &userGroup)
+            }
+    }
+    
+    static func upsert(
+        communities: [CommunityInfo],
+        in config: Config?,
+        using dependencies: Dependencies
+    ) throws {
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         guard !communities.isEmpty else { return }
         
         try communities
@@ -544,6 +811,45 @@ internal extension LibSession {
                 user_groups_set_community(conf, &userCommunity)
             }
     }
+    
+    @discardableResult static func updatingGroups<T>(
+        _ db: Database,
+        _ updated: [T],
+        using dependencies: Dependencies
+    ) throws -> [T] {
+        guard let updatedGroups: [ClosedGroup] = updated as? [ClosedGroup] else { throw StorageError.generic }
+        
+        // Exclude legacy groups as they aren't managed via SessionUtil
+        let targetGroups: [ClosedGroup] = updatedGroups
+            .filter { (try? SessionId(from: $0.id))?.prefix == .group }
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
+        
+        // If we only updated the current user contact then no need to continue
+        guard !targetGroups.isEmpty else { return updated }
+        
+        // Apply the changes
+        try LibSession.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: userSessionId,
+            using: dependencies
+        ) { config in
+            try upsert(
+                groups: targetGroups.map { group -> GroupUpdateInfo in
+                    GroupUpdateInfo(
+                        groupSessionId: group.threadId,
+                        groupIdentityPrivateKey: group.groupIdentityPrivateKey,
+                        name: group.name,
+                        authData: group.authData
+                    )
+                },
+                in: config,
+                using: dependencies
+            )
+        }
+        
+        return updated
+    }
 }
 
 // MARK: - External Outgoing Changes
@@ -556,13 +862,15 @@ public extension LibSession {
         _ db: Database,
         server: String,
         rootToken: String,
-        publicKey: String
+        publicKey: String,
+        using dependencies: Dependencies
     ) throws {
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
             try LibSession.upsert(
                 communities: [
                     CommunityInfo(
@@ -574,17 +882,26 @@ public extension LibSession {
                         )
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
-    static func remove(_ db: Database, server: String, roomToken: String) throws {
+    static func remove(
+        _ db: Database,
+        server: String,
+        roomToken: String,
+        using dependencies: Dependencies
+    ) throws {
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+            
             var cBaseUrl: [CChar] = try server.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
             var cRoom: [CChar] = try roomToken.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
             
@@ -602,7 +919,8 @@ public extension LibSession {
                     roomToken: roomToken,
                     publicKey: ""
                 )
-            ]
+            ],
+            using: dependencies
         )
     }
     
@@ -610,23 +928,26 @@ public extension LibSession {
     
     static func add(
         _ db: Database,
-        groupPublicKey: String,
+        legacyGroupSessionId: String,
         name: String,
         latestKeyPairPublicKey: Data,
         latestKeyPairSecretKey: Data,
         latestKeyPairReceivedTimestamp: TimeInterval,
         disappearingConfig: DisappearingMessagesConfiguration,
         members: Set<String>,
-        admins: Set<String>
+        admins: Set<String>,
+        formationTimestamp: TimeInterval,
+        using dependencies: Dependencies
     ) throws {
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
-            guard conf != nil else { throw LibSessionError.nilConfigObject }
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
             
-            var cGroupId: [CChar] = try groupPublicKey.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
+            var cGroupId: [CChar] = try legacyGroupSessionId.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
             let userGroup: UnsafeMutablePointer<ugroups_legacy_group_info>? = user_groups_get_legacy_group(conf, &cGroupId)
             
             // Need to make sure the group doesn't already exist (otherwise we will end up overriding the
@@ -641,10 +962,10 @@ public extension LibSession {
             try LibSession.upsert(
                 legacyGroups: [
                     LegacyGroupInfo(
-                        id: groupPublicKey,
+                        id: legacyGroupSessionId,
                         name: name,
                         lastKeyPair: ClosedGroupKeyPair(
-                            threadId: groupPublicKey,
+                            threadId: legacyGroupSessionId,
                             publicKey: latestKeyPairPublicKey,
                             secretKey: latestKeyPairSecretKey,
                             receivedTimestamp: latestKeyPairReceivedTimestamp
@@ -653,83 +974,94 @@ public extension LibSession {
                         groupMembers: members
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .standard,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
                         groupAdmins: admins
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .admin,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
-                            }
+                            },
+                        joinedAt: formationTimestamp
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
     static func update(
         _ db: Database,
-        groupPublicKey: String,
+        legacyGroupSessionId: String,
         name: String? = nil,
         latestKeyPair: ClosedGroupKeyPair? = nil,
         disappearingConfig: DisappearingMessagesConfiguration? = nil,
         members: Set<String>? = nil,
-        admins: Set<String>? = nil
+        admins: Set<String>? = nil,
+        using dependencies: Dependencies
     ) throws {
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
             try LibSession.upsert(
                 legacyGroups: [
                     LegacyGroupInfo(
-                        id: groupPublicKey,
+                        id: legacyGroupSessionId,
                         name: name,
                         lastKeyPair: latestKeyPair,
                         disappearingConfig: disappearingConfig,
                         groupMembers: members?
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .standard,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             },
                         groupAdmins: admins?
                             .map { memberId in
                                 GroupMember(
-                                    groupId: groupPublicKey,
+                                    groupId: legacyGroupSessionId,
                                     profileId: memberId,
                                     role: .admin,
+                                    roleStatus: .accepted,  // Legacy group members don't have role statuses
                                     isHidden: false
                                 )
                             }
                     )
                 ],
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
     static func batchUpdate(
         _ db: Database,
-        disappearingConfigs: [DisappearingMessagesConfiguration]
+        disappearingConfigs: [DisappearingMessagesConfiguration],
+        using dependencies: Dependencies
     ) throws {
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
             try LibSession.upsert(
                 legacyGroups: disappearingConfigs.map {
                     LegacyGroupInfo(
@@ -737,21 +1069,29 @@ public extension LibSession {
                         disappearingConfig: $0
                     )
                 },
-                in: conf
+                in: config,
+                using: dependencies
             )
         }
     }
     
-    static func remove(_ db: Database, legacyGroupIds: [String]) throws {
+    static func remove(
+        _ db: Database,
+        legacyGroupIds: [String],
+        using dependencies: Dependencies
+    ) throws {
         guard !legacyGroupIds.isEmpty else { return }
         
         try LibSession.performAndPushChange(
             db,
             for: .userGroups,
-            publicKey: getUserHexEncodedPublicKey(db)
-        ) { conf in
-            legacyGroupIds.forEach { threadId in
-                guard var cGroupId: [CChar] = threadId.cString(using: .utf8) else { return }
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+            
+            legacyGroupIds.forEach { legacyGroupId in
+                guard var cGroupId: [CChar] = legacyGroupId.cString(using: .utf8) else { return }
                 
                 // Don't care if the group doesn't exist
                 user_groups_erase_legacy_group(conf, &cGroupId)
@@ -759,14 +1099,150 @@ public extension LibSession {
         }
         
         // Remove the volatile info as well
-        try LibSession.remove(db, volatileLegacyGroupIds: legacyGroupIds)
+        try LibSession.remove(db, volatileLegacyGroupIds: legacyGroupIds, using: dependencies)
     }
     
     // MARK: -- Group Changes
     
-    static func remove(_ db: Database, groupIds: [String]) throws {
-        guard !groupIds.isEmpty else { return }
+    static func add(
+        _ db: Database,
+        groupSessionId: String,
+        groupIdentityPrivateKey: Data?,
+        name: String?,
+        authData: Data?,
+        joinedAt: TimeInterval,
+        invited: Bool,
+        using dependencies: Dependencies
+    ) throws {
+        try LibSession.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            try LibSession.upsert(
+                groups: [
+                    GroupUpdateInfo(
+                        groupSessionId: groupSessionId,
+                        groupIdentityPrivateKey: groupIdentityPrivateKey,
+                        name: name,
+                        authData: authData,
+                        joinedAt: joinedAt,
+                        invited: invited
+                    )
+                ],
+                in: config,
+                using: dependencies
+            )
+        }
+    }
+    
+    static func update(
+        _ db: Database,
+        groupSessionId: String,
+        groupIdentityPrivateKey: Data? = nil,
+        name: String? = nil,
+        authData: Data? = nil,
+        invited: Bool? = nil,
+        using dependencies: Dependencies
+    ) throws {
+        try LibSession.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            try LibSession.upsert(
+                groups: [
+                    GroupUpdateInfo(
+                        groupSessionId: groupSessionId,
+                        groupIdentityPrivateKey: groupIdentityPrivateKey,
+                        name: name,
+                        authData: authData,
+                        invited: invited
+                    )
+                ],
+                in: config,
+                using: dependencies
+            )
+        }
+    }
+    
+    static func markAsKicked(
+        _ db: Database,
+        groupSessionIds: [String],
+        using dependencies: Dependencies
+    ) throws {
+        guard !groupSessionIds.isEmpty else { return }
         
+        try LibSession.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+            
+            try groupSessionIds.forEach { groupId in
+                var cGroupId: [CChar] = try groupId.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
+                var userGroup: ugroups_group_info = ugroups_group_info()
+                
+                guard user_groups_get_group(conf, &userGroup, &cGroupId) else { return }
+                
+                ugroups_group_set_kicked(&userGroup)
+                user_groups_set_group(conf, &userGroup)
+            }
+        }
+    }
+    
+    static func wasKickedFromGroup(
+        groupSessionId: SessionId,
+        using dependencies: Dependencies
+    ) -> Bool {
+        return (try? dependencies[cache: .libSession]
+            .config(for: .userGroups, sessionId: dependencies[cache: .general].sessionId)
+            .wrappedValue
+            .map { config in
+                guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+                
+                var cGroupId: [CChar] = try groupSessionId.hexString.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
+                var userGroup: ugroups_group_info = ugroups_group_info()
+                
+                // If the group doesn't exist then assume the user hasn't been kicked
+                guard user_groups_get_group(conf, &userGroup, &cGroupId) else { return false }
+                
+                return ugroups_group_is_kicked(&userGroup)
+            })
+            .defaulting(to: false)
+    }
+    
+    static func remove(
+        _ db: Database,
+        groupSessionIds: [SessionId],
+        using dependencies: Dependencies
+    ) throws {
+        guard !groupSessionIds.isEmpty else { return }
+        
+        try LibSession.performAndPushChange(
+            db,
+            for: .userGroups,
+            sessionId: dependencies[cache: .general].sessionId,
+            using: dependencies
+        ) { config in
+            guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
+            
+            try groupSessionIds.forEach { groupSessionId in
+                var cGroupId: [CChar] = try groupSessionId.hexString.cString(using: .utf8) ?? {
+                    throw LibSessionError.invalidCConversion
+                }()
+
+                // Don't care if the group doesn't exist
+                user_groups_erase_group(conf, &cGroupId)
+            }
+        }
+        
+        // Remove the volatile info as well
+        try LibSession.remove(db, volatileGroupSessionIds: groupSessionIds, using: dependencies)
     }
 }
 
@@ -774,13 +1250,6 @@ public extension LibSession {
 
 extension LibSession {
     struct LegacyGroupInfo: Decodable, FetchableRecord, ColumnExpressible {
-        private static let threadIdKey: SQL = SQL(stringLiteral: CodingKeys.threadId.stringValue)
-        private static let nameKey: SQL = SQL(stringLiteral: CodingKeys.name.stringValue)
-        private static let lastKeyPairKey: SQL = SQL(stringLiteral: CodingKeys.lastKeyPair.stringValue)
-        private static let disappearingConfigKey: SQL = SQL(stringLiteral: CodingKeys.disappearingConfig.stringValue)
-        private static let priorityKey: SQL = SQL(stringLiteral: CodingKeys.priority.stringValue)
-        private static let joinedAtKey: SQL = SQL(stringLiteral: CodingKeys.joinedAt.stringValue)
-        
         typealias Columns = CodingKeys
         enum CodingKeys: String, CodingKey, ColumnExpression, CaseIterable {
             case threadId
@@ -802,7 +1271,7 @@ extension LibSession {
         let groupMembers: [GroupMember]?
         let groupAdmins: [GroupMember]?
         let priority: Int32?
-        let joinedAt: Int64?
+        let joinedAt: TimeInterval?
         
         init(
             id: String,
@@ -812,7 +1281,7 @@ extension LibSession {
             groupMembers: [GroupMember]? = nil,
             groupAdmins: [GroupMember]? = nil,
             priority: Int32? = nil,
-            joinedAt: Int64? = nil
+            joinedAt: TimeInterval? = nil
         ) {
             self.threadId = id
             self.name = name
@@ -827,15 +1296,11 @@ extension LibSession {
         static func fetchAll(_ db: Database) throws -> [LegacyGroupInfo] {
             let closedGroup: TypedTableAlias<ClosedGroup> = TypedTableAlias()
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
-            let keyPair: TypedTableAlias<ClosedGroupKeyPair> = TypedTableAlias()
-            
-            let prefixLiteral: SQL = SQL(stringLiteral: "\(SessionId.Prefix.standard.rawValue)%")
-            let keyPairThreadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroupKeyPair.Columns.threadId.name)
-            let receivedTimestampColumnLiteral: SQL = SQL(stringLiteral: ClosedGroupKeyPair.Columns.receivedTimestamp.name)
-            let threadIdColumnLiteral: SQL = SQL(stringLiteral: DisappearingMessagesConfiguration.Columns.threadId.name)
+            let lastKeyPair: TypedTableAlias<ClosedGroupKeyPair> = TypedTableAlias(LegacyGroupInfo.self, column: .lastKeyPair)
+            let disappearingConfig: TypedTableAlias<DisappearingMessagesConfiguration> = TypedTableAlias(LegacyGroupInfo.self, column: .disappearingConfig)
             
             /// **Note:** The `numColumnsBeforeTypes` value **MUST** match the number of fields before
-            /// the `LegacyGroupInfo.lastKeyPairKey` entry below otherwise the query will fail to
+            /// the `lastKeyPair` entry below otherwise the query will fail to
             /// parse and might throw
             ///
             /// Explicitly set default values for the fields ignored for search results
@@ -843,28 +1308,28 @@ extension LibSession {
             
             let request: SQLRequest<LegacyGroupInfo> = """
                 SELECT
-                    \(closedGroup[.threadId]) AS \(LegacyGroupInfo.threadIdKey),
-                    \(closedGroup[.name]) AS \(LegacyGroupInfo.nameKey),
-                    \(closedGroup[.formationTimestamp]) AS \(LegacyGroupInfo.joinedAtKey),
-                    \(thread[.pinnedPriority]) AS \(LegacyGroupInfo.priorityKey),
-                    \(LegacyGroupInfo.lastKeyPairKey).*,
-                    \(LegacyGroupInfo.disappearingConfigKey).*
+                    \(closedGroup[.threadId]) AS \(LegacyGroupInfo.Columns.threadId),
+                    \(closedGroup[.name]) AS \(LegacyGroupInfo.Columns.name),
+                    \(closedGroup[.formationTimestamp]) AS \(LegacyGroupInfo.Columns.joinedAt),
+                    \(thread[.pinnedPriority]) AS \(LegacyGroupInfo.Columns.priority),
+                    \(lastKeyPair.allColumns),
+                    \(disappearingConfig.allColumns)
                 
                 FROM \(ClosedGroup.self)
                 JOIN \(SessionThread.self) ON \(thread[.id]) = \(closedGroup[.threadId])
                 LEFT JOIN (
                     SELECT
-                        \(keyPair[.threadId]),
-                        \(keyPair[.publicKey]),
-                        \(keyPair[.secretKey]),
-                        MAX(\(keyPair[.receivedTimestamp])) AS \(receivedTimestampColumnLiteral),
-                        \(keyPair[.threadKeyPairHash])
-                    FROM \(ClosedGroupKeyPair.self)
-                    GROUP BY \(keyPair[.threadId])
-                ) AS \(LegacyGroupInfo.lastKeyPairKey) ON \(LegacyGroupInfo.lastKeyPairKey).\(keyPairThreadIdColumnLiteral) = \(closedGroup[.threadId])
-                LEFT JOIN \(DisappearingMessagesConfiguration.self) AS \(LegacyGroupInfo.disappearingConfigKey) ON \(LegacyGroupInfo.disappearingConfigKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
+                        \(lastKeyPair[.threadId]),
+                        \(lastKeyPair[.publicKey]),
+                        \(lastKeyPair[.secretKey]),
+                        MAX(\(lastKeyPair[.receivedTimestamp])) AS \(ClosedGroupKeyPair.Columns.receivedTimestamp),
+                        \(lastKeyPair[.threadKeyPairHash])
+                    FROM \(lastKeyPair)
+                    GROUP BY \(lastKeyPair[.threadId])
+                ) \(lastKeyPair, asSubquery: true) ON \(lastKeyPair[.threadId]) = \(closedGroup[.threadId])
+                LEFT JOIN \(disappearingConfig) ON \(disappearingConfig[.threadId]) = \(closedGroup[.threadId])
                 
-                WHERE \(SQL("\(closedGroup[.threadId]) LIKE '\(prefixLiteral)'"))
+                WHERE \(closedGroup[.threadId]) LIKE '\(SessionId.Prefix.standard)%'
             """
             
             let legacyGroupInfoNoMembers: [LegacyGroupInfo] = try request
@@ -875,9 +1340,9 @@ extension LibSession {
                         DisappearingMessagesConfiguration.numberOfSelectedColumns(db)
                     ])
                     
-                    return ScopeAdapter([
-                        CodingKeys.lastKeyPair.stringValue: adapters[1],
-                        CodingKeys.disappearingConfig.stringValue: adapters[2]
+                    return ScopeAdapter.with(LegacyGroupInfo.self, [
+                        .lastKeyPair: adapters[1],
+                        .disappearingConfig: adapters[2]
                     ])
                 }
                 .fetchAll(db)
@@ -904,7 +1369,57 @@ extension LibSession {
                 }
         }
     }
+}
+
+// MARK: - GroupInfo
+
+extension LibSession {
+    struct GroupInfo {
+        let groupSessionId: String
+        let groupIdentityPrivateKey: Data?
+        let name: String
+        let authData: Data?
+        let priority: Int32
+        let joinedAt: TimeInterval
+        let invited: Bool
+        let wasKickedFromGroup: Bool
+    }
     
+    struct GroupUpdateInfo {
+        let groupSessionId: String
+        let groupIdentityPrivateKey: Data?
+        let name: String?
+        let authData: Data?
+        let priority: Int32?
+        let joinedAt: TimeInterval?
+        let invited: Bool?
+        let wasKickedFromGroup: Bool?
+        
+        init(
+            groupSessionId: String,
+            groupIdentityPrivateKey: Data? = nil,
+            name: String? = nil,
+            authData: Data? = nil,
+            priority: Int32? = nil,
+            joinedAt: TimeInterval? = nil,
+            invited: Bool? = nil,
+            wasKickedFromGroup: Bool? = nil
+        ) {
+            self.groupSessionId = groupSessionId
+            self.groupIdentityPrivateKey = groupIdentityPrivateKey
+            self.name = name
+            self.authData = authData
+            self.priority = priority
+            self.joinedAt = joinedAt
+            self.invited = invited
+            self.wasKickedFromGroup = wasKickedFromGroup
+        }
+    }
+}
+
+// MARK: - CommunityInfo
+
+extension LibSession {
     struct CommunityInfo {
         let urlInfo: OpenGroupUrlInfo
         let priority: Int32?
@@ -917,15 +1432,19 @@ extension LibSession {
             self.priority = priority
         }
     }
-    
-    fileprivate struct GroupThreadData {
-        let communities: [PrioritisedData<LibSession.OpenGroupUrlInfo>]
-        let legacyGroups: [PrioritisedData<LegacyGroupInfo>]
-        let groups: [PrioritisedData<String>]
-    }
-    
-    fileprivate struct PrioritisedData<T> {
-        let data: T
-        let priority: Int32
-    }
+}
+
+// MARK: - GroupThreadData
+
+fileprivate struct GroupThreadData {
+    let communities: [PrioritisedData<LibSession.OpenGroupUrlInfo>]
+    let legacyGroups: [PrioritisedData<LibSession.LegacyGroupInfo>]
+    let groups: [PrioritisedData<LibSession.GroupInfo>]
+}
+
+// MARK: - PrioritisedData
+
+fileprivate struct PrioritisedData<T> {
+    let data: T
+    let priority: Int32
 }

@@ -14,6 +14,10 @@ public protocol NavigatableStateHolder {
 
 public extension NavigatableStateHolder {
     func showToast(text: String, backgroundColor: ThemeValue = .backgroundPrimary) {
+        navigatableState._showToast.send((NSAttributedString(string: text), backgroundColor))
+    }
+
+    func showToast(text: NSAttributedString, backgroundColor: ThemeValue = .backgroundPrimary) {
         navigatableState._showToast.send((text, backgroundColor))
     }
     
@@ -29,13 +33,13 @@ public extension NavigatableStateHolder {
 // MARK: - NavigatableState
 
 public struct NavigatableState {
-    let showToast: AnyPublisher<(String, ThemeValue), Never>
+    let showToast: AnyPublisher<(NSAttributedString, ThemeValue), Never>
     let transitionToScreen: AnyPublisher<(UIViewController, TransitionType), Never>
     let dismissScreen: AnyPublisher<DismissType, Never>
     
     // MARK: - Internal Variables
     
-    fileprivate let _showToast: PassthroughSubject<(String, ThemeValue), Never> = PassthroughSubject()
+    fileprivate let _showToast: PassthroughSubject<(NSAttributedString, ThemeValue), Never> = PassthroughSubject()
     fileprivate let _transitionToScreen: PassthroughSubject<(UIViewController, TransitionType), Never> = PassthroughSubject()
     fileprivate let _dismissScreen: PassthroughSubject<DismissType, Never> = PassthroughSubject()
     

@@ -222,7 +222,8 @@ for i in "${!TARGET_ARCHS[@]}"; do
         -DBUILD_STATIC_DEPS=ON \
         -DENABLE_VISIBILITY=ON \
         -DSUBMODULE_CHECK=$submodule_check \
-        -DCMAKE_BUILD_TYPE=$build_type
+        -DCMAKE_BUILD_TYPE=$build_type \
+        -DLOCAL_MIRROR=https://oxen.rocks/deps
 
     # Capture the exit status of the ./utils/static-bundle.sh command
     EXIT_STATUS=$?

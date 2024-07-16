@@ -27,7 +27,7 @@ extension ProjectState {
         "_SharedTestUtilities/",    // Exclude shared test directory
         "external/"                 // External dependencies
     ]
-    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", "null" ]
+    static let excludedPhrases: Set<String> = [ "", " ", ",", ", ", ".", "/", "\\n", "null" ]
     static let excludedUnlocalisedStringLineMatching: Set<MatchType> = [
         .contains(ProjectState.lintSuppression, caseSensitive: false),
         .prefix("#import", caseSensitive: false),
@@ -38,7 +38,17 @@ extension ProjectState {
         .contains("print(", caseSensitive: false),
         .contains("SNLog(", caseSensitive: false),
         .contains("Log.setup(", caseSensitive: false),
-        .contains("Log.trace(", caseSensitive: false),
+        .containsAnd(
+            "primaryPrefix:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Log.setup(with: Logger(", caseSensitive: false))
+        ),
+        .containsAnd(
+            "customDirectory:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 2, .contains("Log.setup(with: Logger(", caseSensitive: false))
+        ),
+        .contains("Log.verbose(", caseSensitive: false),
         .contains("Log.debug(", caseSensitive: false),
         .contains("Log.info(", caseSensitive: false),
         .contains("Log.warn(", caseSensitive: false),
@@ -46,6 +56,7 @@ extension ProjectState {
         .contains("Log.critical(", caseSensitive: false),
         .contains("logMessage:", caseSensitive: false),
         .contains("owsFailDebug(", caseSensitive: false),
+        .contains("error: .other(", caseSensitive: false),
         .contains("#imageLiteral(resourceName:", caseSensitive: false),
         .contains("UIImage(named:", caseSensitive: false),
         .contains("UIImage(systemName:", caseSensitive: false),
@@ -81,7 +92,15 @@ extension ProjectState {
         .contains("SQL(", caseSensitive: false),
         .regex(".*static var databaseTableName: String"),
         .regex("case .* = "),
-        .regex("Error.*\\(")
+        .regex("Error.*\\("),
+        .regex("Crypto.*\\(id:"),
+        .containsAnd("id:", caseSensitive: false, .previousLine(numEarlier: 1, .regex("Crypto.*\\("))),
+        .regex(".*\\.like\\(\".*%\""),
+        .containsAnd(
+            "identifier:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Dependencies.create", caseSensitive: false))
+        )
     ]
 }
 

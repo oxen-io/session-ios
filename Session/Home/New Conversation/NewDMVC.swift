@@ -10,6 +10,7 @@ import SignalUtilitiesKit
 import SessionSnodeKit
 
 final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControllerDelegate, QRScannerDelegate {
+    private let dependencies: Dependencies
     private var shouldShowBackButton: Bool = true
     private let pageVC = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: nil)
     private var pages: [UIViewController] = []
@@ -33,14 +34,14 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
     }()
     
     private lazy var enterPublicKeyVC: EnterPublicKeyVC = {
-        let result = EnterPublicKeyVC()
+        let result = EnterPublicKeyVC(using: dependencies)
         result.NewDMVC = self
         
         return result
     }()
     
     private lazy var scanQRCodePlaceholderVC: ScanQRCodePlaceholderVC = {
-        let result: ScanQRCodePlaceholderVC = ScanQRCodePlaceholderVC()
+        let result: ScanQRCodePlaceholderVC = ScanQRCodePlaceholderVC(using: dependencies)
         result.newDMVC = self
         
         return result
@@ -55,7 +56,8 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
     
     // MARK: - Initialization
     
-    init(sessionId: String? = nil, shouldShowBackButton: Bool = true) {
+    init(sessionId: String? = nil, shouldShowBackButton: Bool = true, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.shouldShowBackButton = shouldShowBackButton
         
         super.init(nibName: nil, bundle: nil)
@@ -66,11 +68,7 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
     }
     
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
-    }
-    
-    override init(nibName: String?, bundle: Bundle?) {
-        super.init(nibName: nibName, bundle: bundle)
+        fatalError("init(coder:) has not been implemented")
     }
     
     // MARK: - Lifecycle
@@ -172,96 +170,82 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
     }
     
     fileprivate func startNewDMIfPossible(with onsNameOrPublicKey: String, onError: (() -> ())?) {
-        let maybeSessionId: SessionId? = SessionId(from: onsNameOrPublicKey)
-        
-        if KeyPair.isValidHexEncodedPublicKey(candidate: onsNameOrPublicKey) {
-            switch maybeSessionId?.prefix {
-                case .standard:
-                    startNewDM(with: onsNameOrPublicKey)
-                    
-                case .blinded15, .blinded25:
-                    let modal: ConfirmationModal = ConfirmationModal(
-                        targetView: self.view,
-                        info: ConfirmationModal.Info(
-                            title: "ALERT_ERROR_TITLE".localized(),
-                            body: .text("DM_ERROR_DIRECT_BLINDED_ID".localized()),
-                            cancelTitle: "BUTTON_OK".localized(),
-                            cancelStyle: .alert_text,
-                            afterClosed: onError
-                        )
+        switch Result(catching: { try SessionId(from: onsNameOrPublicKey) }) {
+            case .success(let sessionId) where sessionId.prefix == .standard: startNewDM(with: onsNameOrPublicKey)
+            case .success(let sessionId) where (sessionId.prefix == .blinded15 || sessionId.prefix == .blinded25):
+                let modal: ConfirmationModal = ConfirmationModal(
+                    targetView: self.view,
+                    info: ConfirmationModal.Info(
+                        title: "ALERT_ERROR_TITLE".localized(),
+                        body: .text("DM_ERROR_DIRECT_BLINDED_ID".localized()),
+                        cancelTitle: "BUTTON_OK".localized(),
+                        cancelStyle: .alert_text,
+                        afterClosed: onError
                     )
-                    self.present(modal, animated: true)
-                    
-                default:
-                    let modal: ConfirmationModal = ConfirmationModal(
-                        targetView: self.view,
-                        info: ConfirmationModal.Info(
-                            title: "ALERT_ERROR_TITLE".localized(),
-                            body: .text("DM_ERROR_INVALID".localized()),
-                            cancelTitle: "BUTTON_OK".localized(),
-                            cancelStyle: .alert_text,
-                            afterClosed: onError
-                        )
-                    )
-                    self.present(modal, animated: true)
-            }
-            return
-        }
-        
-        // This could be an ONS name
-        ModalActivityIndicatorViewController
-            .present(fromViewController: navigationController!, canCancel: false) { [weak self] modalActivityIndicator in
-            SnodeAPI
-                .getSessionID(for: onsNameOrPublicKey)
-                .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                .receive(on: DispatchQueue.main)
-                .sinkUntilComplete(
-                    receiveCompletion: { result in
-                        switch result {
-                            case .finished: break
-                            case .failure(let error):
-                                modalActivityIndicator.dismiss {
-                                    let message: String = {
-                                        if let error = error as? SnodeAPIError {
-                                            switch error {
-                                                case .onsDecryptionFailed, .onsHashingFailed, .onsValidationFailed:
-                                                    return "\(error)"
-                                                    
-                                                default: break
-                                            }
-                                        }
-                                        
-                                        return (maybeSessionId?.prefix == .blinded15 || maybeSessionId?.prefix == .blinded25 ?
-                                            "DM_ERROR_DIRECT_BLINDED_ID".localized() :
-                                            "DM_ERROR_INVALID".localized()
-                                        )
-                                    }()
-                                    
-                                    let modal: ConfirmationModal = ConfirmationModal(
-                                        targetView: self?.view,
-                                        info: ConfirmationModal.Info(
-                                            title: "ALERT_ERROR_TITLE".localized(),
-                                            body: .text(message),
-                                            cancelTitle: "BUTTON_OK".localized(),
-                                            cancelStyle: .alert_text,
-                                            afterClosed: onError
-                                        )
-                                    )
-                                    self?.present(modal, animated: true)
-                                }
-                        }
-                    },
-                    receiveValue: { sessionId in
-                        modalActivityIndicator.dismiss {
-                            self?.startNewDM(with: sessionId)
-                        }
-                    }
                 )
+                self.present(modal, animated: true)
+                
+            case .success:
+                let modal: ConfirmationModal = ConfirmationModal(
+                    targetView: self.view,
+                    info: ConfirmationModal.Info(
+                        title: "ALERT_ERROR_TITLE".localized(),
+                        body: .text("DM_ERROR_INVALID".localized()),
+                        cancelTitle: "BUTTON_OK".localized(),
+                        cancelStyle: .alert_text,
+                        afterClosed: onError
+                    )
+                )
+                self.present(modal, animated: true)
+                
+            case .failure:
+                // This could be an ONS name
+                ModalActivityIndicatorViewController
+                    .present(fromViewController: navigationController!, canCancel: false) { [weak self, dependencies] modalActivityIndicator in
+                    SnodeAPI
+                        .getSessionID(for: onsNameOrPublicKey, using: dependencies)
+                        .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+                        .receive(on: DispatchQueue.main)
+                        .sinkUntilComplete(
+                            receiveCompletion: { result in
+                                switch result {
+                                    case .finished: break
+                                    case .failure(let error):
+                                        modalActivityIndicator.dismiss {
+                                            var message: String = {
+                                                switch error as? SnodeAPIError {
+                                                    case .onsDecryptionFailed, .onsHashingFailed, .onsValidationFailed:
+                                                        return "\(error)"
+                                                    default: return "DM_ERROR_INVALID".localized()
+                                                }
+                                            }()
+                                            
+                                            let modal: ConfirmationModal = ConfirmationModal(
+                                                targetView: self?.view,
+                                                info: ConfirmationModal.Info(
+                                                    title: "ALERT_ERROR_TITLE".localized(),
+                                                    body: .text(message),
+                                                    cancelTitle: "BUTTON_OK".localized(),
+                                                    cancelStyle: .alert_text,
+                                                    afterClosed: onError
+                                                )
+                                            )
+                                            self?.present(modal, animated: true)
+                                        }
+                                }
+                            },
+                            receiveValue: { sessionId in
+                                modalActivityIndicator.dismiss {
+                                    self?.startNewDM(with: sessionId)
+                                }
+                            }
+                        )
+                }
         }
     }
 
     private func startNewDM(with sessionId: String) {
-        SessionApp.presentConversationCreatingIfNeeded(
+        dependencies[singleton: .app].presentConversationCreatingIfNeeded(
             for: sessionId,
             variant: .contact,
             dismissing: presentingViewController,
@@ -273,6 +257,7 @@ final class NewDMVC: BaseVC, UIPageViewControllerDataSource, UIPageViewControlle
 // MARK: - EnterPublicKeyVC
 
 private final class EnterPublicKeyVC: UIViewController {
+    private let dependencies: Dependencies
     weak var NewDMVC: NewDMVC!
     private var isKeyboardShowing = false
     private var simulatorWillResignFirstResponder = false
@@ -318,7 +303,7 @@ private final class EnterPublicKeyVC: UIViewController {
         
         let qrCodeImageView: UIImageView = UIImageView()
         qrCodeImageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        qrCodeImageView.image = QRCode.generate(for: getUserHexEncodedPublicKey(), hasBackground: false)
+        qrCodeImageView.image = QRCode.generate(for: dependencies[cache: .general].sessionId.hexString, hasBackground: false)
             .withRenderingMode(.alwaysTemplate)
         qrCodeImageView.set(.width, to: .height, of: qrCodeImageView)
         qrCodeImageView.heightAnchor
@@ -370,7 +355,7 @@ private final class EnterPublicKeyVC: UIViewController {
         let result: SRCopyableLabel = SRCopyableLabel()
         result.setContentCompressionResistancePriority(.required, for: .vertical)
         result.font = Fonts.spaceMono(ofSize: Values.mediumFontSize)
-        result.text = getUserHexEncodedPublicKey()
+        result.text = dependencies[cache: .general].sessionId.hexString
         result.themeTextColor = .textPrimary
         result.textAlignment = .center
         result.lineBreakMode = .byCharWrapping
@@ -441,6 +426,18 @@ private final class EnterPublicKeyVC: UIViewController {
     private var viewWidth: NSLayoutConstraint?
     private var viewHeight: NSLayoutConstraint?
     
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     // MARK: - Lifecycle
     
     override func viewDidLoad() {
@@ -639,7 +636,7 @@ private final class EnterPublicKeyVC: UIViewController {
     // MARK: - Interaction
     
     @objc private func copyPublicKey() {
-        UIPasteboard.general.string = getUserHexEncodedPublicKey()
+        UIPasteboard.general.string = dependencies[cache: .general].sessionId.hexString
         
         copyButton.isUserInteractionEnabled = false
         
@@ -650,7 +647,10 @@ private final class EnterPublicKeyVC: UIViewController {
     }
     
     @objc private func sharePublicKey() {
-        let shareVC = UIActivityViewController(activityItems: [ getUserHexEncodedPublicKey() ], applicationActivities: nil)
+        let shareVC = UIActivityViewController(
+            activityItems: [ dependencies[cache: .general].sessionId.hexString ],
+            applicationActivities: nil
+        )
         
         if UIDevice.current.isIPad {
             shareVC.excludedActivityTypes = []
@@ -671,10 +671,25 @@ private final class EnterPublicKeyVC: UIViewController {
 // MARK: - ScanQRCodePlaceholderVC
 
 private final class ScanQRCodePlaceholderVC: UIViewController {
+    private let dependencies: Dependencies
     weak var newDMVC: NewDMVC!
     
     private var viewWidth: NSLayoutConstraint?
     private var viewHeight: NSLayoutConstraint?
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Lifecycle
     
     override func viewDidLoad() {
         // Remove background color
@@ -727,7 +742,7 @@ private final class ScanQRCodePlaceholderVC: UIViewController {
 
     
     @objc private func requestCameraAccess() {
-        Permissions.requestCameraPermissionIfNeeded { [weak self] in
+        Permissions.requestCameraPermissionIfNeeded(using: dependencies) { [weak self] in
             self?.newDMVC.handleCameraAccessGranted()
         }
     }

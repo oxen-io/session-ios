@@ -4,7 +4,6 @@ import UIKit
 import YYImage
 import SessionUIKit
 import SessionMessagingKit
-import SignalCoreKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
@@ -19,6 +18,7 @@ public class MediaView: UIView {
 
     // MARK: -
 
+    private let dependencies: Dependencies
     private let mediaCache: NSCache<NSString, AnyObject>?
     public let attachment: Attachment
     private let isOutgoing: Bool
@@ -53,8 +53,10 @@ public class MediaView: UIView {
         attachment: Attachment,
         isOutgoing: Bool,
         shouldSupressControls: Bool,
-        cornerRadius: CGFloat
+        cornerRadius: CGFloat,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.mediaCache = mediaCache
         self.attachment = attachment
         self.isOutgoing = isOutgoing
@@ -72,7 +74,7 @@ public class MediaView: UIView {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     deinit {
@@ -82,7 +84,7 @@ public class MediaView: UIView {
     // MARK: -
 
     private func createContents() {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         guard attachment.state != .pendingDownload && attachment.state != .downloading else {
             addDownloadProgressIfNecessary()
@@ -107,7 +109,7 @@ public class MediaView: UIView {
             configureForVideo(attachment: attachment)
         }
         else {
-            owsFailDebug("Attachment has unexpected type.")
+            Log.error("[MediaView] Attachment has unexpected type.")
             configure(forError: .invalid)
         }
     }
@@ -159,14 +161,14 @@ public class MediaView: UIView {
         animatedImageView.themeBackgroundColor = .backgroundSecondary
         animatedImageView.isHidden = !attachment.isValid
         addSubview(animatedImageView)
-        animatedImageView.autoPinEdgesToSuperviewEdges()
+        animatedImageView.pin(to: self)
         _ = addUploadProgressIfNecessary(animatedImageView)
 
-        loadBlock = { [weak self] in
-            AssertIsOnMainThread()
+        loadBlock = { [weak self, dependencies] in
+            Log.assertOnMainThread()
             
             if animatedImageView.image != nil {
-                owsFailDebug("Unexpectedly already loaded.")
+                Log.error("[MediaView] Unexpectedly already loaded.")
                 return
             }
             self?.tryToLoadMedia(
@@ -175,8 +177,8 @@ public class MediaView: UIView {
                         self?.configure(forError: .invalid)
                         return
                     }
-                    guard let filePath: String = attachment.originalFilePath else {
-                        owsFailDebug("Attachment stream missing original file path.")
+                    guard let filePath: String = attachment.originalFilePath(using: dependencies) else {
+                        Log.error("[MediaView] Attachment stream missing original file path.")
                         self?.configure(forError: .invalid)
                         return
                     }
@@ -184,10 +186,10 @@ public class MediaView: UIView {
                     applyMediaBlock(YYImage(contentsOfFile: filePath))
                 },
                 applyMediaBlock: { media in
-                    AssertIsOnMainThread()
+                    Log.assertOnMainThread()
                     
                     guard let image: YYImage = media as? YYImage else {
-                        owsFailDebug("Media has unexpected type: \(type(of: media))")
+                        Log.error("[MediaView] Media has unexpected type: \(type(of: media))")
                         self?.configure(forError: .invalid)
                         return
                     }
@@ -198,7 +200,7 @@ public class MediaView: UIView {
             )
         }
         unloadBlock = {
-            AssertIsOnMainThread()
+            Log.assertOnMainThread()
 
             animatedImageView.image = nil
         }
@@ -216,14 +218,14 @@ public class MediaView: UIView {
         stillImageView.themeBackgroundColor = .backgroundSecondary
         stillImageView.isHidden = !attachment.isValid
         addSubview(stillImageView)
-        stillImageView.autoPinEdgesToSuperviewEdges()
+        stillImageView.pin(to: self)
         _ = addUploadProgressIfNecessary(stillImageView)
         
-        loadBlock = { [weak self] in
-            AssertIsOnMainThread()
+        loadBlock = { [weak self, dependencies] in
+            Log.assertOnMainThread()
 
             if stillImageView.image != nil {
-                owsFailDebug("Unexpectedly already loaded.")
+                Log.error("[MediaView] Unexpectedly already loaded.")
                 return
             }
             self?.tryToLoadMedia(
@@ -235,18 +237,19 @@ public class MediaView: UIView {
                     
                     attachment.thumbnail(
                         size: .large,
+                        using: dependencies,
                         success: { image, _ in applyMediaBlock(image) },
                         failure: {
-                            Logger.error("Could not load thumbnail")
+                            Log.error("[MediaView] Could not load thumbnail")
                             self?.configure(forError: .invalid)
                         }
                     )
                 },
                 applyMediaBlock: { media in
-                    AssertIsOnMainThread()
+                    Log.assertOnMainThread()
                     
                     guard let image: UIImage = media as? UIImage else {
-                        owsFailDebug("Media has unexpected type: \(type(of: media))")
+                        Log.error("[MediaView] Media has unexpected type: \(type(of: media))")
                         self?.configure(forError: .invalid)
                         return
                     }
@@ -257,7 +260,7 @@ public class MediaView: UIView {
             )
         }
         unloadBlock = {
-            AssertIsOnMainThread()
+            Log.assertOnMainThread()
 
             stillImageView.image = nil
         }
@@ -276,7 +279,7 @@ public class MediaView: UIView {
         stillImageView.isHidden = !attachment.isValid
 
         addSubview(stillImageView)
-        stillImageView.autoPinEdgesToSuperviewEdges()
+        stillImageView.pin(to: self)
 
         if !addUploadProgressIfNecessary(stillImageView) && !shouldSupressControls {
             if let duration: TimeInterval = attachment.duration {
@@ -306,14 +309,14 @@ public class MediaView: UIView {
             videoPlayButton.set(.width, to: 72)
             videoPlayButton.set(.height, to: 72)
             stillImageView.addSubview(videoPlayButton)
-            videoPlayButton.autoCenterInSuperview()
+            videoPlayButton.center(in: stillImageView)
         }
 
-        loadBlock = { [weak self] in
-            AssertIsOnMainThread()
+        loadBlock = { [weak self, dependencies] in
+            Log.assertOnMainThread()
 
             if stillImageView.image != nil {
-                owsFailDebug("Unexpectedly already loaded.")
+                Log.error("[MediaView] Unexpectedly already loaded.")
                 return
             }
             self?.tryToLoadMedia(
@@ -325,18 +328,19 @@ public class MediaView: UIView {
                     
                     attachment.thumbnail(
                         size: .medium,
+                        using: dependencies,
                         success: { image, _ in applyMediaBlock(image) },
                         failure: {
-                            Logger.error("Could not load thumbnail")
+                            Log.error("[MediaView] Could not load thumbnail")
                             self?.configure(forError: .invalid)
                         }
                     )
                 },
                 applyMediaBlock: { media in
-                    AssertIsOnMainThread()
+                    Log.assertOnMainThread()
 
                     guard let image: UIImage = media as? UIImage else {
-                        owsFailDebug("Media has unexpected type: \(type(of: media))")
+                        Log.error("[MediaView] Media has unexpected type: \(type(of: media))")
                         self?.configure(forError: .invalid)
                         return
                     }
@@ -347,7 +351,7 @@ public class MediaView: UIView {
             )
         }
         unloadBlock = {
-            AssertIsOnMainThread()
+            Log.assertOnMainThread()
 
             stillImageView.image = nil
         }
@@ -369,14 +373,14 @@ public class MediaView: UIView {
         switch error {
             case .failed:
                 guard let asset = UIImage(named: "media_retry") else {
-                    owsFailDebug("Missing image")
+                    Log.error("[MediaView] Missing image")
                     return
                 }
                 icon = asset
                 
             case .invalid:
                 guard let asset = UIImage(named: "media_invalid") else {
-                    owsFailDebug("Missing image")
+                    Log.error("[MediaView] Missing image")
                     return
                 }
                 icon = asset
@@ -398,7 +402,7 @@ public class MediaView: UIView {
         iconView.themeTintColor = .textPrimary
         iconView.alpha = Values.mediumOpacity
         addSubview(iconView)
-        iconView.autoCenterInSuperview()
+        iconView.center(in: self)
     }
 
     private func tryToLoadMedia(
@@ -410,7 +414,7 @@ public class MediaView: UIView {
         // our load attempt is complete.
         let loadCompletion: (AnyObject?) -> Void = { [weak self] possibleMedia in
             guard self?.loadState.wrappedValue == .loading else {
-                Logger.verbose("Skipping obsolete load.")
+                Log.verbose("[MediaView] Skipping obsolete load.")
                 return
             }
             guard let media: AnyObject = possibleMedia else {
@@ -427,12 +431,12 @@ public class MediaView: UIView {
         }
 
         guard loadState.wrappedValue == .loading else {
-            owsFailDebug("Unexpected load state: \(loadState)")
+            Log.error("[MediaView] Unexpected load state: \(loadState)")
             return
         }
 
         if let media: AnyObject = self.mediaCache?.object(forKey: cacheKey as NSString) {
-            Logger.verbose("media cache hit")
+            Log.verbose("[MediaView] media cache hit")
             
             guard Thread.isMainThread else {
                 DispatchQueue.main.async {
@@ -445,11 +449,11 @@ public class MediaView: UIView {
             return
         }
 
-        Logger.verbose("media cache miss")
+        Log.verbose("[MediaView] media cache miss")
 
         MediaView.loadQueue.async { [weak self] in
             guard self?.loadState.wrappedValue == .loading else {
-                Logger.verbose("Skipping obsolete load.")
+                Log.verbose("[MediaView] Skipping obsolete load.")
                 return
             }
             
@@ -504,6 +508,7 @@ import SwiftUI
 struct MediaView_SwiftUI: UIViewRepresentable {
     public typealias UIViewType = MediaView
     
+    private let dependencies: Dependencies
     private let mediaCache: NSCache<NSString, AnyObject>?
     public let attachment: Attachment
     private let isOutgoing: Bool
@@ -513,8 +518,10 @@ struct MediaView_SwiftUI: UIViewRepresentable {
         mediaCache: NSCache<NSString, AnyObject>? = nil,
         attachment: Attachment,
         isOutgoing: Bool,
-        cornerRadius: CGFloat
+        cornerRadius: CGFloat,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.mediaCache = mediaCache
         self.attachment = attachment
         self.isOutgoing = isOutgoing
@@ -527,7 +534,8 @@ struct MediaView_SwiftUI: UIViewRepresentable {
             attachment: attachment,
             isOutgoing: isOutgoing, 
             shouldSupressControls: true,
-            cornerRadius: cornerRadius
+            cornerRadius: cornerRadius,
+            using: dependencies
         )
         
         return mediaView

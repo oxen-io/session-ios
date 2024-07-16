@@ -12,11 +12,12 @@ public extension SQLInterpolation {
     ///     let player: TypedTableAlias<T> = TypedTableAlias()
     ///     let request: SQLRequest<Player> = "SELECT * FROM \(player)"
     @_disfavoredOverload
-    mutating func appendInterpolation<T>(_ typedTableAlias: TypedTableAlias<T>) {
+    mutating func appendInterpolation<T>(_ typedTableAlias: TypedTableAlias<T>, asSubquery: Bool = false) {
         let name: String = typedTableAlias.name
         
         guard let tableName: String = typedTableAlias.tableName else { return appendLiteral(name.quotedDatabaseIdentifier) }
         guard name != tableName else { return appendLiteral(tableName.quotedDatabaseIdentifier) }
+        guard !asSubquery else { return appendLiteral("AS \(name.quotedDatabaseIdentifier)") }
         
         appendLiteral("\(tableName.quotedDatabaseIdentifier) AS \(name.quotedDatabaseIdentifier)")
     }
@@ -67,5 +68,15 @@ public extension SQLInterpolation {
     
     private func generateSelection<T: ColumnExpressible>(for type: T.Type) -> String {
         return "SELECT 1"
+    }
+    
+    /// Appends the table name of the record type.
+    ///
+    ///     // SELECT * FROM user WHERE user.id LIKE '05%'
+    ///     let user: TypedTableAlias<User> = TypedTableAlias()
+    ///     let request: SQLRequest<User> = "SELECT * FROM \(user) WHERE \(user[.id]) LIKE '\(SessionId.Prefix.standard)%'"
+    @_disfavoredOverload
+    mutating func appendInterpolation(_ idPrefix: SessionId.Prefix) {
+        appendLiteral(idPrefix.rawValue)
     }
 }

@@ -15,7 +15,7 @@ class NotificationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
     
     // MARK: - Initialization
     
-    init(using dependencies: Dependencies = Dependencies()) {
+    init(using dependencies: Dependencies) {
         self.dependencies = dependencies
     }
     
@@ -72,9 +72,9 @@ class NotificationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                     .defaulting(to: Preferences.NotificationPreviewType.defaultPreviewType)
             )
         }
-        .map { dbState -> State in
+        .map { [dependencies] dbState -> State in
             State(
-                isUsingFullAPNs: UserDefaults.standard[.isUsingFullAPNs],
+                isUsingFullAPNs: dependencies[defaults: .standard, key: .isUsingFullAPNs],
                 notificationSound: dbState.notificationSound,
                 playNotificationSoundInForeground: dbState.playNotificationSoundInForeground,
                 previewType: dbState.previewType
@@ -89,25 +89,20 @@ class NotificationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                             id: .strategyUseFastMode,
                             title: "NOTIFICATIONS_STRATEGY_FAST_MODE_TITLE".localized(),
                             subtitle: "NOTIFICATIONS_STRATEGY_FAST_MODE_DESCRIPTION".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    current.isUsingFullAPNs,
-                                    oldValue: (previous ?? current).isUsingFullAPNs
-                                )
+                            trailingAccessory: .toggle(
+                                current.isUsingFullAPNs,
+                                oldValue: previous?.isUsingFullAPNs
                             ),
                             styling: SessionCell.StyleInfo(
                                 allowedSeparators: [.top],
                                 customPadding: SessionCell.Padding(bottom: Values.verySmallSpacing)
                             ),
                             onTap: { [weak self] in
-                                UserDefaults.standard.set(
-                                    !UserDefaults.standard.bool(forKey: "isUsingFullAPNs"),
-                                    forKey: "isUsingFullAPNs"
-                                )
+                                dependencies[defaults: .standard, key: .isUsingFullAPNs] = !dependencies[defaults: .standard, key: .isUsingFullAPNs]
 
                                 // Force sync the push tokens on change
-                                SyncPushTokensJob.run(uploadOnlyIfStale: false)
-                                self?.forceRefresh()
+                                SyncPushTokensJob.run(uploadOnlyIfStale: false, using: dependencies)
+                                self?.forceRefresh(type: .postDatabaseQuery)
                             }
                         ),
                         SessionCell.Info(
@@ -131,27 +126,24 @@ class NotificationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                         SessionCell.Info(
                             id: .styleSound,
                             title: "NOTIFICATIONS_STYLE_SOUND_TITLE".localized(),
-                            rightAccessory: .dropDown(
-                                .dynamicString { current.notificationSound.displayName }
-                            ),
+                            trailingAccessory: .dropDown { current.notificationSound.displayName },
                             onTap: { [weak self] in
                                 self?.transitionToScreen(
-                                    SessionTableViewController(viewModel: NotificationSoundViewModel())
+                                    SessionTableViewController(
+                                        viewModel: NotificationSoundViewModel(using: dependencies)
+                                    )
                                 )
                             }
                         ),
                         SessionCell.Info(
                             id: .styleSoundWhenAppIsOpen,
                             title: "NOTIFICATIONS_STYLE_SOUND_WHEN_OPEN_TITLE".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .playNotificationSoundInForeground,
-                                    value: current.playNotificationSoundInForeground,
-                                    oldValue: (previous ?? current).playNotificationSoundInForeground
-                                )
+                            trailingAccessory: .toggle(
+                                current.playNotificationSoundInForeground,
+                                oldValue: previous?.playNotificationSoundInForeground
                             ),
                             onTap: {
-                                Storage.shared.write { db in
+                                dependencies[singleton: .storage].write { db in
                                     db[.playNotificationSoundInForeground] = !db[.playNotificationSoundInForeground]
                                 }
                             }
@@ -165,12 +157,12 @@ class NotificationSettingsViewModel: SessionTableViewModel, NavigatableStateHold
                             id: .content,
                             title: "NOTIFICATIONS_STYLE_CONTENT_TITLE".localized(),
                             subtitle: "NOTIFICATIONS_STYLE_CONTENT_DESCRIPTION".localized(),
-                            rightAccessory: .dropDown(
-                                .dynamicString { current.previewType.name }
-                            ),
+                            trailingAccessory: .dropDown { current.previewType.name },
                             onTap: { [weak self] in
                                 self?.transitionToScreen(
-                                    SessionTableViewController(viewModel: NotificationContentViewModel())
+                                    SessionTableViewController(
+                                        viewModel: NotificationContentViewModel(using: dependencies)
+                                    )
                                 )
                             }
                         )

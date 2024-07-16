@@ -9,7 +9,8 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class PNModeVC: BaseVC, OptionViewDelegate {
-    private let flow: Onboarding.Flow
+    private let dependencies: Dependencies
+    private var profileRetrievalCancellable: AnyCancellable?
     
     private var optionViews: [OptionView] {
         [ apnsOptionView, backgroundPollingOptionView ]
@@ -21,14 +22,18 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
     
     // MARK: - Initialization
     
-    init(flow: Onboarding.Flow) {
-        self.flow = flow
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         
         super.init(nibName: nil, bundle: nil)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    deinit {
+        profileRetrievalCancellable?.cancel()
     }
     
     // MARK: - Components
@@ -85,7 +90,7 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         let registerButton = SessionButton(style: .filled, size: .large)
         registerButton.accessibilityLabel = "Continue with settings"
         registerButton.setTitle("continue_2".localized(), for: .normal)
-        registerButton.addTarget(self, action: #selector(register), for: UIControl.Event.touchUpInside)
+        registerButton.addTarget(self, action: #selector(registerTapped), for: UIControl.Event.touchUpInside)
         
         // Set up register button container
         let registerButtonContainer = UIView(wrapping: registerButton, withInsets: UIEdgeInsets(top: 0, leading: Values.massiveSpacing, bottom: 0, trailing: Values.massiveSpacing), shouldAdaptForIPadWithWidth: Values.iPadButtonWidth)
@@ -128,7 +133,9 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
         optionViews.filter { $0 != optionView }.forEach { $0.isSelected = false }
     }
 
-    @objc private func register() {
+    @objc private func registerTapped() { register() }
+    
+    private func register() {
         guard selectedOptionView != nil else {
             let modal: ConfirmationModal = ConfirmationModal(
                 targetView: self.view,
@@ -142,70 +149,61 @@ final class PNModeVC: BaseVC, OptionViewDelegate {
             return
         }
         
-        let useAPNS: Bool = (selectedOptionView == apnsOptionView)
-        UserDefaults.standard[.isUsingFullAPNs] = useAPNS
+        // Store whether we want to use APNS
+        dependencies.mutate(cache: .onboarding) { $0.setUserAPNS(selectedOptionView == apnsOptionView) }
         
         // If we are registering then we can just continue on
-        guard flow != .register else {
-            return self.completeRegistration(useAPNS: useAPNS)
+        guard dependencies[cache: .onboarding].initialFlow != .register else {
+            return self.completeRegistration()
         }
         
         // Check if we already have a profile name (ie. profile retrieval completed while waiting on
         // this screen)
-        let existingProfileName: String? = Storage.shared
-            .read { db in
-                try Profile
-                    .filter(id: getUserHexEncodedPublicKey(db))
-                    .select(.name)
-                    .asRequest(of: String.self)
-                    .fetchOne(db)
-            }
-        
-        guard existingProfileName?.isEmpty != false else {
+        guard dependencies[cache: .onboarding].displayName.isEmpty else {
             // If we have one then we can go straight to the home screen
-            return self.completeRegistration(useAPNS: useAPNS)
+            return self.completeRegistration()
         }
         
         // If we don't have one then show a loading indicator and try to retrieve the existing name
-        ModalActivityIndicatorViewController.present(fromViewController: self) { [weak self, flow = self.flow] viewController in
-            Onboarding.profileNamePublisher
+        ModalActivityIndicatorViewController.present(fromViewController: self) { [weak self, dependencies] viewController in
+            self?.profileRetrievalCancellable = dependencies[cache: .onboarding].displayNamePublisher
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .timeout(.seconds(15), scheduler: DispatchQueue.main, customError: { NetworkError.timeout })
-                .catch { _ -> AnyPublisher<String?, Error> in
-                    SNLog("Onboarding failed to retrieve existing profile information")
-                    return Just(nil)
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
-                }
                 .receive(on: DispatchQueue.main)
-                .sinkUntilComplete(
+                .sink(
+                    receiveCompletion: { _ in },
                     receiveValue: { value in
                         // Hide the loading indicator
                         viewController.dismiss(animated: true)
                         
                         // If we have no display name we need to collect one
                         guard value?.isEmpty == false else {
-                            let displayNameVC: DisplayNameVC = DisplayNameVC(flow: flow)
+                            let displayNameVC: DisplayNameVC = DisplayNameVC(using: dependencies)
                             self?.navigationController?.pushViewController(displayNameVC, animated: true)
                             return
                         }
                         
                         // Otherwise we are done and can go to the home screen
-                        self?.completeRegistration(useAPNS: useAPNS)
+                        self?.completeRegistration()
                     }
                 )
         }
     }
     
-    private func completeRegistration(useAPNS: Bool) {
-        self.flow.completeRegistration()
-        
-        // Trigger the 'SyncPushTokensJob' directly as we don't want to wait for paths to build
-        // before requesting the permission from the user
-        if useAPNS { SyncPushTokensJob.run(uploadOnlyIfStale: false) }
-        
-        // Go to the home screen
-        let homeVC: HomeVC = HomeVC()
-        self.navigationController?.setViewControllers([ homeVC ], animated: true)
+    private func completeRegistration() {
+        dependencies.mutate(cache: .onboarding) { [weak self, dependencies] onboarding in
+            let shouldSyncPushTokens: Bool = onboarding.useAPNS
+            
+            onboarding.completeRegistration {
+                // Trigger the 'SyncPushTokensJob' directly as we don't want to wait for paths to build
+                // before requesting the permission from the user
+                if shouldSyncPushTokens { SyncPushTokensJob.run(uploadOnlyIfStale: false, using: dependencies) }
+                
+                // Go to the home screen
+                let homeVC: HomeVC = HomeVC(using: dependencies)
+                dependencies[singleton: .app].setHomeViewController(homeVC)
+                self?.navigationController?.setViewControllers([ homeVC ], animated: true)
+            }
+        }
     }
 }

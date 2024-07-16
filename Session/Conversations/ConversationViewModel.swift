@@ -4,8 +4,10 @@ import Foundation
 import Combine
 import GRDB
 import DifferenceKit
+import SessionSnodeKit
 import SessionMessagingKit
 import SessionUtilitiesKit
+import SessionUIKit
 
 public class ConversationViewModel: OWSAudioPlayerDelegate {
     public typealias SectionModel = ArraySection<Section, MessageViewModel>
@@ -55,6 +57,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     private let initialUnreadInteractionId: Int64?
     private let markAsReadTrigger: PassthroughSubject<(SessionThreadViewModel.ReadTarget, Int64?), Never> = PassthroughSubject()
     private var markAsReadPublisher: AnyPublisher<Void, Never>?
+    public let dependencies: Dependencies
     
     public lazy var blockedBannerMessage: String = {
         let threadData: SessionThreadViewModel = self._threadData.wrappedValue
@@ -63,7 +66,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             case .contact:
                 let name: String = Profile.displayName(
                     id: threadData.threadId,
-                    threadVariant: threadData.threadVariant
+                    threadVariant: threadData.threadVariant,
+                    using: dependencies
                 )
                 
                 return "\(name) is blocked. Unblock them?"
@@ -74,22 +78,28 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     // MARK: - Initialization
     
-    init(threadId: String, threadVariant: SessionThread.Variant, focusedInteractionInfo: Interaction.TimestampInfo?) {
+    init(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        focusedInteractionInfo: Interaction.TimestampInfo?,
+        using dependencies: Dependencies
+    ) {
         typealias InitialData = (
-            currentUserPublicKey: String,
+            userSessionId: SessionId,
             initialUnreadInteractionInfo: Interaction.TimestampInfo?,
             threadIsBlocked: Bool,
+            threadIsMessageRequest: Bool,
             currentUserIsClosedGroupMember: Bool?,
             currentUserIsClosedGroupAdmin: Bool?,
             openGroupPermissions: OpenGroup.Permissions?,
-            blinded15Key: String?,
-            blinded25Key: String?
+            blinded15SessionId: SessionId?,
+            blinded25SessionId: SessionId?
         )
         
-        let initialData: InitialData? = Storage.shared.read { db -> InitialData in
+        let initialData: InitialData? = dependencies[singleton: .storage].read { db -> InitialData in
             let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
             let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
-            let currentUserPublicKey: String = getUserHexEncodedPublicKey(db)
+            let userSessionId: SessionId = dependencies[cache: .general].sessionId
             
             // If we have a specified 'focusedInteractionInfo' then use that, otherwise retrieve the oldest
             // unread interaction and start focused around that one
@@ -108,10 +118,35 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                     .fetchOne(db)
                     .defaulting(to: false)
             )
+            let threadIsMessageRequest: Bool = try {
+                switch threadVariant {
+                    case .contact:
+                        let isApproved: Bool = try Contact
+                            .filter(id: threadId)
+                            .select(.isApproved)
+                            .asRequest(of: Bool.self)
+                            .fetchOne(db)
+                            .defaulting(to: true)
+                        
+                        return !isApproved
+                        
+                    case .group:
+                        let isInvite: Bool = try ClosedGroup
+                            .filter(id: threadId)
+                            .select(.invited)
+                            .asRequest(of: Bool.self)
+                            .fetchOne(db)
+                            .defaulting(to: true)
+                        
+                        return !isInvite
+                        
+                    default: return false
+                }
+            }()
             let currentUserIsClosedGroupAdmin: Bool? = (![.legacyGroup, .group].contains(threadVariant) ? nil :
                 GroupMember
                     .filter(groupMember[.groupId] == threadId)
-                    .filter(groupMember[.profileId] == currentUserPublicKey)
+                    .filter(groupMember[.profileId] == userSessionId.hexString)
                     .filter(groupMember[.role] == GroupMember.Role.admin)
                     .isNotEmpty(db)
             )
@@ -121,7 +156,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 
                 return GroupMember
                     .filter(groupMember[.groupId] == threadId)
-                    .filter(groupMember[.profileId] == currentUserPublicKey)
+                    .filter(groupMember[.profileId] == userSessionId.hexString)
                     .filter(groupMember[.role] == GroupMember.Role.standard)
                     .isNotEmpty(db)
             }()
@@ -132,28 +167,31 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                     .asRequest(of: OpenGroup.Permissions.self)
                     .fetchOne(db)
             )
-            let blinded15Key: String? = SessionThread.getUserHexEncodedBlindedKey(
+            let blinded15SessionId: SessionId? = SessionThread.getCurrentUserBlindedSessionId(
                 db,
                 threadId: threadId,
                 threadVariant: threadVariant,
-                blindingPrefix: .blinded15
+                blindingPrefix: .blinded15,
+                using: dependencies
             )
-            let blinded25Key: String? = SessionThread.getUserHexEncodedBlindedKey(
+            let blinded25SessionId: SessionId? = SessionThread.getCurrentUserBlindedSessionId(
                 db,
                 threadId: threadId,
                 threadVariant: threadVariant,
-                blindingPrefix: .blinded25
+                blindingPrefix: .blinded25,
+                using: dependencies
             )
             
             return (
-                currentUserPublicKey,
+                userSessionId,
                 initialUnreadInteractionInfo,
                 threadIsBlocked,
+                threadIsMessageRequest,
                 currentUserIsClosedGroupMember,
                 currentUserIsClosedGroupAdmin,
                 openGroupPermissions,
-                blinded15Key,
-                blinded25Key
+                blinded15SessionId,
+                blinded25SessionId
             )
         }
         
@@ -166,17 +204,21 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             SessionThreadViewModel(
                 threadId: threadId,
                 threadVariant: threadVariant,
-                threadIsNoteToSelf: (initialData?.currentUserPublicKey == threadId),
+                threadIsNoteToSelf: (initialData?.userSessionId.hexString == threadId),
+                threadIsMessageRequest: initialData?.threadIsMessageRequest,
                 threadIsBlocked: initialData?.threadIsBlocked,
                 currentUserIsClosedGroupMember: initialData?.currentUserIsClosedGroupMember,
                 currentUserIsClosedGroupAdmin: initialData?.currentUserIsClosedGroupAdmin,
-                openGroupPermissions: initialData?.openGroupPermissions
-            ).populatingCurrentUserBlindedKeys(
-                currentUserBlinded15PublicKeyForThisThread: initialData?.blinded15Key,
-                currentUserBlinded25PublicKeyForThisThread: initialData?.blinded25Key
+                openGroupPermissions: initialData?.openGroupPermissions,
+                using: dependencies
+            ).populatingCurrentUserBlindedIds(
+                currentUserBlinded15SessionIdForThisThread: initialData?.blinded15SessionId?.hexString,
+                currentUserBlinded25SessionIdForThisThread: initialData?.blinded25SessionId?.hexString,
+                using: dependencies
             )
         )
         self.pagedDataObserver = nil
+        self.dependencies = dependencies
         
         // Note: Since this references self we need to finish initializing before setting it, we
         // also want to skip the initial query and trigger it async so that the push animation
@@ -184,9 +226,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         // distinct stutter)
         self.pagedDataObserver = self.setupPagedObserver(
             for: threadId,
-            userPublicKey: (initialData?.currentUserPublicKey ?? getUserHexEncodedPublicKey()),
-            blinded15PublicKey: initialData?.blinded15Key,
-            blinded25PublicKey: initialData?.blinded25Key
+            userSessionId: (initialData?.userSessionId ?? dependencies[cache: .general].sessionId),
+            blinded15SessionId: initialData?.blinded15SessionId,
+            blinded25SessionId: initialData?.blinded25SessionId,
+            using: dependencies
         )
         
         // Run the initial query on a background thread so we don't block the push transition
@@ -227,21 +270,21 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     private func setupObservableThreadData(for threadId: String) -> ThreadObservation {
         return ValueObservation
-            .trackingConstantRegion { [weak self] db -> SessionThreadViewModel? in
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+            .trackingConstantRegion { [weak self, dependencies] db -> SessionThreadViewModel? in
+                let userSessionId: SessionId = dependencies[cache: .general].sessionId
                 let recentReactionEmoji: [String] = try Emoji.getRecent(db, withDefaultEmoji: true)
-                let oldThreadData: SessionThreadViewModel? = self?._threadData.wrappedValue
                 let threadViewModel: SessionThreadViewModel? = try SessionThreadViewModel
-                    .conversationQuery(threadId: threadId, userPublicKey: userPublicKey)
+                    .conversationQuery(threadId: threadId, userSessionId: userSessionId)
                     .fetchOne(db)
                 
                 return threadViewModel
                     .map { $0.with(recentReactionEmoji: recentReactionEmoji) }
                     .map { viewModel -> SessionThreadViewModel in
-                        viewModel.populatingCurrentUserBlindedKeys(
+                        viewModel.populatingCurrentUserBlindedIds(
                             db,
-                            currentUserBlinded15PublicKeyForThisThread: oldThreadData?.currentUserBlinded15PublicKey,
-                            currentUserBlinded25PublicKeyForThisThread: oldThreadData?.currentUserBlinded25PublicKey
+                            currentUserBlinded15SessionIdForThisThread: self?.threadData.currentUserBlinded15SessionId,
+                            currentUserBlinded25SessionIdForThisThread: self?.threadData.currentUserBlinded25SessionId,
+                            using: dependencies
                         )
                     }
             }
@@ -281,9 +324,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     private func setupPagedObserver(
         for threadId: String,
-        userPublicKey: String,
-        blinded15PublicKey: String?,
-        blinded25PublicKey: String?
+        userSessionId: SessionId,
+        blinded15SessionId: SessionId?,
+        blinded25SessionId: SessionId?,
+        using dependencies: Dependencies
     ) -> PagedDatabaseObserver<Interaction, MessageViewModel> {
         return PagedDatabaseObserver(
             pagedTable: Interaction.self,
@@ -359,9 +403,9 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             groupSQL: MessageViewModel.groupSQL,
             orderSQL: MessageViewModel.orderSQL,
             dataQuery: MessageViewModel.baseQuery(
-                userPublicKey: userPublicKey,
-                blinded15PublicKey: blinded15PublicKey,
-                blinded25PublicKey: blinded25PublicKey,
+                userSessionId: userSessionId,
+                blinded15SessionId: blinded15SessionId,
+                blinded25SessionId: blinded25SessionId,
                 orderSQL: MessageViewModel.orderSQL,
                 groupSQL: MessageViewModel.groupSQL
             ),
@@ -424,7 +468,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                         )
                     }
                 )
-            }
+            },
+            using: dependencies
         )
     }
     
@@ -468,15 +513,16 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                                 isLastOutgoing: (
                                     cellViewModel.id == sortedData
                                         .filter {
-                                            $0.authorId == threadData.currentUserPublicKey ||
-                                            $0.authorId == threadData.currentUserBlinded15PublicKey ||
-                                            $0.authorId == threadData.currentUserBlinded25PublicKey
+                                            $0.authorId == threadData.currentUserSessionId ||
+                                            $0.authorId == threadData.currentUserBlinded15SessionId ||
+                                            $0.authorId == threadData.currentUserBlinded25SessionId
                                         }
                                         .last?
                                         .id
                                 ),
-                                currentUserBlinded15PublicKey: threadData.currentUserBlinded15PublicKey,
-                                currentUserBlinded25PublicKey: threadData.currentUserBlinded25PublicKey
+                                currentUserBlinded15SessionId: threadData.currentUserBlinded15SessionId,
+                                currentUserBlinded25SessionId: threadData.currentUserBlinded25SessionId,
+                                using: dependencies
                             )
                         }
                         .reduce([]) { result, message in
@@ -522,7 +568,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         id: UUID,
         messageViewModel: MessageViewModel,
         interaction: Interaction,
-        attachmentData: Attachment.PreparedData?,
+        attachmentData: [Attachment]?,
         linkPreviewDraft: LinkPreviewDraft?,
         linkPreviewAttachment: Attachment?,
         quoteModel: QuotedReplyModel?
@@ -541,32 +587,34 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         // Generate the optimistic data
         let optimisticMessageId: UUID = UUID()
         let threadData: SessionThreadViewModel = self._threadData.wrappedValue
-        let currentUserProfile: Profile = Profile.fetchOrCreateCurrentUser()
+        let currentUserProfile: Profile = Profile.fetchOrCreateCurrentUser(using: dependencies)
         let interaction: Interaction = Interaction(
             threadId: threadData.threadId,
             threadVariant: threadData.threadVariant,
-            authorId: (threadData.currentUserBlinded15PublicKey ?? threadData.currentUserPublicKey),
+            authorId: (threadData.currentUserBlinded15SessionId ?? threadData.currentUserSessionId),
             variant: .standardOutgoing,
             body: text,
             timestampMs: sentTimestampMs,
             hasMention: Interaction.isUserMentioned(
                 publicKeysToCheck: [
-                    threadData.currentUserPublicKey,
-                    threadData.currentUserBlinded15PublicKey,
-                    threadData.currentUserBlinded25PublicKey
+                    threadData.currentUserSessionId,
+                    threadData.currentUserBlinded15SessionId,
+                    threadData.currentUserBlinded25SessionId
                 ].compactMap { $0 },
                 body: text
             ),
             expiresInSeconds: threadData.disappearingMessagesConfiguration?.durationSeconds,
             expiresStartedAtMs: (threadData.disappearingMessagesConfiguration?.type == .disappearAfterSend ? Double(sentTimestampMs) : nil),
-            linkPreviewUrl: linkPreviewDraft?.urlString
+            linkPreviewUrl: linkPreviewDraft?.urlString,
+            using: dependencies
         )
-        let optimisticAttachments: Attachment.PreparedData? = attachments
-            .map { Attachment.prepare(attachments: $0) }
+        let optimisticAttachments: [Attachment]? = attachments
+            .map { Attachment.prepare(attachments: $0, using: dependencies) }
         let linkPreviewAttachment: Attachment? = linkPreviewDraft.map { draft in
             try? LinkPreview.generateAttachmentIfPossible(
                 imageData: draft.jpegImageData,
-                mimeType: OWSMimeTypeImageJpeg
+                mimeType: MimeTypeUtil.MimeType.imageJpeg,
+                using: dependencies
             )
         }
         
@@ -587,8 +635,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             body: interaction.body,
             expiresStartedAtMs: interaction.expiresStartedAtMs,
             expiresInSeconds: interaction.expiresInSeconds,
-            isSenderOpenGroupModerator: OpenGroupManager.isUserModeratorOrAdmin(
-                threadData.currentUserPublicKey,
+            isSenderOpenGroupModerator: dependencies[singleton: .openGroupManager].isUserModeratorOrAdmin(
+                publicKey: threadData.currentUserSessionId,
                 for: threadData.openGroupRoomToken,
                 on: threadData.openGroupServer
             ),
@@ -608,11 +656,12 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 LinkPreview(
                     url: draft.urlString,
                     title: draft.title,
-                    attachmentId: nil    // Can't save to db optimistically
+                    attachmentId: nil,    // Can't save to db optimistically
+                    using: dependencies
                 )
             },
             linkPreviewAttachment: linkPreviewAttachment,
-            attachments: optimisticAttachments?.attachments
+            attachments: optimisticAttachments
         )
         let optimisticData: OptimisticMessageData = (
             optimisticMessageId,
@@ -706,9 +755,9 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     public func mentions(for query: String = "") -> [MentionInfo] {
         let threadData: SessionThreadViewModel = self._threadData.wrappedValue
         
-        return Storage.shared
-            .read { db -> [MentionInfo] in
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        return dependencies[singleton: .storage]
+            .read { [dependencies] db -> [MentionInfo] in
+                let userSessionId: SessionId = dependencies[cache: .general].sessionId
                 let pattern: FTS5Pattern? = try? SessionThreadViewModel.pattern(db, searchTerm: query, forTable: Profile.self)
                 let capabilities: Set<Capability.Variant> = (threadData.threadVariant != .community ?
                     nil :
@@ -726,7 +775,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 
                 return (try MentionInfo
                     .query(
-                        userPublicKey: userPublicKey,
+                        userPublicKey: userSessionId.hexString,
                         threadId: threadData.threadId,
                         threadVariant: threadData.threadVariant,
                         targetPrefixes: targetPrefixes,
@@ -742,7 +791,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     public func updateDraft(to draft: String) {
         let threadId: String = self.threadId
-        let currentDraft: String = Storage.shared
+        let currentDraft: String = dependencies[singleton: .storage]
             .read { db in
                 try SessionThread
                     .select(.messageDraft)
@@ -755,7 +804,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         // Only write the updated draft to the database if it's changed (avoid unnecessary writes)
         guard draft != currentDraft else { return }
         
-        Storage.shared.writeAsync { db in
+        dependencies[singleton: .storage].writeAsync { db in
             try SessionThread
                 .filter(id: threadId)
                 .updateAll(db, SessionThread.Columns.messageDraft.set(to: draft))
@@ -787,18 +836,18 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             markAsReadPublisher = markAsReadTrigger
                 .throttle(for: .milliseconds(100), scheduler: DispatchQueue.global(qos: .userInitiated), latest: true)
                 .handleEvents(
-                    receiveOutput: { [weak self] target, timestampMs in
+                    receiveOutput: { [weak self, dependencies] target, timestampMs in
                         let threadData: SessionThreadViewModel? = self?._threadData.wrappedValue
                         
                         switch target {
-                            case .thread: threadData?.markAsRead(target: target)
+                            case .thread: threadData?.markAsRead(target: target, using: dependencies)
                             case .threadAndInteractions(let interactionId):
                                 guard
                                     timestampMs == nil ||
                                     (self?.lastInteractionTimestampMsMarkedAsRead ?? 0) < (timestampMs ?? 0) ||
                                     (self?.lastInteractionIdMarkedAsRead ?? 0) < (interactionId ?? 0)
                                 else {
-                                    threadData?.markAsRead(target: .thread)
+                                    threadData?.markAsRead(target: .thread, using: dependencies)
                                     return
                                 }
                                 
@@ -809,7 +858,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                                 }
                                 
                                 self?.lastInteractionIdMarkedAsRead = (interactionId ?? threadData?.interactionId)
-                                threadData?.markAsRead(target: target)
+                                threadData?.markAsRead(target: target, using: dependencies)
                         }
                     }
                 )
@@ -827,9 +876,10 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         self.observableThreadData = self.setupObservableThreadData(for: updatedThreadId)
         self.pagedDataObserver = self.setupPagedObserver(
             for: updatedThreadId,
-            userPublicKey: getUserHexEncodedPublicKey(),
-            blinded15PublicKey: nil,
-            blinded25PublicKey: nil
+            userSessionId: dependencies[cache: .general].sessionId,
+            blinded15SessionId: nil,
+            blinded25SessionId: nil,
+            using: dependencies
         )
         
         // Try load everything up to the initial visible message, fallback to just the initial page of messages
@@ -843,9 +893,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     public func trustContact() {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
-        let threadId: String = self.threadId
-        
-        Storage.shared.writeAsync { db in
+        dependencies[singleton: .storage].writeAsync { [threadId, dependencies] db in
             try Contact
                 .filter(id: threadId)
                 .updateAll(db, Contact.Columns.isTrusted.set(to: true))
@@ -856,7 +904,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 .stateInfo(authorId: threadId, state: .pendingDownload)
                 .fetchAll(db)
                 .forEach { attachmentDownloadInfo in
-                    JobRunner.add(
+                    dependencies[singleton: .jobRunner].add(
                         db,
                         job: Job(
                             variant: .attachmentDownload,
@@ -865,7 +913,8 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                             details: AttachmentDownloadJob.Details(
                                 attachmentId: attachmentDownloadInfo.attachmentId
                             )
-                        )
+                        ),
+                        canStartJob: true
                     )
                 }
         }
@@ -874,12 +923,15 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     public func unblockContact() {
         guard self._threadData.wrappedValue.threadVariant == .contact else { return }
         
-        let threadId: String = self.threadId
-        
-        Storage.shared.writeAsync { db in
+        dependencies[singleton: .storage].writeAsync { [threadId, dependencies] db in
             try Contact
                 .filter(id: threadId)
-                .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false))
+                .updateAllAndConfig(
+                    db,
+                    Contact.Columns.isBlocked.set(to: false),
+                    calledFromConfig: nil,
+                    using: dependencies
+                )
         }
     }
     
@@ -889,6 +941,341 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
     
     public func collapseReactions(for interactionId: Int64) {
         reactionExpandedInteractionIds.remove(interactionId)
+    }
+    
+    public func deletionActions(
+        for cellViewModel: MessageViewModel,
+        threadName: String
+    ) -> DeletionBehaviours {
+        struct InteractionInfo: FetchableRecord, Decodable {
+            let serverHash: String?
+            let openGroupServerMessageId: Int64?
+        }
+        struct OpenGroupInfo: FetchableRecord, Decodable {
+            let server: String
+            let roomToken: String
+        }
+        struct GroupAuthData: Codable, FetchableRecord {
+            let groupIdentityPrivateKey: Data?
+            let authData: Data?
+        }
+        
+        return dependencies[singleton: .storage].read { [dependencies] db -> DeletionBehaviours in
+            let userSessionId: SessionId = dependencies[cache: .general].sessionId
+            let interactionInfo: InteractionInfo = try Interaction
+                .filter(id: cellViewModel.id)
+                .select(.serverHash, .openGroupServerMessageId)
+                .asRequest(of: InteractionInfo.self)
+                .fetchOne(db) ?? { throw MessageSenderError.invalidMessage }()
+            let groupAuthData: GroupAuthData? = try? ClosedGroup
+                .filter(id: cellViewModel.threadId)
+                .select(.authData, .groupIdentityPrivateKey)
+                .asRequest(of: GroupAuthData.self)
+                .fetchOne(db)
+            let groupAuthInfo: Authentication.Info? = {
+                switch (groupAuthData?.groupIdentityPrivateKey, groupAuthData?.authData) {
+                    case (.none, .none): return nil
+                    case (.some(let groupIdentityPrivateKey), _):
+                        return .groupAdmin(
+                            groupSessionId: SessionId(.group, hex: cellViewModel.threadId),
+                            ed25519SecretKey: Array(groupIdentityPrivateKey)
+                        )
+                        
+                    case (_, .some(let authData)):
+                        return .groupMember(
+                            groupSessionId: SessionId(.group, hex: cellViewModel.threadId),
+                            authData: authData
+                        )
+                }
+            }()
+            let dataToSwitchOn = (
+                cellViewModel.threadVariant,
+                cellViewModel.variant,
+                interactionInfo.serverHash,
+                interactionInfo.openGroupServerMessageId,
+                groupAuthInfo
+            )
+            
+            /// The methods we use to delete a message depends on the type of conversation it belongs to
+            switch dataToSwitchOn {
+                /// If a message has not been sent then only support a local deletion (or the user has missing/invalid auth data)
+                ///
+                /// **Note:** It's possible for the user to press the delete button before the send completes and then trigger the deletion
+                /// after the send has completed - there isn't really a good way to completely handle this so just rely on the user to avoid
+                /// deleting in this situation
+                case (_, _, .none, .none, _), (.community, _, .some, .none, _), (.group, _, .none, .some, _), (.contact, _, .none, .some, _), (.group, _, .some, _, .none), (.group, _, .some, _, .standard):
+                    return DeletionBehaviours.deleteForMe(id: cellViewModel.id)
+                    
+                /// Delete from the current device
+                /// Delete from all participant devices via an `UnsendRequest`
+                /// Delete from the current users swarm
+                case (.contact, _, .some(let serverHash), _, _):
+                    guard cellViewModel.threadId != userSessionId.hexString else {
+                        return DeletionBehaviours(
+                            actions: [
+                                DeletionBehaviours.Action(
+                                    title: "delete_message_for_me_and_my_devices".localized(),
+                                    behaviours: [
+                                        .preparedRequest(try MessageSender
+                                            .preparedSend(
+                                                db,
+                                                message: UnsendRequest(
+                                                    timestamp: UInt64(cellViewModel.timestampMs),
+                                                    author: (cellViewModel.variant == .standardOutgoing ?
+                                                        userSessionId.hexString :
+                                                                cellViewModel.authorId
+                                                    )
+                                                )
+                                                .with(
+                                                    expiresInSeconds: cellViewModel.expiresInSeconds,
+                                                    expiresStartedAtMs: cellViewModel.expiresStartedAtMs
+                                                ),
+                                                to: .contact(publicKey: cellViewModel.threadId),
+                                                namespace: .default,
+                                                interactionId: nil,
+                                                fileIds: [],
+                                                using: dependencies
+                                            )),
+                                        .preparedRequest(try SnodeAPI
+                                            .preparedDeleteMessages(
+                                                serverHashes: [serverHash],
+                                                requireSuccessfulDeletion: false,
+                                                authMethod: try Authentication.with(
+                                                    db,
+                                                    swarmPublicKey: userSessionId.hexString,
+                                                    using: dependencies
+                                                ),
+                                                using: dependencies
+                                            )
+                                            .map { _, _ in () }),
+                                        .deleteFromDatabase(cellViewModel.id)
+                                    ]
+                                )
+                            ]
+                        )
+                    }
+                    
+                    return DeletionBehaviours(
+                        actions: [
+                            DeletionBehaviours.deleteForMe(id: cellViewModel.id).actions[0],
+                            DeletionBehaviours.Action(
+                                title: String(format: "delete_message_for_me_and_recipient".localized(), threadName),
+                                accessibility: Accessibility(identifier: "Delete for everyone"),
+                                behaviours: [
+                                    .preparedRequest(try MessageSender
+                                        .preparedSend(
+                                            db,
+                                            message: UnsendRequest(
+                                                timestamp: UInt64(cellViewModel.timestampMs),
+                                                author: (cellViewModel.variant == .standardOutgoing ?
+                                                    userSessionId.hexString :
+                                                            cellViewModel.authorId
+                                                )
+                                            )
+                                            .with(
+                                                expiresInSeconds: cellViewModel.expiresInSeconds,
+                                                expiresStartedAtMs: cellViewModel.expiresStartedAtMs
+                                            ),
+                                            to: .contact(publicKey: cellViewModel.threadId),
+                                            namespace: .default,
+                                            interactionId: nil,
+                                            fileIds: [],
+                                            using: dependencies
+                                        )),
+                                    .preparedRequest(try SnodeAPI
+                                        .preparedDeleteMessages(
+                                            serverHashes: [serverHash],
+                                            requireSuccessfulDeletion: false,
+                                            authMethod: try Authentication.with(
+                                                db,
+                                                swarmPublicKey: userSessionId.hexString,
+                                                using: dependencies
+                                            ),
+                                            using: dependencies
+                                        )
+                                        .map { _, _ in () }),
+                                    .deleteFromDatabase(cellViewModel.id)
+                                ]
+                            )
+                        ]
+                    )
+                
+                /// **Message sent by current user**
+                /// Delete from all participant devices via an `UnsendRequest`
+                /// Delete from the current device
+                ///
+                /// **Note:** We **cannot** delete from the current users swarm in legacy groups
+                case (.legacyGroup, .standardOutgoing, _, _, _):
+                    return DeletionBehaviours(
+                        actions: [
+                            DeletionBehaviours.deleteForMe(id: cellViewModel.id).actions[0],
+                            DeletionBehaviours.Action(
+                                title: "delete_message_for_everyone".localized(),
+                                accessibility: Accessibility(identifier: "Delete for everyone"),
+                                behaviours: [
+                                    .preparedRequest(try MessageSender
+                                        .preparedSend(
+                                            db,
+                                            message: UnsendRequest(
+                                                timestamp: UInt64(cellViewModel.timestampMs),
+                                                author: (cellViewModel.variant == .standardOutgoing ?
+                                                    userSessionId.hexString :
+                                                    cellViewModel.authorId
+                                                )
+                                            )
+                                            .with(
+                                                expiresInSeconds: cellViewModel.expiresInSeconds,
+                                                expiresStartedAtMs: cellViewModel.expiresStartedAtMs
+                                            ),
+                                            to: .closedGroup(groupPublicKey: cellViewModel.threadId),
+                                            namespace: .legacyClosedGroup,
+                                            interactionId: nil,
+                                            fileIds: [],
+                                            using: dependencies
+                                        )),
+                                    .deleteFromDatabase(cellViewModel.id)
+                                ]
+                            )
+                        ]
+                    )
+                    
+                /// **Message not sent by current user**
+                /// Delete from the current device
+                case (.legacyGroup, _, _, _, _):
+                    return DeletionBehaviours.deleteForMe(id: cellViewModel.id)
+                
+                /// **Message sent by current user and a standard member**
+                /// Delete from all participant devices via an `GroupUpdateDeleteMemberContentMessage`
+                /// Delete from the current device
+                case (.group, .standardOutgoing, .some(let serverHash), _, .groupMember):
+                    return DeletionBehaviours(
+                        actions: [
+                            DeletionBehaviours.deleteForMe(id: cellViewModel.id).actions[0],
+                            DeletionBehaviours.Action(
+                                title: "delete_message_for_everyone".localized(),
+                                accessibility: Accessibility(identifier: "Delete for everyone"),
+                                behaviours: [
+                                    /// **Note:** No signature for member delete content
+                                    .preparedRequest(try MessageSender
+                                        .preparedSend(
+                                            db,
+                                            message: GroupUpdateDeleteMemberContentMessage(
+                                                memberSessionIds: [],
+                                                messageHashes: [serverHash],
+                                                sentTimestamp: dependencies[cache: .snodeAPI].currentOffsetTimestampMs(),
+                                                authMethod: nil,
+                                                using: dependencies
+                                            ),
+                                            to: .closedGroup(groupPublicKey: cellViewModel.threadId),
+                                            namespace: .groupMessages,
+                                            interactionId: nil,
+                                            fileIds: [],
+                                            using: dependencies
+                                        )),
+                                    .deleteFromDatabase(cellViewModel.id)
+                                ]
+                            )
+                        ]
+                    )
+                
+                /// **Message not sent by current user and a standard member**
+                /// Delete from the current device
+                case (.group, _, _, _, .groupMember):
+                    return DeletionBehaviours.deleteForMe(id: cellViewModel.id)
+                    
+                /// **Member is a group admin**
+                /// **If user is an admin** delete from all participant devices via an `GroupUpdateDeleteMemberContentMessage`
+                /// **If user is an admin** delete from the group swarm
+                /// Delete from the current device
+                case (.group, _, .some(let serverHash), _, .groupAdmin(let groupSessionId, let ed25519SecretKey)):
+                    return DeletionBehaviours(
+                        actions: [
+                            DeletionBehaviours.deleteForMe(id: cellViewModel.id).actions[0],
+                            DeletionBehaviours.Action(
+                                title: "delete_message_for_everyone".localized(),
+                                accessibility: Accessibility(identifier: "Delete for everyone"),
+                                behaviours: [
+                                    .preparedRequest(try MessageSender
+                                        .preparedSend(
+                                            db,
+                                            message: GroupUpdateDeleteMemberContentMessage(
+                                                memberSessionIds: [],
+                                                messageHashes: [serverHash],
+                                                sentTimestamp: dependencies[cache: .snodeAPI].currentOffsetTimestampMs(),
+                                                authMethod: Authentication.groupAdmin(
+                                                    groupSessionId: groupSessionId,
+                                                    ed25519SecretKey: ed25519SecretKey
+                                                ),
+                                                using: dependencies
+                                            ),
+                                            to: .closedGroup(groupPublicKey: cellViewModel.threadId),
+                                            namespace: .groupMessages,
+                                            interactionId: nil,
+                                            fileIds: [],
+                                            using: dependencies
+                                        )),
+                                    .preparedRequest(try SnodeAPI
+                                        .preparedDeleteMessages(
+                                            serverHashes: [serverHash],
+                                            requireSuccessfulDeletion: false,
+                                            authMethod: Authentication.groupAdmin(
+                                                groupSessionId: groupSessionId,
+                                                ed25519SecretKey: ed25519SecretKey
+                                            ),
+                                            using: dependencies
+                                        )
+                                        .map { _, _ in () }),
+                                    .deleteFromDatabase(cellViewModel.id)
+                                ]
+                            )
+                        ]
+                    )
+                    
+                /// **If message hasn't been sent yet** delete from the current device
+                ///     **Note:** We don't support local deletion after sending because it can't be synced easily between devices and the
+                ///     message would return if the user left and rejoined the community)
+                /// **If user is an admin OR message sent by current user** delete from the open group
+                case (.community, _, _, .some(let openGroupServerMessageId), _):
+                    guard
+                        let openGroupInfo: OpenGroupInfo = try? OpenGroup
+                            .filter(id: cellViewModel.threadId)
+                            .select(.roomToken, .server)
+                            .asRequest(of: OpenGroupInfo.self)
+                            .fetchOne(db),
+                        (
+                            cellViewModel.variant == .standardOutgoing ||
+                            dependencies[singleton: .openGroupManager].isUserModeratorOrAdmin(
+                                db,
+                                publicKey: userSessionId.hexString,
+                                for: openGroupInfo.roomToken,
+                                on: openGroupInfo.server
+                            )
+                        )
+                    else { return DeletionBehaviours(actions: []) }
+                    
+                    return DeletionBehaviours(
+                        actions: [
+                            DeletionBehaviours.Action(
+                                title: "delete_message_for_everyone".localized(),
+                                accessibility: Accessibility(identifier: "Delete for everyone"),
+                                behaviours: [
+                                    .preparedRequest(try OpenGroupAPI
+                                        .preparedMessageDelete(
+                                            db,
+                                            id: openGroupServerMessageId,
+                                            in: openGroupInfo.roomToken,
+                                            on: openGroupInfo.server,
+                                            using: dependencies
+                                        )
+                                        .map { _, _ in () }),
+                                    .deleteFromDatabase(cellViewModel.id)
+                                ]
+                            )
+                        ]
+                    )
+            }
+        }
+        .defaulting(to: DeletionBehaviours.deleteForMe(id: cellViewModel.id))
     }
     
     // MARK: - Audio Playback
@@ -938,7 +1325,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
             let attachment: Attachment = viewModel.attachments?.first,
             attachment.isAudio,
             attachment.isValid,
-            let originalFilePath: String = attachment.originalFilePath,
+            let originalFilePath: String = attachment.originalFilePath(using: dependencies),
             FileManager.default.fileExists(atPath: originalFilePath)
         else { return nil }
         
@@ -966,7 +1353,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         
         guard
             let attachment: Attachment = viewModel.attachments?.first,
-            let originalFilePath: String = attachment.originalFilePath,
+            let originalFilePath: String = attachment.originalFilePath(using: dependencies),
             FileManager.default.fileExists(atPath: originalFilePath)
         else { return }
         
@@ -1117,7 +1504,7 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
                 .firstIndex(where: { $0.id == interactionId }),
             currentIndex < (messageSection.elements.count - 1),
             messageSection.elements[currentIndex + 1].cellType == .voiceMessage,
-            Storage.shared[.shouldAutoPlayConsecutiveAudioMessages] == true
+            dependencies[singleton: .storage, key: .shouldAutoPlayConsecutiveAudioMessages]
         else { return }
         
         let nextItem: MessageViewModel = messageSection.elements[currentIndex + 1]
@@ -1137,5 +1524,90 @@ public class ConversationViewModel: OWSAudioPlayerDelegate {
         stopAudio()
         playbackInfo.mutate { $0[interactionId] = updatedPlaybackInfo }
         updatedPlaybackInfo?.updateCallback(updatedPlaybackInfo, AttachmentError.invalidData)
+    }
+}
+
+// MARK: - ConversationViewModel.DeletionBehaviours
+
+public extension ConversationViewModel {
+    struct DeletionBehaviours {
+        struct Action {
+            let title: String
+            let accessibility: Accessibility?
+            let behaviours: [Behaviour]
+            
+            init(title: String, accessibility: Accessibility? = nil, behaviours: [Behaviour]) {
+                self.title = title
+                self.accessibility = accessibility
+                self.behaviours = behaviours
+            }
+        }
+        
+        enum Behaviour {
+            case deleteFromDatabase(Int64)
+            case preparedRequest(Network.PreparedRequest<Void>)
+        }
+        
+        static let defaultTitle: String = "delete_message_for_me".localized()
+        
+        let actions: [Action]
+        
+        // MARK: - Functions
+        
+        static func deleteForMe(id: Int64) -> DeletionBehaviours {
+            DeletionBehaviours(
+                actions: [
+                    Action(
+                        title: "delete_message_for_me".localized(),
+                        accessibility: Accessibility(identifier: "Delete for me"),
+                        behaviours: [.deleteFromDatabase(id)]
+                    )
+                ]
+            )
+        }
+        
+        /// Indicates whether the specified action is solely a "deleteFromDatabase" action
+        public func isOnlyDeleteFromDatabase(at index: Int) -> Bool {
+            guard index >= 0, index < actions.count else { return false }
+            
+            switch (actions[index].behaviours.count, actions[index].behaviours.first) {
+                case (1, .deleteFromDatabase): return true
+                default: return false
+            }
+        }
+        
+        /// Collect the actions and construct a publisher which triggers each action before returning the result
+        public func publisherForAction(at index: Int, using dependencies: Dependencies) -> AnyPublisher<Void, Error> {
+            guard index >= 0, index < actions.count else {
+                return Fail(error: StorageError.objectNotFound).eraseToAnyPublisher()
+            }
+            
+            var result: AnyPublisher<Void, Error> = Just(())
+                .setFailureType(to: Error.self)
+                .eraseToAnyPublisher()
+            
+            actions[index].behaviours.forEach { behaviour in
+                switch behaviour {
+                    case .deleteFromDatabase(let id):
+                        result = result
+                            .flatMap { _ in
+                                dependencies[singleton: .storage].writePublisher { db in
+                                    _ = try Interaction
+                                        .filter(id: id)
+                                        .deleteAll(db)
+                                }
+                            }
+                            .eraseToAnyPublisher()
+                        
+                    case .preparedRequest(let preparedRequest):
+                        result = result
+                            .flatMap { _ in preparedRequest.send(using: dependencies) }
+                            .map { _, _ in () }
+                            .eraseToAnyPublisher()
+                }
+            }
+            
+            return result
+        }
     }
 }

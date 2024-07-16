@@ -14,12 +14,12 @@ enum _019_ScheduleAppUpdateCheckJob: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: GRDB.Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         _ = try Job(
             variant: .checkForAppUpdates,
             behaviour: .recurring
         ).migrationSafeInserted(db)
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

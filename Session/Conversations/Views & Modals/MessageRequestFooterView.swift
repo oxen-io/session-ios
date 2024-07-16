@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionMessagingKit
 
 class MessageRequestFooterView: UIView {
     private var onBlock: (() -> ())?
@@ -56,7 +57,7 @@ class MessageRequestFooterView: UIView {
     
     private lazy var blockButton: UIButton = {
         let result: UIButton = UIButton()
-        result.setCompressionResistanceHigh()
+        result.setCompressionResistance(to: .defaultHigh)
         result.accessibilityLabel = "Block message request"
         result.translatesAutoresizingMaskIntoConstraints = false
         result.clipsToBounds = true
@@ -160,10 +161,12 @@ class MessageRequestFooterView: UIView {
             threadVariant != .contact ||
             threadRequiresApproval
         )
-        self.descriptionLabel.text = (threadRequiresApproval ?
-            "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized() :
-            "MESSAGE_REQUESTS_INFO".localized()
-        )
+        switch (threadVariant, threadRequiresApproval) {
+            case (.contact, false): self.descriptionLabel.text = "MESSAGE_REQUESTS_INFO".localized()
+            case (.contact, true): self.descriptionLabel.text = "MESSAGE_REQUEST_PENDING_APPROVAL_INFO".localized()
+            case (.group, _): self.descriptionLabel.text = "GROUP_MESSAGE_REQUEST_INFO".localized()
+            default: break
+        }
         self.actionStackView.isHidden = threadRequiresApproval
         self.messageRequestDescriptionLabelBottomConstraint?.constant = (threadRequiresApproval ? -4 : -20)
     }

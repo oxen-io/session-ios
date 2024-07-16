@@ -41,6 +41,8 @@ extension PushNotificationAPI {
     }
 }
 
+// MARK: - Decodable
+
 extension PushNotificationAPI.NotificationMetadata {
     public init(from decoder: Decoder) throws {
         let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)

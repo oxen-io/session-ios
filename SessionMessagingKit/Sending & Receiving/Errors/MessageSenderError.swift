@@ -19,8 +19,9 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
     case noThread
     case noKeyPair
     case invalidClosedGroupUpdate
+    case invalidConfigMessageHandling
     
-    case other(Error)
+    case other(String, Error)
 
     internal var isRetryable: Bool {
         switch self {
@@ -48,7 +49,8 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
             case .noThread: return "Couldn't find a thread associated with the given group public key (MessageSenderError.noThread)."
             case .noKeyPair: return "Couldn't find a private key associated with the given group public key (MessageSenderError.noKeyPair)."
             case .invalidClosedGroupUpdate: return "Invalid group update (MessageSenderError.invalidClosedGroupUpdate)."
-            case .other(let error): return "\(error)"
+            case .invalidConfigMessageHandling: return "Invalid handling of a config message (MessageSenderError.invalidConfigMessageHandling)."
+            case .other(_, let error): return "\(error)"
         }
     }
     
@@ -67,9 +69,12 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
             case (.invalidClosedGroupUpdate, .invalidClosedGroupUpdate): return true
             case (.blindingFailed, .blindingFailed): return true
             
-            case (.other(let lhsError), .other(let rhsError)):
+            case (.other(let lhsDescription, let lhsError), .other(let rhsDescription, let rhsError)):
                 // Not ideal but the best we can do
-                return (lhsError.localizedDescription == rhsError.localizedDescription)
+                return (
+                    lhsDescription == rhsDescription &&
+                    lhsError.localizedDescription == rhsError.localizedDescription
+                )
                 
             default: return false
         }

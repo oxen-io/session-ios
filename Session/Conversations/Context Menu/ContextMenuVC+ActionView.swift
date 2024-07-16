@@ -10,6 +10,7 @@ extension ContextMenuVC {
         private static let iconSize: CGFloat = 16
         private static let iconImageViewSize: CGFloat = 24
         
+        private let dependencies: Dependencies
         private let action: Action
         private let dismiss: () -> Void
         private var didTouchDownInside: Bool = false
@@ -58,7 +59,8 @@ extension ContextMenuVC {
 
         // MARK: - Lifecycle
         
-        init(for action: Action, dismiss: @escaping () -> Void) {
+        init(for action: Action, using dependencies: Dependencies, dismiss: @escaping () -> Void) {
+            self.dependencies = dependencies
             self.action = action
             self.dismiss = dismiss
             
@@ -79,7 +81,7 @@ extension ContextMenuVC {
             themeBackgroundColor = .clear
             
             iconImageView.image = action.icon?
-                .resizedImage(to: CGSize(width: ActionView.iconSize, height: ActionView.iconSize))?
+                .resized(to: CGSize(width: ActionView.iconSize, height: ActionView.iconSize))?
                 .withRenderingMode(.alwaysTemplate)
             titleLabel.text = action.title
             setUpSubtitle()
@@ -119,11 +121,11 @@ extension ContextMenuVC {
             subtitleLabel.isHidden = false
             subtitleWidthConstraint.isActive = true
             // To prevent a negative timer
-            let timeToExpireInSeconds: TimeInterval =  max(0, (expiresStartedAtMs + expiresInSeconds * 1000 - Double(SnodeAPI.currentOffsetTimestampMs())) / 1000)
+            let timeToExpireInSeconds: TimeInterval =  max(0, (expiresStartedAtMs + expiresInSeconds * 1000 - dependencies[cache: .snodeAPI].currentOffsetTimestampMs()) / 1000)
             subtitleLabel.text = String(format: "DISAPPEARING_MESSAGES_AUTO_DELETES_COUNT_DOWN".localized(), timeToExpireInSeconds.formatted(format: .twoUnits))
             
-            timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 1, repeats: true, block: { [weak self] _ in
-                let timeToExpireInSeconds: TimeInterval =  (expiresStartedAtMs + expiresInSeconds * 1000 - Double(SnodeAPI.currentOffsetTimestampMs())) / 1000
+            timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 1, repeats: true, using: dependencies, block: { [weak self, dependencies] _ in
+                let timeToExpireInSeconds: TimeInterval =  (expiresStartedAtMs + expiresInSeconds * 1000 - dependencies[cache: .snodeAPI].currentOffsetTimestampMs()) / 1000
                 if timeToExpireInSeconds <= 0 {
                     self?.dismissWithTimerInvalidationIfNeeded()
                 } else {

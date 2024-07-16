@@ -2,7 +2,7 @@
 
 import GRDB
 import SessionMessagingKit
-
+import SessionUtilitiesKit
 
 public class NewConversationViewModel {
     struct SectionData {
@@ -10,10 +10,12 @@ public class NewConversationViewModel {
         var contacts: [Profile]
     }
 
+    public let dependencies: Dependencies
     let sectionData: [SectionData]
     
-    init() {
-        let contactProfiles: [Profile] = Profile.fetchAllContactProfiles(excludeCurrentUser: true)
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        let contactProfiles: [Profile] = Profile.fetchAllContactProfiles(excludeCurrentUser: true, using: dependencies)
         
         var groupedContacts: [String: SectionData] = [:]
         contactProfiles.forEach { profile in

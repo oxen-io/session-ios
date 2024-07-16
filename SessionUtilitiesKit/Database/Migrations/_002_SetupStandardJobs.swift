@@ -14,7 +14,7 @@ enum _002_SetupStandardJobs: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         try autoreleasepool {
             // Note: This job exists in the 'Session' target but that doesn't have it's own migrations
             _ = try Job(
@@ -32,6 +32,6 @@ enum _002_SetupStandardJobs: Migration {
             ).migrationSafeInserted(db)
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

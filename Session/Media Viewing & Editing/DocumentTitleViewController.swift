@@ -6,7 +6,7 @@ import GRDB
 import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
-import SignalCoreKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 public class DocumentTileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
@@ -19,6 +19,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     static let footerBarHeight: CGFloat = 40
     static let loadMoreHeaderHeight: CGFloat = 100
     
+    private let dependencies: Dependencies
     private let viewModel: MediaGalleryViewModel
     private var hasLoadedInitialData: Bool = false
     private var didFinishInitialLayout: Bool = false
@@ -29,15 +30,16 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     
     // MARK: - Initialization
 
-    init(viewModel: MediaGalleryViewModel) {
+    init(viewModel: MediaGalleryViewModel, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.viewModel = viewModel
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
 
         super.init(nibName: nil, bundle: nil)
     }
 
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
     
     deinit {
@@ -79,7 +81,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
 
         // Add a custom back button if this is the only view controller
         if self.navigationController?.viewControllers.first == self {
-            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: dependencies)
             self.navigationItem.leftBarButtonItem = backButton
         }
         
@@ -90,7 +92,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         )
 
         view.addSubview(self.tableView)
-        tableView.autoPin(toEdgesOf: view)
+        tableView.pin(to: view)
         
         // Notifications
         NotificationCenter.default.addObserver(
@@ -145,7 +147,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         // If we have a focused item then we want to scroll to it
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return }
         
-        Logger.debug("scrolling to focused item at indexPath: \(focusedIndexPath)")
+        Log.debug("[DocumentTitleViewController] Scrolling to focused item at indexPath: \(focusedIndexPath)")
         self.view.layoutIfNeeded()
         self.tableView.scrollToRow(at: focusedIndexPath, at: .middle, animated: false)
         
@@ -334,7 +336,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: false)
         let attachment: Attachment = self.viewModel.galleryData[indexPath.section].elements[indexPath.row].attachment
-        guard let originalFilePath: String = attachment.originalFilePath else { return }
+        guard let originalFilePath: String = attachment.originalFilePath(using: dependencies) else { return }
         
         let fileUrl: URL = URL(fileURLWithPath: originalFilePath)
         
@@ -342,7 +344,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         if
             attachment.isText ||
             attachment.isMicrosoftDoc ||
-            attachment.contentType == OWSMimeTypeApplicationPdf
+            attachment.contentType == MimeTypeUtil.MimeType.applicationPdf
         {
             
             delegate?.preview(fileUrl: fileUrl)
@@ -569,7 +571,7 @@ class DocumentSectionHeaderView: UIView {
 
     @available(*, unavailable, message: "Unimplemented")
     required init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public func configure(title: String) {
@@ -589,12 +591,15 @@ class DocumentStaticHeaderView: UIView {
         label.themeTextColor = .textPrimary
         label.textAlignment = .center
         label.numberOfLines = 0
-        label.autoPinEdgesToSuperviewMargins(with: UIEdgeInsets(top: 0, leading: Values.largeSpacing, bottom: 0, trailing: Values.largeSpacing))
+        label.pin(.top, toMargin: .top, of: self)
+        label.pin(.leading, toMargin: .leading, of: self, withInset: Values.largeSpacing)
+        label.pin(.trailing, toMargin: .trailing, of: self, withInset: -Values.largeSpacing)
+        label.pin(.bottom, toMargin: .bottom, of: self)
     }
 
     @available(*, unavailable, message: "Unimplemented")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     public func configure(title: String) {

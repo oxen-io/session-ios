@@ -1,5 +1,5 @@
 // This build configuration requires the following to be installed:
-// Git, Xcode, XCode Command-line Tools, Cocoapods, xcbeautify, xcresultparser, pip
+// Git, Xcode, XCode Command-line Tools, xcbeautify, xcresultparser, pip
 
 // Log a bunch of version information to make it easier for debugging
 local version_info = {
@@ -7,7 +7,6 @@ local version_info = {
   environment: { LANG: 'en_US.UTF-8' },
   commands: [
     'git --version',
-    'pod --version',
     'xcodebuild -version',
     'xcbeautify --version',
     'xcresultparser --version',
@@ -23,75 +22,6 @@ local clone_submodules = {
 
 // cmake options for static deps mirror
 local ci_dep_mirror(want_mirror) = (if want_mirror then ' -DLOCAL_MIRROR=https://oxen.rocks/deps ' else '');
-
-// Cocoapods
-//
-// Unfortunately Cocoapods has a dumb restriction which requires you to use UTF-8 for the
-// 'LANG' env var so we need to work around the with https://github.com/CocoaPods/CocoaPods/issues/6333
-local install_cocoapods = {
-  name: 'Install CocoaPods',
-  environment: { LANG: 'en_US.UTF-8' },
-  commands: [
-    'pod install || (rm -rf ./Pods && pod install)',
-  ],
-  depends_on: [
-    'Load CocoaPods Cache',
-  ],
-};
-
-// Load from the cached CocoaPods directory (to speed up the build)
-local load_cocoapods_cache = {
-  name: 'Load CocoaPods Cache',
-  commands: [
-    |||
-      LOOP_BREAK=0
-      while test -e /Users/$USER/.cocoapods_cache.lock; do
-          sleep 1
-          LOOP_BREAK=$((LOOP_BREAK + 1))
-
-          if [[ $LOOP_BREAK -ge 600 ]]; then
-            rm -f /Users/$USER/.cocoapods_cache.lock
-          fi
-      done
-    |||,
-    'touch /Users/$USER/.cocoapods_cache.lock',
-    |||
-      if [[ -d /Users/$USER/.cocoapods_cache ]]; then
-        cp -r /Users/$USER/.cocoapods_cache ./Pods
-      fi
-    |||,
-    'rm -f /Users/$USER/.cocoapods_cache.lock',
-  ],
-  depends_on: [
-    'Clone Submodules',
-  ],
-};
-
-// Override the cached CocoaPods directory (to speed up the next build)
-local update_cocoapods_cache(depends_on) = {
-  name: 'Update CocoaPods Cache',
-  commands: [
-    |||
-      LOOP_BREAK=0
-      while test -e /Users/$USER/.cocoapods_cache.lock; do
-          sleep 1
-          LOOP_BREAK=$((LOOP_BREAK + 1))
-
-          if [[ $LOOP_BREAK -ge 600 ]]; then
-            rm -f /Users/$USER/.cocoapods_cache.lock
-          fi
-      done
-    |||,
-    'touch /Users/$USER/.cocoapods_cache.lock',
-    |||
-      if [[ -d ./Pods ]]; then
-        rsync -a --delete ./Pods/ /Users/$USER/.cocoapods_cache
-      fi
-    |||,
-    'rm -f /Users/$USER/.cocoapods_cache.lock',
-  ],
-  depends_on: depends_on,
-};
 
 local boot_simulator(device_type) = {
   name: 'Boot Test Simulator',
@@ -128,19 +58,17 @@ local sim_delete_cmd = 'if [ -f build/artifacts/sim_uuid ]; then rm -f /Users/$U
     steps: [
       version_info,
       clone_submodules,
-      load_cocoapods_cache,
-      install_cocoapods,
 
       boot_simulator('com.apple.CoreSimulator.SimDeviceType.iPhone-15'),
       sim_keepalive,
       {
         name: 'Build and Run Tests',
         commands: [
-          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -parallelizeTargets -destination "platform=iOS Simulator,id=$(<./build/artifacts/sim_uuid)" -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
+          'NSUnbufferedIO=YES set -o pipefail && xcodebuild test -project Session.xcodeproj -scheme Session -derivedDataPath ./build/derivedData -resultBundlePath ./build/artifacts/testResults.xcresult -parallelizeTargets -destination "platform=iOS Simulator,id=$(<./build/artifacts/sim_uuid)" -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 10 -collect-test-diagnostics never 2>&1 | xcbeautify --is-ci',
         ],
         depends_on: [
-          'Boot Test Simulator',
-          'Install CocoaPods',
+          'Clone Submodules',
+          'Boot Test Simulator'
         ],
       },
       {
@@ -160,7 +88,6 @@ local sim_delete_cmd = 'if [ -f build/artifacts/sim_uuid ]; then rm -f /Users/$U
           status: ['failure', 'success'],
         },
       },
-      update_cocoapods_cache(['Build and Run Tests']),
       {
         name: 'Install Codecov CLI',
         commands: [
@@ -221,19 +148,16 @@ local sim_delete_cmd = 'if [ -f build/artifacts/sim_uuid ]; then rm -f /Users/$U
     steps: [
       version_info,
       clone_submodules,
-      load_cocoapods_cache,
-      install_cocoapods,
       {
         name: 'Build',
         commands: [
           'mkdir build',
-          'NSUnbufferedIO=YES set -o pipefail && xcodebuild archive -workspace Session.xcworkspace -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App_Store_Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS Simulator" | xcbeautify --is-ci',
+          'NSUnbufferedIO=YES set -o pipefail && xcodebuild archive -project Session.xcodeproj -scheme Session -derivedDataPath ./build/derivedData -parallelizeTargets -configuration "App_Store_Release" -sdk iphonesimulator -archivePath ./build/Session_sim.xcarchive -destination "generic/platform=iOS Simulator" | xcbeautify --is-ci',
         ],
         depends_on: [
-          'Install CocoaPods',
+          'Clone Submodules',
         ],
       },
-      update_cocoapods_cache(['Build']),
       {
         name: 'Upload artifacts',
         environment: { SSH_KEY: { from_secret: 'SSH_KEY' } },

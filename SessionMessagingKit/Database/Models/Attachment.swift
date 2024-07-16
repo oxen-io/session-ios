@@ -5,7 +5,6 @@ import AVFAudio
 import AVFoundation
 import Combine
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 import SessionUIKit
@@ -165,11 +164,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         self.width = width
         self.height = height
         self.duration = duration
-        self.isVisualMedia = (isVisualMedia ?? (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        ))
+        self.isVisualMedia = (isVisualMedia ?? MimeTypeUtil.isVisualMedia(contentType))
         self.isValid = isValid
         self.encryptionKey = encryptionKey
         self.digest = digest
@@ -181,23 +176,26 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         id: String = UUID().uuidString,
         variant: Variant = .standard,
         contentType: String,
-        dataSource: DataSource,
+        dataSource: any DataSource,
         sourceFilename: String? = nil,
-        caption: String? = nil
+        caption: String? = nil,
+        using dependencies: Dependencies
     ) {
-        guard let originalFilePath: String = Attachment.originalFilePath(id: id, mimeType: contentType, sourceFilename: sourceFilename) else {
+        guard let originalFilePath: String = Attachment.originalFilePath(id: id, mimeType: contentType, sourceFilename: sourceFilename, using: dependencies) else {
             return nil
         }
-        guard dataSource.write(toPath: originalFilePath) else { return nil }
+        guard case .success = Result(try dataSource.write(to: originalFilePath)) else { return nil }
         
         let imageSize: CGSize? = Attachment.imageSize(
             contentType: contentType,
-            originalFilePath: originalFilePath
+            originalFilePath: originalFilePath,
+            using: dependencies
         )
         let (isValid, duration): (Bool, TimeInterval?) = Attachment.determineValidityAndDuration(
             contentType: contentType,
             localRelativeFilePath: nil,
-            originalFilePath: originalFilePath
+            originalFilePath: originalFilePath,
+            using: dependencies
         )
         
         self.id = id
@@ -205,19 +203,15 @@ public struct Attachment: Codable, Identifiable, Equatable, Hashable, FetchableR
         self.variant = variant
         self.state = .uploading
         self.contentType = contentType
-        self.byteCount = dataSource.dataLength()
+        self.byteCount = UInt(dataSource.dataLength)
         self.creationTimestamp = nil
         self.sourceFilename = sourceFilename
         self.downloadUrl = nil
-        self.localRelativeFilePath = Attachment.localRelativeFilePath(from: originalFilePath)
+        self.localRelativeFilePath = Attachment.localRelativeFilePath(from: originalFilePath, using: dependencies)
         self.width = imageSize.map { UInt(floor($0.width)) }
         self.height = imageSize.map { UInt(floor($0.height)) }
         self.duration = duration
-        self.isVisualMedia = (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        )
+        self.isVisualMedia = MimeTypeUtil.isVisualMedia(contentType)
         self.isValid = isValid
         self.encryptionKey = nil
         self.digest = nil
@@ -266,9 +260,9 @@ extension Attachment: CustomStringConvertible {
     public static func description(for descriptionInfo: DescriptionInfo, count: Int) -> String {
         // We only support multi-attachment sending of images so we can just default to the image attachment
         // if there were multiple attachments
-        guard count == 1 else { return "\(emoji(for: OWSMimeTypeImageJpeg)) \("ATTACHMENT".localized())" }
-        
-        if MIMETypeUtil.isAudio(descriptionInfo.contentType) {
+        guard count == 1 else { return "\(emoji(for: MimeTypeUtil.MimeType.imageJpeg)) \("ATTACHMENT".localized())" }
+
+        if MimeTypeUtil.isAudio(descriptionInfo.contentType) {
             // a missing filename is the legacy way to determine if an audio attachment is
             // a voice note vs. other arbitrary audio attachments.
             if
@@ -284,16 +278,16 @@ extension Attachment: CustomStringConvertible {
     }
     
     public static func emoji(for contentType: String) -> String {
-        if MIMETypeUtil.isImage(contentType) {
+        if MimeTypeUtil.isImage(contentType) {
             return "📷"     // stringlint:disable
         }
-        else if MIMETypeUtil.isVideo(contentType) {
+        else if MimeTypeUtil.isVideo(contentType) {
             return "🎥"     // stringlint:disable
         }
-        else if MIMETypeUtil.isAudio(contentType) {
+        else if MimeTypeUtil.isAudio(contentType) {
             return "🎧"     // stringlint:disable
         }
-        else if MIMETypeUtil.isAnimated(contentType) {
+        else if MimeTypeUtil.isAnimated(contentType) {
             return "🎡"     // stringlint:disable
         }
         
@@ -323,7 +317,8 @@ extension Attachment {
         downloadUrl: String? = nil,
         localRelativeFilePath: String? = nil,
         encryptionKey: Data? = nil,
-        digest: Data? = nil
+        digest: Data? = nil,
+        using dependencies: Dependencies
     ) -> Attachment {
         let (isValid, duration): (Bool, TimeInterval?) = {
             switch (self.state, state) {
@@ -331,7 +326,8 @@ extension Attachment {
                     return Attachment.determineValidityAndDuration(
                         contentType: contentType,
                         localRelativeFilePath: localRelativeFilePath,
-                        originalFilePath: originalFilePath
+                        originalFilePath: originalFilePath(using: dependencies),
+                        using: dependencies
                     )
                 
                 // Assume the data is already correct for "uploading" attachments (and don't override it)
@@ -343,20 +339,16 @@ extension Attachment {
         }()
         // Regenerate this just in case we added support since the attachment was inserted into
         // the database (eg. manually downloaded in a later update)
-        let isVisualMedia: Bool = (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        )
+        let isVisualMedia: Bool = MimeTypeUtil.isVisualMedia(contentType)
         let attachmentResolution: CGSize? = {
             if let width: UInt = self.width, let height: UInt = self.height, width > 0, height > 0 {
                 return CGSize(width: Int(width), height: Int(height))
             }
             guard isVisualMedia else { return nil }
             guard state == .downloaded else { return nil }
-            guard let originalFilePath: String = originalFilePath else { return nil }
+            guard let originalFilePath: String = originalFilePath(using: dependencies) else { return nil }
             
-            return Attachment.imageSize(contentType: contentType, originalFilePath: originalFilePath)
+            return Attachment.imageSize(contentType: contentType, originalFilePath: originalFilePath, using: dependencies)
         }()
         
         return Attachment(
@@ -376,9 +368,7 @@ extension Attachment {
             isVisualMedia: (
                 // Regenerate this just in case we added support since the attachment was inserted into
                 // the database (eg. manually downloaded in a later update)
-                MIMETypeUtil.isImage(contentType) ||
-                MIMETypeUtil.isVideo(contentType) ||
-                MIMETypeUtil.isAnimated(contentType)
+                MimeTypeUtil.isVisualMedia(contentType)
             ),
             isValid: isValid,
             encryptionKey: (encryptionKey ?? self.encryptionKey),
@@ -396,9 +386,9 @@ extension Attachment {
             guard
                 let fileName: String = filename,
                 let fileExtension: String = URL(string: fileName)?.pathExtension
-            else { return OWSMimeTypeApplicationOctetStream }
-            
-            return (MIMETypeUtil.mimeType(forFileExtension: fileExtension) ?? OWSMimeTypeApplicationOctetStream)
+            else { return MimeTypeUtil.MimeType.applicationOctetStream }
+
+            return (MimeTypeUtil.mimeType(for: fileExtension) ?? MimeTypeUtil.MimeType.applicationOctetStream)
         }
         
         self.id = UUID().uuidString
@@ -424,11 +414,7 @@ extension Attachment {
         self.width = (proto.hasWidth && proto.width > 0 ? UInt(proto.width) : nil)
         self.height = (proto.hasHeight && proto.height > 0 ? UInt(proto.height) : nil)
         self.duration = nil         // Needs to be downloaded to be set
-        self.isVisualMedia = (
-            MIMETypeUtil.isImage(contentType) ||
-            MIMETypeUtil.isVideo(contentType) ||
-            MIMETypeUtil.isAnimated(contentType)
-        )
+        self.isVisualMedia = MimeTypeUtil.isVisualMedia(contentType)
         self.isValid = false        // Needs to be downloaded to be set
         self.encryptionKey = proto.key
         self.digest = proto.digest
@@ -603,77 +589,80 @@ extension Attachment {
     }()
     
     private static var sharedDataAttachmentsDirPath: String = {
-        URL(fileURLWithPath: OWSFileSystem.appSharedDataDirectoryPath())
+        URL(fileURLWithPath: FileManager.default.appSharedDataDirectoryPath)
             .appendingPathComponent("Attachments")
             .path
     }()
     
-    internal static var attachmentsFolder: String = {
+    internal static func attachmentsFolder(using dependencies: Dependencies) -> String {
         let attachmentsFolder: String = sharedDataAttachmentsDirPath
-        OWSFileSystem.ensureDirectoryExists(attachmentsFolder)
+        try? FileSystem.ensureDirectoryExists(at: attachmentsFolder, using: dependencies)
         
         return attachmentsFolder
-    }()
+    }
     
     public static func resetAttachmentStorage() {
         try? FileManager.default.removeItem(atPath: Attachment.sharedDataAttachmentsDirPath)
     }
     
-    public static func originalFilePath(id: String, mimeType: String, sourceFilename: String?) -> String? {
-        return MIMETypeUtil.filePath(
-            forAttachment: id,
-            ofMIMEType: mimeType,
+    public static func originalFilePath(id: String, mimeType: String, sourceFilename: String?, using dependencies: Dependencies) -> String? {
+        return MimeTypeUtil.filePath(
+            for: id,
+            ofMimeType: mimeType,
             sourceFilename: sourceFilename,
-            inFolder: Attachment.attachmentsFolder
+            in: Attachment.attachmentsFolder(using: dependencies),
+            using: dependencies
         )
     }
     
-    public static func localRelativeFilePath(from originalFilePath: String?) -> String? {
+    public static func localRelativeFilePath(from originalFilePath: String?, using dependencies: Dependencies) -> String? {
         guard let originalFilePath: String = originalFilePath else { return nil }
         
         return originalFilePath
-            .substring(from: (Attachment.attachmentsFolder.count + 1))  // Leading forward slash
+            .substring(from: (Attachment.attachmentsFolder(using: dependencies).count + 1))  // Leading forward slash
     }
     
-    internal static func imageSize(contentType: String, originalFilePath: String) -> CGSize? {
-        let isVideo: Bool = MIMETypeUtil.isVideo(contentType)
-        let isImage: Bool = MIMETypeUtil.isImage(contentType)
-        let isAnimated: Bool = MIMETypeUtil.isAnimated(contentType)
+    internal static func imageSize(contentType: String, originalFilePath: String, using dependencies: Dependencies) -> CGSize? {
+        let isVideo: Bool = MimeTypeUtil.isVideo(contentType)
+        let isImage: Bool = MimeTypeUtil.isImage(contentType)
+        let isAnimated: Bool = MimeTypeUtil.isAnimated(contentType)
         
         guard isVideo || isImage || isAnimated else { return nil }
         
         if isVideo {
-            guard OWSMediaUtils.isValidVideo(path: originalFilePath) else { return nil }
+            guard MediaUtils.isValidVideo(path: originalFilePath, using: dependencies) else { return nil }
             
-            return Attachment.videoStillImage(filePath: originalFilePath)?.size
+            return Attachment.videoStillImage(filePath: originalFilePath, using: dependencies)?.size
         }
         
-        return NSData.imageSize(forFilePath: originalFilePath, mimeType: contentType)
+        return Data.imageSize(for: originalFilePath, mimeType: contentType, using: dependencies)
     }
     
-    public static func videoStillImage(filePath: String) -> UIImage? {
-        return try? OWSMediaUtils.thumbnail(
+    public static func videoStillImage(filePath: String, using dependencies: Dependencies) -> UIImage? {
+        return try? MediaUtils.thumbnail(
             forVideoAtPath: filePath,
-            maxDimension: CGFloat(Attachment.thumbnailDimensionLarge)
+            maxDimension: CGFloat(Attachment.thumbnailDimensionLarge),
+            using: dependencies
         )
     }
     
     internal static func determineValidityAndDuration(
         contentType: String,
         localRelativeFilePath: String?,
-        originalFilePath: String?
+        originalFilePath: String?,
+        using dependencies: Dependencies
     ) -> (isValid: Bool, duration: TimeInterval?) {
         guard let originalFilePath: String = originalFilePath else { return (false, nil) }
         
         let constructedFilePath: String? = localRelativeFilePath.map {
-            URL(fileURLWithPath: Attachment.attachmentsFolder)
+            URL(fileURLWithPath: Attachment.attachmentsFolder(using: dependencies))
                 .appendingPathComponent($0)
                 .path
         }
         let targetPath: String = (constructedFilePath ?? originalFilePath)
         
         // Process audio attachments
-        if MIMETypeUtil.isAudio(contentType) {
+        if MimeTypeUtil.isAudio(contentType) {
             do {
                 let audioPlayer: AVAudioPlayer = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: targetPath))
                 
@@ -691,15 +680,15 @@ extension Attachment {
         }
         
         // Process image attachments
-        if MIMETypeUtil.isImage(contentType) || MIMETypeUtil.isAnimated(contentType) {
+        if MimeTypeUtil.isImage(contentType) || MimeTypeUtil.isAnimated(contentType) {
             return (
-                NSData.ows_isValidImage(atPath: targetPath, mimeType: contentType),
+                Data.isValidImage(at: targetPath, mimeType: contentType, using: dependencies),
                 nil
             )
         }
         
         // Process video attachments
-        if MIMETypeUtil.isVideo(contentType) {
+        if MimeTypeUtil.isVideo(contentType) {
             let asset: AVURLAsset = AVURLAsset(url: URL(fileURLWithPath: targetPath), options: nil)
             let durationSeconds: TimeInterval = (
                 // According to the CMTime docs "value/timescale = seconds"
@@ -707,7 +696,7 @@ extension Attachment {
             )
             
             return (
-                OWSMediaUtils.isValidVideo(path: targetPath),
+                MediaUtils.isValidVideo(path: targetPath, using: dependencies),
                 durationSeconds
             )
         }
@@ -736,9 +725,9 @@ extension Attachment {
         }
     }
     
-    public var originalFilePath: String? {
+    public func originalFilePath(using dependencies: Dependencies) -> String? {
         if let localRelativeFilePath: String = self.localRelativeFilePath {
-            return URL(fileURLWithPath: Attachment.attachmentsFolder)
+            return URL(fileURLWithPath: Attachment.attachmentsFolder(using: dependencies))
                 .appendingPathComponent(localRelativeFilePath)
                 .path
         }
@@ -746,19 +735,20 @@ extension Attachment {
         return Attachment.originalFilePath(
             id: self.id,
             mimeType: self.contentType,
-            sourceFilename: self.sourceFilename
+            sourceFilename: self.sourceFilename,
+            using: dependencies
         )
     }
     
     var thumbnailsDirPath: String {
         // Thumbnails are written to the caches directory, so that iOS can
         // remove them if necessary
-        return "\(OWSFileSystem.cachesDirectoryPath())/\(id)-thumbnails"
+        return "\(FileSystem.cachesDirectoryPath)/\(id)-thumbnails"
     }
     
-    var legacyThumbnailPath: String? {
+    func legacyThumbnailPath(using dependencies: Dependencies) -> String? {
         guard
-            let originalFilePath: String = originalFilePath,
+            let originalFilePath: String = originalFilePath(using: dependencies),
             (isImage || isVideo || isAnimated)
         else { return nil }
         
@@ -769,11 +759,11 @@ extension Attachment {
         return "\(containingDir)/\(filename)-signal-ios-thumbnail.jpg"
     }
     
-    var originalImage: UIImage? {
-        guard let originalFilePath: String = originalFilePath else { return nil }
+    func originalImage(using dependencies: Dependencies) -> UIImage? {
+        guard let originalFilePath: String = originalFilePath(using: dependencies) else { return nil }
         
         if isVideo {
-            return Attachment.videoStillImage(filePath: originalFilePath)
+            return Attachment.videoStillImage(filePath: originalFilePath, using: dependencies)
         }
         
         guard isImage || isAnimated else { return nil }
@@ -782,12 +772,12 @@ extension Attachment {
         return UIImage(contentsOfFile: originalFilePath)
     }
     
-    public var isImage: Bool { MIMETypeUtil.isImage(contentType) }
-    public var isVideo: Bool { MIMETypeUtil.isVideo(contentType) }
-    public var isAnimated: Bool { MIMETypeUtil.isAnimated(contentType) }
-    public var isAudio: Bool { MIMETypeUtil.isAudio(contentType) }
-    public var isText: Bool { MIMETypeUtil.isText(contentType) }
-    public var isMicrosoftDoc: Bool { MIMETypeUtil.isMicrosoftDoc(contentType) }
+    public var isImage: Bool { MimeTypeUtil.isImage(contentType) }
+    public var isVideo: Bool { MimeTypeUtil.isVideo(contentType) }
+    public var isAnimated: Bool { MimeTypeUtil.isAnimated(contentType) }
+    public var isAudio: Bool { MimeTypeUtil.isAudio(contentType) }
+    public var isText: Bool { MimeTypeUtil.isText(contentType) }
+    public var isMicrosoftDoc: Bool { MimeTypeUtil.isMicrosoftDoc(contentType) }
     
     public var documentFileName: String {
         if let sourceFilename: String = sourceFilename { return sourceFilename }
@@ -813,8 +803,8 @@ extension Attachment {
         }
     }
     
-    public func readDataFromFile() throws -> Data? {
-        guard let filePath: String = self.originalFilePath else {
+    public func readDataFromFile(using dependencies: Dependencies) throws -> Data? {
+        guard let filePath: String = self.originalFilePath(using: dependencies) else {
             return nil
         }
         
@@ -825,7 +815,7 @@ extension Attachment {
         return "\(thumbnailsDirPath)/thumbnail-\(dimensions).jpg"
     }
     
-    private func loadThumbnail(with dimensions: UInt, success: @escaping (UIImage, () throws -> Data) -> (), failure: @escaping () -> ()) {
+    private func loadThumbnail(with dimensions: UInt, using dependencies: Dependencies, success: @escaping (UIImage, () throws -> Data) -> (), failure: @escaping () -> ()) {
         guard let width: UInt = self.width, let height: UInt = self.height, width > 1, height > 1 else {
             failure()
             return
@@ -834,7 +824,7 @@ extension Attachment {
         // There's no point in generating a thumbnail if the original is smaller than the
         // thumbnail size
         if width < dimensions || height < dimensions {
-            guard let image: UIImage = originalImage else {
+            guard let image: UIImage = originalImage(using: dependencies) else {
                 failure()
                 return
             }
@@ -842,7 +832,9 @@ extension Attachment {
             success(
                 image,
                 {
-                    guard let originalFilePath: String = originalFilePath else { throw AttachmentError.invalidData }
+                    guard let originalFilePath: String = originalFilePath(using: dependencies) else {
+                        throw AttachmentError.invalidData
+                    }
                     
                     return try Data(contentsOf: URL(fileURLWithPath: originalFilePath))
                 }
@@ -865,7 +857,7 @@ extension Attachment {
             return
         }
         
-        ThumbnailService.shared.ensureThumbnail(
+        dependencies[singleton: .thumbnailService].ensureThumbnail(
             for: self,
             dimensions: dimensions,
             success: { loadedThumbnail in success(loadedThumbnail.image, loadedThumbnail.dataSourceBlock) },
@@ -873,16 +865,17 @@ extension Attachment {
         )
     }
     
-    public func thumbnail(size: ThumbnailSize, success: @escaping (UIImage, () throws -> Data) -> (), failure: @escaping () -> ()) {
-        loadThumbnail(with: size.dimension, success: success, failure: failure)
+    public func thumbnail(size: ThumbnailSize, using dependencies: Dependencies, success: @escaping (UIImage, () throws -> Data) -> (), failure: @escaping () -> ()) {
+        loadThumbnail(with: size.dimension, using: dependencies, success: success, failure: failure)
     }
     
-    public func existingThumbnail(size: ThumbnailSize) -> UIImage? {
+    public func existingThumbnail(size: ThumbnailSize, using dependencies: Dependencies) -> UIImage? {
         var existingImage: UIImage?
         
         let semaphore: DispatchSemaphore = DispatchSemaphore(value: 0)
         loadThumbnail(
             with: size.dimension,
+            using: dependencies,
             success: { image, _ in
                 existingImage = image
                 semaphore.signal()
@@ -898,7 +891,7 @@ extension Attachment {
         return existingImage
     }
     
-    public func cloneAsQuoteThumbnail() -> Attachment? {
+    public func cloneAsQuoteThumbnail(using dependencies: Dependencies) -> Attachment? {
         let cloneId: String = UUID().uuidString
         let thumbnailName: String = "quoted-thumbnail-\(sourceFilename ?? "null")"
         
@@ -908,8 +901,9 @@ extension Attachment {
             self.isValid,
             let thumbnailPath: String = Attachment.originalFilePath(
                 id: cloneId,
-                mimeType: OWSMimeTypeImageJpeg,
-                sourceFilename: thumbnailName
+                mimeType: MimeTypeUtil.MimeType.imageJpeg,
+                sourceFilename: thumbnailName,
+                using: dependencies
             )
         else {
             // Non-media files cannot have thumbnails but may be sent as quotes, in these cases we want
@@ -934,6 +928,7 @@ extension Attachment {
         
         self.thumbnail(
             size: .small,
+            using: dependencies,
             success: { _, dataSourceBlock in
                 thumbnailData = try? dataSourceBlock()
                 semaphore.signal()
@@ -953,8 +948,9 @@ extension Attachment {
         // Need to retrieve the size of the thumbnail as it maintains it's aspect ratio
         let thumbnailSize: CGSize = Attachment
             .imageSize(
-                contentType: OWSMimeTypeImageJpeg,
-                originalFilePath: thumbnailPath
+                contentType: MimeTypeUtil.MimeType.imageJpeg,
+                originalFilePath: thumbnailPath,
+                using: dependencies
             )
             .defaulting(
                 to: CGSize(
@@ -968,18 +964,18 @@ extension Attachment {
             id: cloneId,
             variant: .standard,
             state: .downloaded,
-            contentType: OWSMimeTypeImageJpeg,
+            contentType: MimeTypeUtil.MimeType.imageJpeg,
             byteCount: UInt(thumbnailData.count),
             sourceFilename: thumbnailName,
-            localRelativeFilePath: Attachment.localRelativeFilePath(from: thumbnailPath),
+            localRelativeFilePath: Attachment.localRelativeFilePath(from: thumbnailPath, using: dependencies),
             width: UInt(thumbnailSize.width),
             height: UInt(thumbnailSize.height),
             isValid: true
         )
     }
     
-    public func write(data: Data) throws -> Bool {
-        guard let originalFilePath: String = originalFilePath else { return false }
+    public func write(data: Data, using dependencies: Dependencies) throws -> Bool {
+        guard let originalFilePath: String = originalFilePath(using: dependencies) else { return false }
 
         try data.write(to: URL(fileURLWithPath: originalFilePath))
 
@@ -1000,50 +996,45 @@ extension Attachment {
 // MARK: - Upload
 
 extension Attachment {
-    public enum Destination {
+    private enum Destination {
         case fileServer
-        case openGroup(OpenGroup)
+        case community(OpenGroup)
         
         var shouldEncrypt: Bool {
             switch self {
                 case .fileServer: return true
-                case .openGroup: return false
+                case .community: return false
             }
         }
     }
     
-    public struct PreparedData {
-        public let attachments: [Attachment]
-    }
-    
-    public static func prepare(attachments: [SignalAttachment]) -> PreparedData {
-        return PreparedData(
-            attachments: attachments.compactMap { signalAttachment in
-                Attachment(
-                    variant: (signalAttachment.isVoiceMessage ?
-                        .voiceMessage :
-                        .standard
-                    ),
-                    contentType: signalAttachment.mimeType,
-                    dataSource: signalAttachment.dataSource,
-                    sourceFilename: signalAttachment.sourceFilename,
-                    caption: signalAttachment.captionText
-                )
-            }
-        )
+    public static func prepare(attachments: [SignalAttachment], using dependencies: Dependencies) -> [Attachment] {
+        return attachments.compactMap { signalAttachment in
+            Attachment(
+                variant: (signalAttachment.isVoiceMessage ?
+                    .voiceMessage :
+                    .standard
+                ),
+                contentType: signalAttachment.mimeType,
+                dataSource: signalAttachment.dataSource,
+                sourceFilename: signalAttachment.sourceFilename,
+                caption: signalAttachment.captionText,
+                using: dependencies
+            )
+        }
     }
     
     public static func process(
         _ db: Database,
-        data: PreparedData?,
+        attachments: [Attachment]?,
         for interactionId: Int64?
     ) throws {
         guard
-            let data: PreparedData = data,
+            let attachments: [Attachment] = attachments,
             let interactionId: Int64 = interactionId
         else { return }
                 
-        try data.attachments
+        try attachments
             .enumerated()
             .forEach { index, attachment in
                 let interactionAttachment: InteractionAttachment = InteractionAttachment(
@@ -1057,161 +1048,211 @@ extension Attachment {
             }
     }
     
-    internal func upload(
-        to destination: Attachment.Destination,
+    public func preparedUpload(
+        _ db: Database,
+        threadId: String,
         using dependencies: Dependencies
-    ) -> AnyPublisher<String?, Error> {
-        // This can occur if an AttachmnetUploadJob was explicitly created for a message
-        // dependant on the attachment being uploaded (in this case the attachment has
-        // already been uploaded so just succeed)
-        guard state != .uploaded else {
-            return Just(self.downloadUrl)
-                .setFailureType(to: Error.self)
-                .eraseToAnyPublisher()
-        }
+    ) throws -> Network.PreparedRequest<String> {
+        typealias UploadInfo = (
+            attachment: Attachment,
+            preparedRequest: Network.PreparedRequest<FileUploadResponse>,
+            encryptionKey: Data?,
+            digest: Data?
+        )
         
-        // Get the attachment
-        guard var data = try? readDataFromFile() else {
-            SNLog("Couldn't read attachment from disk.")
-            return Fail(error: AttachmentError.noAttachment)
-                .eraseToAnyPublisher()
-        }
-        
-        let attachmentId: String = self.id
-        
-        return Just(())
-            .tryFlatMap { _ -> AnyPublisher<(Network.Destination?, String?, Data?, Data?), Error> in
-                // If the attachment is a downloaded attachment, check if it came from
-                // the server and if so just succeed immediately (no use re-uploading
-                // an attachment that is already present on the server) - or if we want
-                // it to be encrypted and it's not then encrypt it
-                //
-                // Note: The most common cases for this will be for LinkPreviews or Quotes
-                guard
-                    state != .downloaded ||
-                    serverId == nil ||
-                    downloadUrl == nil ||
-                    !destination.shouldEncrypt ||
-                    encryptionKey == nil ||
-                    digest == nil
-                else {
-                    // Save the final upload info
-                    return Storage.shared.writePublisher { db -> (Network.Destination?, String?, Data?, Data?) in
-                        _ = try? Attachment
-                            .filter(id: attachmentId)
-                            .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploaded))
-                        
-                        return (nil, self.downloadUrl, nil, nil)
-                    }
+        // Retrieve the correct destination for the given thread
+        let destination: Destination = (try? OpenGroup.fetchOne(db, id: threadId))
+            .map { .community($0) }
+            .defaulting(to: .fileServer)
+        let uploadInfo: UploadInfo = try {
+            let endpoint: (any EndpointType) = {
+                switch destination {
+                    case .fileServer: return Network.FileServer.Endpoint.file
+                    case .community(let openGroup): return OpenGroupAPI.Endpoint.roomFile(openGroup.roomToken)
                 }
-                
-                var encryptionKey: NSData = NSData()
-                var digest: NSData = NSData()
-                
-                // Encrypt the attachment if needed
-                if destination.shouldEncrypt {
-                    guard let ciphertext = Cryptography.encryptAttachmentData(data, shouldPad: true, outKey: &encryptionKey, outDigest: &digest) else {
-                        SNLog("Couldn't encrypt attachment.")
+            }()
+            let finalData: Data
+            let finalEncryptionKey: Data?
+            let finalDigest: Data?
+            
+            // This can occur if an AttachmentUploadJob was explicitly created for a message
+            // dependant on the attachment being uploaded (in this case the attachment has
+            // already been uploaded so just succeed)
+            if state == .uploaded, let fileId: String = Attachment.fileId(for: downloadUrl) {
+                return (
+                    self,
+                    try Network.PreparedRequest<FileUploadResponse>.cached(
+                        FileUploadResponse(id: fileId),
+                        endpoint: endpoint,
+                        using: dependencies
+                    ),
+                    self.encryptionKey,
+                    self.digest
+                )
+            }
+            
+            // If the attachment is a downloaded attachment, check if it came from
+            // the server and if so just succeed immediately (no use re-uploading
+            // an attachment that is already present on the server) - or if we want
+            // it to be encrypted and it's not then encrypt it
+            //
+            // Note: The most common cases for this will be for LinkPreviews or Quotes
+            if
+                state == .downloaded,
+                serverId != nil,
+                let fileId: String = Attachment.fileId(for: downloadUrl),
+                (
+                    !destination.shouldEncrypt || (
+                        encryptionKey != nil &&
+                        digest != nil
+                    )
+                )
+            {
+                return (
+                    self,
+                    try Network.PreparedRequest.cached(
+                        FileUploadResponse(id: fileId),
+                        endpoint: endpoint,
+                        using: dependencies
+                    ),
+                    self.encryptionKey,
+                    self.digest
+                )
+            }
+            
+            // Get the raw attachment data
+            guard let rawData: Data = try? readDataFromFile(using: dependencies) else {
+                Log.error("[Attachment] Couldn't read attachment from disk.")
+                throw AttachmentError.noAttachment
+            }
+            
+            // Perform encryption if needed
+            typealias EncryptionData = (ciphertext: Data, encryptionKey: Data, digest: Data)
+            switch destination.shouldEncrypt {
+                case false:
+                    finalEncryptionKey = nil
+                    finalDigest = nil
+                    finalData = rawData
+                    
+                case true:
+                    guard
+                        let result: EncryptionData = dependencies[singleton: .crypto].generate(
+                            .encryptAttachment(plaintext: rawData, using: dependencies)
+                        )
+                    else {
+                        Log.error("[Attachment] Couldn't encrypt attachment.")
                         throw AttachmentError.encryptionFailed
                     }
                     
-                    data = ciphertext
-                }
-                
-                // Check the file size
-                SNLog("File size: \(data.count) bytes.")
-                if data.count > Network.maxFileSize { throw NetworkError.maxFileSizeExceeded }
-                
-                return Storage.shared.writePublisher { db -> (Network.Destination?, String?, Data?, Data?) in
-                    // Update the attachment to the 'uploading' state
-                    _ = try? Attachment
-                        .filter(id: attachmentId)
-                        .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploading))
                     
+                    finalEncryptionKey = result.encryptionKey
+                    finalDigest = result.digest
+                    finalData = result.ciphertext
+            }
+            
+            // Ensure the file size is smaller than our upload limit
+            Log.info("[Attachment] File size: \(finalData.count) bytes.")
+            guard finalData.count <= Network.maxFileSize else { throw NetworkError.maxFileSizeExceeded }
+            
+            // Generate the request
+            switch destination {
+                case .fileServer:
+                    return (
+                        self,
+                        try Network.preparedUpload(data: finalData, using: dependencies),
+                        finalEncryptionKey,
+                        finalDigest
+                    )
                     
-                    switch destination {
-                        case .openGroup(let openGroup):
-                            return (
-                                try OpenGroupAPI.uploadDestination(
-                                    db,
-                                    data: data,
-                                    openGroup: openGroup,
-                                    using: dependencies
-                                ),
-                                nil,
-                                nil,
-                                nil
-                            )
-                        
-                        default:
-                            return (.fileServer, nil, encryptionKey as Data, digest as Data)
-                    }
-                }
+                case .community(let openGroup):
+                    return (
+                        self,
+                        try OpenGroupAPI.preparedUpload(
+                            db,
+                            data: finalData,
+                            to: openGroup.roomToken,
+                            on: openGroup.server,
+                            using: dependencies
+                        ),
+                        finalEncryptionKey,
+                        finalDigest
+                    )
             }
-            .tryFlatMap { maybeDestination, existingFileId, encryptionKey, digest -> AnyPublisher<(String?, Data?, Data?), Error> in
-                // No need to upload if the file was already uploaded
-                if let fileId: String = existingFileId {
-                    return Just((fileId, encryptionKey, digest))
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
-                }
-                
-                guard let destination: Network.Destination = maybeDestination else { throw NetworkError.invalidURL }
-                
-                return LibSession.uploadToServer(data, to: destination, fileName: nil, using: dependencies)
-                    .map { _, response -> (String, Data?, Data?) in (response.id, encryptionKey, digest) }
-                    .eraseToAnyPublisher()
-            }
-            .tryFlatMap { fileId, encryptionKey, digest -> AnyPublisher<String?, Error> in
-                let downloadUrl: URL? = try fileId.map { fileId in
-                    switch destination {
-                        case .fileServer: return try Network.fileServerDownloadUrlFor(fileId: fileId)
-                        case .openGroup(let openGroup):
-                            return try OpenGroupAPI
-                                .downloadUrlFor(
-                                    fileId: fileId,
-                                    server: openGroup.server,
-                                    roomToken: openGroup.roomToken
-                                )
-                    }
-                }
-                
-                /// Save the final upload info
-                ///
-                /// **Note:** We **MUST** use the `.with` function here to ensure the `isValid` flag is
-                /// updated correctly
-                return Storage.shared
-                    .writePublisher { db in
-                        try self
-                            .with(
-                                serverId: fileId,
-                                state: .uploaded,
-                                creationTimestamp: (
-                                    self.creationTimestamp ??
-                                    (TimeInterval(SnodeAPI.currentOffsetTimestampMs()) / 1000)
-                                ),
-                                downloadUrl: downloadUrl?.absoluteString,
-                                encryptionKey: encryptionKey,
-                                digest: digest
-                            )
-                            .saved(db)
-                    }
-                    .map { _ in downloadUrl?.absoluteString }
-                    .eraseToAnyPublisher()
-            }
+        }()
+        
+        return uploadInfo.preparedRequest
             .handleEvents(
+                receiveSubscription: {
+                    // If we have a `cachedResponse` (ie. already uploaded) then don't change
+                    // the attachment state to uploading as it's already been done
+                    guard uploadInfo.preparedRequest.cachedResponse == nil else { return }
+                    
+                    // Update the attachment to the 'uploading' state
+                    dependencies[singleton: .storage].write { db in
+                        _ = try? Attachment
+                            .filter(id: uploadInfo.attachment.id)
+                            .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.uploading))
+                    }
+                },
+                receiveOutput: { _, response in
+                    /// Save the final upload info
+                    ///
+                    /// **Note:** We **MUST** use the `.with` function here to ensure the `isValid` flag is
+                    /// updated correctly
+                    let updatedAttachment: Attachment = uploadInfo.attachment
+                        .with(
+                            serverId: response.id,
+                            state: .uploaded,
+                            creationTimestamp: (
+                                uploadInfo.attachment.creationTimestamp ??
+                                (dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000)
+                            ),
+                            downloadUrl: {
+                                switch (uploadInfo.attachment.downloadUrl, destination) {
+                                    case (.some(let downloadUrl), _): return downloadUrl
+                                    case (.none, .fileServer):
+                                        return Network.FileServer.downloadUrlString(for: response.id)
+                                        
+                                    case (.none, .community(let openGroup)):
+                                        return OpenGroupAPI.downloadUrlString(
+                                            for: response.id,
+                                            server: openGroup.server,
+                                            roomToken: openGroup.roomToken
+                                        )
+                                }
+                            }(),
+                            encryptionKey: uploadInfo.encryptionKey,
+                            digest: uploadInfo.digest,
+                            using: dependencies
+                        )
+                    
+                    // Ensure there were changes before triggering a db write to avoid unneeded
+                    // write queue use and UI updates
+                    guard updatedAttachment != uploadInfo.attachment else { return }
+                    
+                    dependencies[singleton: .storage].write { db in
+                        try updatedAttachment.upserted(db)
+                    }
+                },
                 receiveCompletion: { result in
                     switch result {
                         case .finished: break
                         case .failure:
-                            Storage.shared.write { db in
+                            dependencies[singleton: .storage].write { db in
                                 try Attachment
-                                    .filter(id: attachmentId)
+                                    .filter(id: uploadInfo.attachment.id)
                                     .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.failedUpload))
                             }
                     }
+                },
+                receiveCancel: {
+                    dependencies[singleton: .storage].write { db in
+                        try Attachment
+                            .filter(id: uploadInfo.attachment.id)
+                            .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.failedUpload))
+                    }
                 }
             )
-            .eraseToAnyPublisher()
+            .map { _, response in response.id }
     }
 }

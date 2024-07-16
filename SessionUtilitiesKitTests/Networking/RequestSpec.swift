@@ -11,7 +11,7 @@ class RequestSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
 
-        @TestState var dependencies: Dependencies! = Dependencies()
+        @TestState var dependencies: TestDependencies! = TestDependencies()
         @TestState var urlRequest: URLRequest?
         @TestState var request: Request<NoBody, TestEndpoint>!
         @TestState var responseInfo: ResponseInfoType! = Network.ResponseInfo(code: 200, headers: [:])

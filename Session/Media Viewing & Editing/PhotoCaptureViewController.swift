@@ -5,7 +5,7 @@ import Combine
 import AVFoundation
 import SessionUIKit
 import SignalUtilitiesKit
-import SignalCoreKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 protocol PhotoCaptureViewControllerDelegate: AnyObject {
@@ -36,8 +36,24 @@ class PhotoCaptureViewController: OWSViewController {
 
     weak var delegate: PhotoCaptureViewControllerDelegate?
 
+    private let dependencies: Dependencies
     private var photoCapture: PhotoCapture!
-
+    var isRecordingMovie: Bool = false
+    let recordingTimerView: RecordingTimerView
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        recordingTimerView = RecordingTimerView(using: dependencies)
+        
+        super.init()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     deinit {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         if let photoCapture = photoCapture {
@@ -46,7 +62,7 @@ class PhotoCaptureViewController: OWSViewController {
                     receiveCompletion: { result in
                         switch result {
                             case .failure: break
-                            case .finished: Logger.debug("stopCapture completed")
+                            case .finished: Log.debug("[PhotoCaptureViewController] stopCapture completed")
                         }
                     }
                 )
@@ -81,8 +97,6 @@ class PhotoCaptureViewController: OWSViewController {
     }
 
     // MARK: -
-    var isRecordingMovie: Bool = false
-    let recordingTimerView = RecordingTimerView()
 
     func updateNavigationItems() {
         if isRecordingMovie {
@@ -105,7 +119,6 @@ class PhotoCaptureViewController: OWSViewController {
     // If the app is backgrounded and then foregrounded, when OWSWindowManager calls mainWindow.makeKeyAndVisible
     // the ConversationVC's inputAccessoryView will appear *above* us unless we'd previously become first responder.
     override public var canBecomeFirstResponder: Bool {
-        Logger.debug("")
         return true
     }
 
@@ -124,7 +137,7 @@ class PhotoCaptureViewController: OWSViewController {
 
         init(imageName: String, block: @escaping () -> Void) {
             self.button = OWSButton(imageName: imageName, tintColor: .white, block: block)
-            button.autoPinToSquareAspectRatio()
+            button.set(.width, to: .height, of: button)
             button.themeShadowColor = .black
             button.layer.shadowOffset = CGSize.zero
             button.layer.shadowOpacity = 0.35
@@ -179,20 +192,19 @@ class PhotoCaptureViewController: OWSViewController {
 
     @objc
     func didTapSwitchCamera() {
-        Logger.debug("")
         switchCamera()
     }
 
     @objc
     func didDoubleTapToSwitchCamera(tapGesture: UITapGestureRecognizer) {
-        Logger.debug("")
         switchCamera()
     }
 
     private func switchCamera() {
         UIView.animate(withDuration: 0.2) {
             let epsilonToForceCounterClockwiseRotation: CGFloat = 0.00001
-            self.switchCameraControl.button.transform = self.switchCameraControl.button.transform.rotate(.pi + epsilonToForceCounterClockwiseRotation)
+            self.switchCameraControl.button.transform = self.switchCameraControl.button.transform
+                .rotated(by: .pi + epsilonToForceCounterClockwiseRotation)
         }
         
         photoCapture.switchCamera()
@@ -209,7 +221,6 @@ class PhotoCaptureViewController: OWSViewController {
 
     @objc
     func didTapFlashMode() {
-        Logger.debug("")
         photoCapture.switchFlashMode()
             .receive(on: DispatchQueue.main)
             .sinkUntilComplete(
@@ -262,7 +273,7 @@ class PhotoCaptureViewController: OWSViewController {
             // since the "face up" and "face down" orientations aren't reflected in the photo output,
             // we need to capture the last known _other_ orientation so we can reflect the appropriate
             // portrait/landscape in our captured photos.
-            Logger.verbose("lastKnownCaptureOrientation: \(lastKnownCaptureOrientation)->\(captureOrientation)")
+            Log.verbose("[PhotoCaptureViewController] lastKnownCaptureOrientation: \(lastKnownCaptureOrientation)->\(captureOrientation)")
             lastKnownCaptureOrientation = captureOrientation
             updateIconOrientations(isAnimated: true, captureOrientation: captureOrientation)
         }
@@ -271,14 +282,14 @@ class PhotoCaptureViewController: OWSViewController {
     // MARK: -
 
     private func updateIconOrientations(isAnimated: Bool, captureOrientation: AVCaptureVideoOrientation) {
-        Logger.verbose("captureOrientation: \(captureOrientation)")
+        Log.verbose("[PhotoCaptureViewController] captureOrientation: \(captureOrientation)")
 
         let transformFromOrientation: CGAffineTransform
         switch captureOrientation {
             case .portrait: transformFromOrientation = .identity
             case .portraitUpsideDown: transformFromOrientation = CGAffineTransform(rotationAngle: .pi)
-            case .landscapeLeft: transformFromOrientation = CGAffineTransform(rotationAngle: .halfPi)
-            case .landscapeRight: transformFromOrientation = CGAffineTransform(rotationAngle: -1 * .halfPi)
+            case .landscapeLeft: transformFromOrientation = CGAffineTransform(rotationAngle: .pi * 0.5)
+            case .landscapeRight: transformFromOrientation = CGAffineTransform(rotationAngle: -1 * .pi * 0.5)
             @unknown default: transformFromOrientation = .identity
         }
 
@@ -298,7 +309,7 @@ class PhotoCaptureViewController: OWSViewController {
     }
 
     private func setupPhotoCapture() {
-        photoCapture = PhotoCapture()
+        photoCapture = PhotoCapture(using: dependencies)
         photoCapture.delegate = self
         captureButton.delegate = photoCapture
         previewView = CapturePreviewView(session: photoCapture.session)
@@ -316,21 +327,23 @@ class PhotoCaptureViewController: OWSViewController {
     }
 
     private func showCaptureUI() {
-        Logger.debug("")
         view.addSubview(previewView)
         if UIDevice.current.hasIPhoneXNotch {
-            previewView.autoPinEdgesToSuperviewEdges()
+            previewView.pin(to: view)
         } else {
-            previewView.autoPinEdgesToSuperviewEdges(with: UIEdgeInsets(top: 0, leading: 0, bottom: 40, trailing: 0))
+            previewView.pin(.top, to: .top, of: view)
+            previewView.pin(.leading, to: .leading, of: view)
+            previewView.pin(.trailing, to: .trailing, of: view)
+            previewView.pin(.bottom, to: .bottom, of: view, withInset: -40)
         }
 
         view.addSubview(captureButton)
-        captureButton.autoHCenterInSuperview()
+        captureButton.center(.horizontal, in: view)
         captureButton.centerYAnchor.constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: SendMediaNavigationController.bottomButtonsCenterOffset).isActive = true
     }
 
     private func showFailureUI(error: Error) {
-        Logger.error("error: \(error)")
+        Log.error("[PhotoCaptureViewController] Error: \(error)")
         let modal: ConfirmationModal = ConfirmationModal(
             info: ConfirmationModal.Info(
                 title: CommonStrings.errorAlertTitle,
@@ -387,7 +400,7 @@ extension PhotoCaptureViewController: PhotoCaptureDelegate {
     }
 
     func photoCaptureDidCancelVideo(_ photoCapture: PhotoCapture) {
-        owsFailDebug("If we ever allow this, we should test.")
+        Log.error("[PhotoCaptureViewController] photoCaptureDidCancelVideo called - If we ever allow this, we should test.")
         isRecordingMovie = false
         recordingTimerView.stopCounting()
         updateNavigationItems()
@@ -432,8 +445,8 @@ class CaptureButton: UIView {
 
     weak var delegate: CaptureButtonDelegate?
 
-    let defaultDiameter: CGFloat = ScaleFromIPhone5To7Plus(60, 80)
-    let recordingDiameter: CGFloat = ScaleFromIPhone5To7Plus(68, 120)
+    let defaultDiameter: CGFloat = Values.scaleFromIPhone5To7Plus(60, 80)
+    let recordingDiameter: CGFloat = Values.scaleFromIPhone5To7Plus(68, 120)
     var innerButtonSizeConstraints: [NSLayoutConstraint]!
     var zoomIndicatorSizeConstraints: [NSLayoutConstraint]!
 
@@ -448,21 +461,26 @@ class CaptureButton: UIView {
         innerButton.addGestureRecognizer(longPressGesture)
 
         addSubview(innerButton)
-        innerButtonSizeConstraints = autoSetDimensions(to: CGSize(width: defaultDiameter, height: defaultDiameter))
+        innerButtonSizeConstraints = [
+            set(.width, to: defaultDiameter),
+            set(.height, to: defaultDiameter)
+        ]
         innerButton.themeBackgroundColor = .white
         innerButton.layer.shadowOffset = .zero
         innerButton.layer.shadowOpacity = 0.33
         innerButton.layer.shadowRadius = 2
         innerButton.alpha = 0.33
-        innerButton.autoPinEdgesToSuperviewEdges()
+        innerButton.pin(to: self)
 
         addSubview(zoomIndicator)
-        zoomIndicatorSizeConstraints = zoomIndicator.autoSetDimensions(to: CGSize(width: defaultDiameter, height: defaultDiameter))
+        zoomIndicatorSizeConstraints = [
+            zoomIndicator.set(.width, to: defaultDiameter),
+            zoomIndicator.set(.height, to: defaultDiameter)
+        ]
         zoomIndicator.isUserInteractionEnabled = false
         zoomIndicator.themeBorderColor = .white
         zoomIndicator.layer.borderWidth = 1.5
-        zoomIndicator.autoAlignAxis(.horizontal, toSameAxisOf: innerButton)
-        zoomIndicator.autoAlignAxis(.vertical, toSameAxisOf: innerButton)
+        zoomIndicator.center(in: innerButton)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -480,10 +498,8 @@ class CaptureButton: UIView {
 
     @objc
     func didLongPress(_ gesture: UILongPressGestureRecognizer) {
-        Logger.verbose("")
-
         guard let gestureView = gesture.view else {
-            owsFailDebug("gestureView was unexpectedly nil")
+            Log.error("[CaptureButton] gestureView was unexpectedly nil")
             return
         }
 
@@ -499,17 +515,17 @@ class CaptureButton: UIView {
             }
         case .changed:
             guard let referenceHeight = delegate?.zoomScaleReferenceHeight else {
-                owsFailDebug("referenceHeight was unexpectedly nil")
+                Log.error("[CaptureButton] referenceHeight was unexpectedly nil")
                 return
             }
 
             guard referenceHeight > 0 else {
-                owsFailDebug("referenceHeight was unexpectedly <= 0")
+                Log.error("[CaptureButton] referenceHeight was unexpectedly <= 0")
                 return
             }
 
             guard let initialTouchLocation = initialTouchLocation else {
-                owsFailDebug("initialTouchLocation was unexpectedly nil")
+                Log.error("[CaptureButton] initialTouchLocation was unexpectedly nil")
                 return
             }
 
@@ -521,9 +537,9 @@ class CaptureButton: UIView {
 
             let alpha = ratio.clamp(0, 1)
 
-            Logger.verbose("distance: \(distance), alpha: \(alpha)")
+            Log.verbose("[CaptureButton] distance: \(distance), alpha: \(alpha)")
 
-            let zoomIndicatorDiameter = CGFloatLerp(recordingDiameter, 3, alpha)
+            let zoomIndicatorDiameter = alpha.lerp(recordingDiameter, 3)
             self.zoomIndicatorSizeConstraints.forEach { $0.constant = zoomIndicatorDiameter }
             zoomIndicator.superview?.layoutIfNeeded()
 
@@ -574,11 +590,13 @@ class CapturePreviewView: UIView {
 }
 
 class RecordingTimerView: UIView {
-
+    private let dependencies: Dependencies
     let stackViewSpacing: CGFloat = 4
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(frame: .zero)
 
         let stackView = UIStackView(arrangedSubviews: [icon, label])
         stackView.axis = .horizontal
@@ -586,7 +604,7 @@ class RecordingTimerView: UIView {
         stackView.spacing = stackViewSpacing
 
         addSubview(stackView)
-        stackView.autoPinEdgesToSuperviewMargins()
+        stackView.pin(toMarginsOf: self)
 
         updateView()
     }
@@ -617,7 +635,8 @@ class RecordingTimerView: UIView {
         icon.layer.shadowOpacity = 0.35
         icon.layer.shadowRadius = 4
         icon.themeBackgroundColor = .danger
-        icon.autoSetDimensions(to: CGSize(width: iconWidth, height: iconWidth))
+        icon.set(.width, to: iconWidth)
+        icon.set(.height, to: iconWidth)
         icon.alpha = 0
 
         return icon
@@ -628,7 +647,9 @@ class RecordingTimerView: UIView {
 
     func startCounting() {
         recordingStartTime = CACurrentMediaTime()
-        timer = Timer.weakScheduledTimer(withTimeInterval: 0.1, target: self, selector: #selector(updateView), userInfo: nil, repeats: true)
+        timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 0.1, repeats: true, using: dependencies) { [weak self] _ in
+            self?.updateView()
+        }
         UIView.animate(
             withDuration: 0.5,
             delay: 0,
@@ -667,10 +688,9 @@ class RecordingTimerView: UIView {
         return CACurrentMediaTime() - recordingStartTime
     }
 
-    @objc
     private func updateView() {
         let recordingDuration = self.recordingDuration
-        Logger.verbose("recordingDuration: \(recordingDuration)")
+        Log.verbose("[RecordingTimerView] recordingDuration: \(recordingDuration)")
         let durationDate = Date(timeIntervalSinceReferenceDate: recordingDuration)
         label.text = timeFormatter.string(from: durationDate)
     }

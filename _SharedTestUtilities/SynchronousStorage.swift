@@ -6,13 +6,18 @@ import GRDB
 @testable import SessionUtilitiesKit
 
 class SynchronousStorage: Storage {
+    private let dependencies: Dependencies
+    
     public init(
         customWriter: DatabaseWriter? = nil,
         migrationTargets: [MigratableTarget.Type]? = nil,
         migrations: [Storage.KeyedMigration]? = nil,
+        using dependencies: Dependencies,
         initialData: ((Database) throws -> ())? = nil
     ) {
-        super.init(customWriter: customWriter)
+        self.dependencies = dependencies
+        
+        super.init(customWriter: customWriter, using: dependencies)
         
         // Process any migration targets first
         if let migrationTargets: [MigratableTarget.Type] = migrationTargets {
@@ -43,7 +48,6 @@ class SynchronousStorage: Storage {
         fileName: String = #file,
         functionName: String = #function,
         lineNumber: Int = #line,
-        using dependencies: Dependencies = Dependencies(),
         updates: @escaping (Database) throws -> T?
     ) -> T? {
         guard isValid, let dbWriter: DatabaseWriter = testDbWriter else { return nil }
@@ -60,7 +64,6 @@ class SynchronousStorage: Storage {
             fileName: fileName,
             functionName: functionName,
             lineNumber: lineNumber,
-            using: dependencies,
             updates: updates
         )
     }
@@ -69,7 +72,6 @@ class SynchronousStorage: Storage {
         fileName: String = #file,
         functionName: String = #function,
         lineNumber: Int = #line,
-        using dependencies: Dependencies = Dependencies(),
         _ value: @escaping (Database) throws -> T?
     ) -> T? {
         guard isValid, let dbWriter: DatabaseWriter = testDbWriter else { return nil }
@@ -86,7 +88,6 @@ class SynchronousStorage: Storage {
             fileName: fileName,
             functionName: functionName,
             lineNumber: lineNumber,
-            using: dependencies,
             value
         )
     }
@@ -97,33 +98,40 @@ class SynchronousStorage: Storage {
         fileName: String = #file,
         functionName: String = #function,
         lineNumber: Int = #line,
-        using dependencies: Dependencies = Dependencies(),
         value: @escaping (Database) throws -> T
     ) -> AnyPublisher<T, Error> {
-        guard let result: T = self.read(fileName: fileName, functionName: functionName, lineNumber: lineNumber, using: dependencies, value) else {
+        guard isValid, let dbWriter: DatabaseWriter = testDbWriter else {
             return Fail(error: StorageError.generic)
                 .eraseToAnyPublisher()
         }
         
-        return Just(result)
-            .setFailureType(to: Error.self)
-            .eraseToAnyPublisher()
+        // If 'forceSynchronous' is true then it's likely that we will access the database in
+        // a reentrant way, the 'unsafeReentrant...' functions allow us to interact with the
+        // database without worrying about reentrant access during tests because we can be
+        // confident that the tests are running on the correct thread
+        guard !dependencies.forceSynchronous else {
+            return Just(())
+                .setFailureType(to: Error.self)
+                .tryMap { _ in try dbWriter.unsafeReentrantRead(value) }
+                .eraseToAnyPublisher()
+        }
+        
+        return super.readPublisher(fileName: fileName, functionName: functionName, lineNumber: lineNumber, value: value)
     }
     
     override func writeAsync<T>(
         fileName: String = #file,
         functionName: String = #function,
         lineNumber: Int = #line,
-        using dependencies: Dependencies = Dependencies(),
         updates: @escaping (Database) throws -> T,
         completion: @escaping (Database, Result<T, Error>) throws -> Void
     ) {
         do {
-            let result: T = try write(using: dependencies, updates: updates) ?? { throw StorageError.failedToSave }()
-            write(using: dependencies) { db in try completion(db, Result.success(result)) }
+            let result: T = try write(updates: updates) ?? { throw StorageError.failedToSave }()
+            write { db in try completion(db, Result.success(result)) }
         }
         catch {
-            write(using: dependencies) { db in try completion(db, Result.failure(error)) }
+            write { db in try completion(db, Result.failure(error)) }
         }
     }
     
@@ -131,16 +139,24 @@ class SynchronousStorage: Storage {
         fileName: String = #file,
         functionName: String = #function,
         lineNumber: Int = #line,
-        using dependencies: Dependencies = Dependencies(),
         updates: @escaping (Database) throws -> T
     ) -> AnyPublisher<T, Error> {
-        guard let result: T = super.write(fileName: fileName, functionName: functionName, lineNumber: lineNumber, using: dependencies, updates: updates) else {
+        guard isValid, let dbWriter: DatabaseWriter = testDbWriter else {
             return Fail(error: StorageError.generic)
                 .eraseToAnyPublisher()
         }
         
-        return Just(result)
-            .setFailureType(to: Error.self)
-            .eraseToAnyPublisher()
+        // If 'forceSynchronous' is true then it's likely that we will access the database in
+        // a reentrant way, the 'unsafeReentrant...' functions allow us to interact with the
+        // database without worrying about reentrant access during tests because we can be
+        // confident that the tests are running on the correct thread
+        guard !dependencies.forceSynchronous else {
+            return Just(())
+                .setFailureType(to: Error.self)
+                .tryMap { _ in try dbWriter.unsafeReentrantWrite(updates) }
+                .eraseToAnyPublisher()
+        }
+        
+        return super.writePublisher(fileName: fileName, functionName: functionName, lineNumber: lineNumber, updates: updates)
     }
 }

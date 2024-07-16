@@ -24,13 +24,15 @@ public enum MessageReceiverError: LocalizedError {
     case invalidConfigMessageHandling
     case requiredThreadNotInConfig
     case outdatedMessage
+    case missingRequiredAdminPrivileges
 
     public var isRetryable: Bool {
         switch self {
             case .duplicateMessage, .duplicateMessageNewSnode, .duplicateControlMessage,
                 .invalidMessage, .unknownMessage, .unknownEnvelopeType, .invalidSignature,
                 .noData, .senderBlocked, .noThread, .selfSend, .decryptionFailed,
-                .invalidConfigMessageHandling, .requiredThreadNotInConfig, .outdatedMessage:
+                .invalidConfigMessageHandling, .requiredThreadNotInConfig,
+                .outdatedMessage, .missingRequiredAdminPrivileges:
                 return false
                 
             default: return true
@@ -43,7 +45,7 @@ public enum MessageReceiverError: LocalizedError {
             // retrieving and attempting to process the same messages again (as well as ensure the
             // next poll doesn't retrieve the same message - these errors are essentially considered
             // "already successfully processed")
-            case .selfSend, .duplicateControlMessage, .outdatedMessage:
+            case .selfSend, .duplicateControlMessage, .outdatedMessage, .missingRequiredAdminPrivileges:
                 return true
                 
             default: return false
@@ -74,6 +76,7 @@ public enum MessageReceiverError: LocalizedError {
             case .invalidConfigMessageHandling: return "Invalid handling of a config message."
             case .requiredThreadNotInConfig: return "Required thread not in config."
             case .outdatedMessage: return "Message was sent before a config change which would have removed the message."
+            case .missingRequiredAdminPrivileges: return "Handling this message requires admin privileges which the current user does not have."
         }
     }
 }

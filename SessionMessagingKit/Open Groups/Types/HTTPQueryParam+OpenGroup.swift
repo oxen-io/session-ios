@@ -3,7 +3,7 @@
 // stringlint:disable
 
 import Foundation
-import SessionUtilitiesKit
+import SessionSnodeKit
 
 public extension HTTPQueryParam {
     static let publicKey: HTTPQueryParam = "public_key"

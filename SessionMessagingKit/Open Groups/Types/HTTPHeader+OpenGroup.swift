@@ -3,7 +3,7 @@
 // stringlint:disable
 
 import Foundation
-import SessionUtilitiesKit
+import SessionSnodeKit
 
 public extension HTTPHeader {
     static let sogsPubKey: HTTPHeader = "X-SOGS-Pubkey"

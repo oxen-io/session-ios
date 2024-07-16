@@ -10,14 +10,14 @@ enum _015_BlockCommunityMessageRequests: Migration {
     static let identifier: String = "BlockCommunityMessageRequests" // stringlint:disable
     static let needsConfigSync: Bool = false
     static let minExpectedRunDuration: TimeInterval = 0.01
-    static var requirements: [MigrationRequirement] = [.libSessionStateLoaded]
+    static var requirements: [MigrationRequirement] = [.sessionIdCached, .libSessionStateLoaded]
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [
         Identity.self, Setting.self
     ]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [Profile.self]
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
     
-    static func migrate(_ db: Database) throws {
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         // Add the new 'Profile' properties
         try db.alter(table: Profile.self) { t in
             t.add(.blocksCommunityMessageRequests, .boolean)
@@ -26,13 +26,13 @@ enum _015_BlockCommunityMessageRequests: Migration {
         
         // If the user exists and the 'checkForCommunityMessageRequests' hasn't already been set then default it to "false"
         if
-            Identity.userExists(db),
+            Identity.userExists(db, using: dependencies),
             (try Setting.exists(db, id: Setting.BoolKey.checkForCommunityMessageRequests.rawValue)) == false
         {
-            let rawBlindedMessageRequestValue: Int32 = try LibSession
-                .config(for: .userProfile, publicKey: getUserHexEncodedPublicKey(db))
+            let rawBlindedMessageRequestValue: Int32 = try dependencies[cache: .libSession]
+                .config(for: .userProfile, sessionId: dependencies[cache: .general].sessionId)
                 .wrappedValue
-                .map { conf -> Int32 in try LibSession.rawBlindedMessageRequestValue(in: conf) }
+                .map { config -> Int32 in try LibSession.rawBlindedMessageRequestValue(in: config) }
                 .defaulting(to: -1)
             
             // Use the value in the config if we happen to have one, otherwise use the default
@@ -42,6 +42,6 @@ enum _015_BlockCommunityMessageRequests: Migration {
             )
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

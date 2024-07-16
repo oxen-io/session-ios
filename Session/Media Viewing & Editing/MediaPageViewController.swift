@@ -5,7 +5,6 @@ import GRDB
 import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -33,7 +32,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     public func setCurrentItem(_ item: MediaGalleryViewModel.Item, direction: UIPageViewController.NavigationDirection, animated isAnimated: Bool) {
         guard let galleryPage = self.buildGalleryPage(galleryItem: item) else {
-            owsFailDebug("unexpectedly unable to build new gallery page")
+            Log.error("[MediaPageViewController] Unexpectedly unable to build new gallery page")
             return
         }
         
@@ -68,7 +67,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         self.viewModel = viewModel
         self.showAllMediaButton = options.contains(.showAllMediaButton)
         self.sliderEnabled = options.contains(.sliderEnabled)
-        self.initialPage = MediaDetailViewController(galleryItem: initialItem)
+        self.initialPage = MediaDetailViewController(galleryItem: initialItem, using: viewModel.dependencies)
 
         super.init(
             transitionStyle: .scroll,
@@ -87,11 +86,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     @available(*, unavailable, message: "Unimplemented")
     required init?(coder: NSCoder) {
-        notImplemented()
-    }
-
-    deinit {
-        Logger.debug("deinit")
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - Subview
@@ -132,7 +127,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         // Navigation
 
-        let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+        let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: viewModel.dependencies)
         self.navigationItem.leftBarButtonItem = backButton
         self.navigationItem.titleView = portraitHeaderView
 
@@ -180,8 +175,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         galleryRailView.isHidden = true
         galleryRailView.delegate = self
-        galleryRailView.autoSetDimension(.height, toSize: 72)
-        footerBar.autoSetDimension(.height, toSize: 44)
+        galleryRailView.set(.height, to: 72)
+        footerBar.set(.height, to: 44)
 
         let bottomContainer: DynamicallySizedView = DynamicallySizedView()
         bottomContainer.clipsToBounds = true
@@ -193,7 +188,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         bottomStack.axis = .vertical
         bottomStack.isLayoutMarginsRelativeArrangement = true
         bottomContainer.addSubview(bottomStack)
-        bottomStack.autoPinEdgesToSuperviewEdges()
+        bottomStack.pin(to: bottomContainer)
         
         let galleryRailBlockingView: UIView = UIView()
         galleryRailBlockingView.themeBackgroundColor = .backgroundPrimary
@@ -276,7 +271,6 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }
 
     override func didReceiveMemoryWarning() {
-        Logger.info("")
         super.didReceiveMemoryWarning()
 
         self.cachedPages = [:]
@@ -287,7 +281,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     var pagerScrollViewContentOffsetObservation: NSKeyValueObservation?
     func pagerScrollView(_ pagerScrollView: UIScrollView, contentOffsetDidChange change: NSKeyValueObservedChange<CGPoint>) {
         guard let newValue = change.newValue else {
-            owsFailDebug("newValue was unexpectedly nil")
+            Log.error("[MediaPageViewController] newValue was unexpectedly nil")
             return
         }
 
@@ -381,6 +375,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         galleryRailView.configureCellViews(
             album: (self.viewModel.albumData[item.interactionId] ?? []),
             focusedItem: currentItem,
+            using: viewModel.dependencies,
             cellViewBuilder: { _ in return GalleryRailCellView() }
         )
     }
@@ -391,7 +386,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         guard dataChangeObservable == nil else { return }
         
         // Start observing for data changes
-        dataChangeObservable = Storage.shared.start(
+        dataChangeObservable = viewModel.dependencies[singleton: .storage].start(
             viewModel.observableAlbumData,
             onError: { _ in },
             onChange: { [weak self] albumData in
@@ -493,7 +488,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             threadId: self.viewModel.threadId,
             threadVariant: self.viewModel.threadVariant,
             focusedAttachmentId: currentItem.attachment.id,
-            performInitialQuerySync: true
+            performInitialQuerySync: true,
+            using: viewModel.dependencies
         )
         
         let navController: MediaGalleryNavigationController = MediaGalleryNavigationController()
@@ -514,12 +510,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     @objc public func didPressShare(_ sender: Any) { share() }
     
-    public func share(using dependencies: Dependencies = Dependencies()) {
+    public func share() {
         guard let currentViewController = self.viewControllers?[0] as? MediaDetailViewController else {
-            owsFailDebug("currentViewController was unexpectedly nil")
+            Log.error("[MediaPageViewController] currentViewController was unexpectedly nil")
             return
         }
-        guard let originalFilePath: String = currentViewController.galleryItem.attachment.originalFilePath else {
+        guard let originalFilePath: String = currentViewController.galleryItem.attachment.originalFilePath(using: viewModel.dependencies) else {
             return
         }
         
@@ -532,12 +528,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             shareVC.popoverPresentationController?.sourceRect = self.view.bounds
         }
         
-        shareVC.completionWithItemsHandler = { activityType, completed, returnedItems, activityError in
+        shareVC.completionWithItemsHandler = { [dependencies = viewModel.dependencies] activityType, completed, returnedItems, activityError in
             if let activityError = activityError {
-                SNLog("Failed to share with activityError: \(activityError)")
+                Log.error("[MediaPageViewController] Failed to share with activityError: \(activityError)")
             }
             else if completed {
-                SNLog("Did share with activityType: \(activityType.debugDescription)")
+                Log.info("[MediaPageViewController] Did share with activityType: \(activityType.debugDescription)")
             }
             
             guard
@@ -550,14 +546,14 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
             let threadId: String = self.viewModel.threadId
             let threadVariant: SessionThread.Variant = self.viewModel.threadVariant
             
-            Storage.shared.write { db in
+            dependencies[singleton: .storage].write { db in
                 try MessageSender.send(
                     db,
                     message: DataExtractionNotification(
                         kind: .mediaSaved(
                             timestamp: UInt64(currentViewController.galleryItem.interactionTimestampMs)
                         ),
-                        sentTimestamp: UInt64(SnodeAPI.currentOffsetTimestampMs())
+                        sentTimestamp: dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
                     )
                     .with(DisappearingMessagesConfiguration
                         .fetchOne(db, id: threadId)?
@@ -579,14 +575,14 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         let deleteAction = UIAlertAction(
             title: "delete_message_for_me".localized(),
             style: .destructive
-        ) { _ in
-            Storage.shared.writeAsync { db in
+        ) { [dependencies = viewModel.dependencies] _ in
+            dependencies[singleton: .storage].writeAsync { db in
                 _ = try Attachment
                     .filter(id: itemToDelete.attachment.id)
                     .deleteAll(db)
                 
                 // Add the garbage collection job to delete orphaned attachment files
-                JobRunner.add(
+                dependencies[singleton: .jobRunner].add(
                     db,
                     job: Job(
                         variant: .garbageCollection,
@@ -594,7 +590,8 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
                         details: GarbageCollectionJob.Details(
                             typesToCollect: [.orphanedAttachmentFiles]
                         )
-                    )
+                    ),
+                    canStartJob: true
                 )
                 
                 // Delete any interactions which had all of their attachments removed
@@ -615,7 +612,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     @objc public func didPressPlayBarButton() {
         guard let currentViewController = self.viewControllers?.first as? MediaDetailViewController else {
-            SNLog("currentViewController was unexpectedly nil")
+            Log.error("[MediaPageViewController] currentViewController was unexpectedly nil")
             return
         }
         
@@ -626,12 +623,11 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
     var pendingViewController: MediaDetailViewController?
     public func pageViewController(_ pageViewController: UIPageViewController, willTransitionTo pendingViewControllers: [UIViewController]) {
-        Logger.debug("")
 
-        assert(pendingViewControllers.count == 1)
+        Log.assert(pendingViewControllers.count == 1)
         pendingViewControllers.forEach { viewController in
             guard let pendingViewController = viewController as? MediaDetailViewController else {
-                owsFailDebug("unexpected mediaDetailViewController: \(viewController)")
+                Log.error("[MediaPageViewController] Unexpected mediaDetailViewController: \(viewController)")
                 return
             }
             self.pendingViewController = pendingViewController
@@ -645,12 +641,11 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     }
 
     public func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted: Bool) {
-        Logger.debug("")
 
-        assert(previousViewControllers.count == 1)
+        Log.assert(previousViewControllers.count == 1)
         previousViewControllers.forEach { viewController in
             guard let previousPage = viewController as? MediaDetailViewController else {
-                owsFailDebug("unexpected mediaDetailViewController: \(viewController)")
+                Log.error("[MediaPageViewController] Unexpected mediaDetailViewController: \(viewController)")
                 return
             }
 
@@ -775,7 +770,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         }
         
         cachedPages[galleryItem.interactionId] = (cachedPages[galleryItem.interactionId] ?? [:])
-            .setting(galleryItem, MediaDetailViewController(galleryItem: galleryItem, delegate: self))
+            .setting(galleryItem, MediaDetailViewController(galleryItem: galleryItem, delegate: self, using: viewModel.dependencies))
         
         return cachedPages[galleryItem.interactionId]?[galleryItem]
     }
@@ -792,7 +787,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 
         self.navigationController?.view.isUserInteractionEnabled = false
         self.navigationController?.dismiss(animated: true, completion: { [weak self] in
-            if !IsLandscapeOrientationEnabled() {
+            if !UIDevice.current.isIPad {
                 UIDevice.current.ows_setOrientation(.portrait)
             }
             
@@ -805,8 +800,6 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
     // MARK: MediaDetailViewControllerDelegate
 
     public func mediaDetailViewControllerDidTapMedia(_ mediaDetailViewController: MediaDetailViewController) {
-        Logger.debug("")
-
         self.shouldHideToolbars = !self.shouldHideToolbars
     }
 
@@ -855,13 +848,12 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         containerView.layoutMargins = UIEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
 
         containerView.addSubview(stackView)
-
-        stackView.autoPinEdge(toSuperviewMargin: .top, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .trailing, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .bottom, relation: .greaterThanOrEqual)
-        stackView.autoPinEdge(toSuperviewMargin: .leading, relation: .greaterThanOrEqual)
-        stackView.setContentHuggingHigh()
-        stackView.autoCenterInSuperview()
+        stackView.pin(.top, greaterThanOrEqualTo: .top, of: containerView)
+        stackView.pin(.trailing, greaterThanOrEqualTo: .trailing, of: containerView)
+        stackView.pin(.bottom, lessThanOrEqualTo: .bottom, of: containerView)
+        stackView.pin(.leading, lessThanOrEqualTo: .leading, of: containerView)
+        stackView.setContentHugging(to: .required)
+        stackView.center(in: containerView)
 
         return containerView
     }()
@@ -877,12 +869,13 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
         let name: String = {
             switch targetItem.interactionVariant {
                 case .standardIncoming:
-                    return Storage.shared
-                        .read { db in
+                    return viewModel.dependencies[singleton: .storage]
+                        .read { [dependencies = viewModel.dependencies] db in
                             Profile.displayName(
                                 db,
                                 id: targetItem.interactionAuthorId,
-                                threadVariant: threadVariant
+                                threadVariant: threadVariant,
+                                using: dependencies
                             )
                         }
                         .defaulting(to: Profile.truncated(id: targetItem.interactionAuthorId, truncating: .middle))
@@ -891,7 +884,7 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
                     return "MEDIA_GALLERY_SENDER_NAME_YOU".localized() //"Short sender label for media sent by you"
                         
                 default:
-                    owsFailDebug("Unsupported message variant: \(targetItem.interactionVariant)")
+                    Log.error("[MediaPageViewController] Unsupported message variant: \(targetItem.interactionVariant)")
                     return ""
             }
         }()
@@ -917,11 +910,11 @@ class MediaPageViewController: UIPageViewController, UIPageViewControllerDataSou
 }
 
 extension MediaGalleryViewModel.Item: GalleryRailItem {
-    public func buildRailItemView() -> UIView {
+    public func buildRailItemView(using dependencies: Dependencies) -> UIView {
         let imageView: UIImageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
         
-        self.thumbnailImage { [weak imageView] image in
+        self.thumbnailImage(using: dependencies) { [weak imageView] image in
             DispatchQueue.main.async {
                 imageView?.image = image
             }
@@ -942,7 +935,7 @@ extension MediaGalleryViewModel.Item: GalleryRailItem {
 extension MediaPageViewController: GalleryRailViewDelegate {
     func galleryRailView(_ galleryRailView: GalleryRailView, didTapItem imageRailItem: GalleryRailItem) {
         guard let targetItem = imageRailItem as? MediaGalleryViewModel.Item else {
-            owsFailDebug("unexpected imageRailItem: \(imageRailItem)")
+            Log.error("[MediaPageViewController] Unexpected imageRailItem: \(imageRailItem)")
             return
         }
 
@@ -986,14 +979,14 @@ extension MediaPageViewController: UIViewControllerTransitioningDelegate {
     public func animationController(forPresented presented: UIViewController, presenting: UIViewController, source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
         guard self == presented || self.navigationController == presented else { return nil }
 
-        return MediaZoomAnimationController(galleryItem: currentItem)
+        return MediaZoomAnimationController(galleryItem: currentItem, using: viewModel.dependencies)
     }
 
     public func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
         guard self == dismissed || self.navigationController == dismissed else { return nil }
         guard !self.viewModel.albumData.isEmpty else { return nil }
 
-        let animationController = MediaDismissAnimationController(galleryItem: currentItem, interactionController: mediaInteractiveDismiss)
+        let animationController = MediaDismissAnimationController(galleryItem: currentItem, interactionController: mediaInteractiveDismiss, using: viewModel.dependencies)
         mediaInteractiveDismiss?.interactiveDismissDelegate = animationController
 
         return animationController

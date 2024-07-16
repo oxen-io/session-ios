@@ -1006,6 +1006,12 @@ The point that a message will disappear in a disappearing message update message
 /* An informational message displayed when the user has been invited to join a group, the '%@' will be the name of the group. */
 "GROUP_MESSAGE_INFO_INVITED_FALLBACK" = "Byli jsi pozváni k připojení do %@.";
 
+/* An informational message displayed when the user has been invited to join a group as an admin, the first '%@' will be the name of the user that sent the invitation and the second '%@' will be the name of the group. */
+"GROUP_MESSAGE_INFO_INVITED_ADMIN" = "%@ invited you to rejoin %@, where you are an Admin.";
+
+/* An informational message displayed when the user has been invited to join a group as an admin, the '%@' will be the name of the group. */
+"GROUP_MESSAGE_INFO_INVITED_ADMIN_FALLBACK" = "You were invited to rejoin %@, where you are an Admin.";
+
 /* An informational message displayed when the current user joined the group, the '%@' will be replaced with 'You'. */
 "GROUP_MESSAGE_INFO_MEMBER_ADDED_YOU" = "%@ jste byli pozváni k připojení do skupiny.";
 
@@ -1053,3 +1059,7 @@ The point that a message will disappear in a disappearing message update message
 
 /* A message indicating how the disappearing messages setting applies in a one-to-one conversation for legacy mode */
 "DISAPPERING_MESSAGES_SUBTITLE_LEGACY" = "This setting applies to everyone in this conversation.";
+
+"GROUP_MEMBERS_MIN_VERSION" = "Users must have at least Session version {version} to see invites";
+
+"CURRENT_USER" = "Current User";

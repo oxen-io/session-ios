@@ -2,8 +2,10 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 final class LandingVC: BaseVC {
+    private let dependencies: Dependencies
     
     // MARK: - Components
     
@@ -34,6 +36,18 @@ final class LandingVC: BaseVC {
     // MARK: - Settings
     
     private static let fakeChatViewHeight = isIPhone5OrSmaller ? CGFloat(234) : CGFloat(260)
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
     
     // MARK: - Lifecycle
     
@@ -110,17 +124,26 @@ final class LandingVC: BaseVC {
     // MARK: - Interaction
     
     @objc private func register() {
-        let registerVC = RegisterVC()
+        // Reset the Onboarding cache to create a new user (in case the user previously went back)
+        dependencies.set(cache: .onboarding, to: Onboarding.Cache(flow: .register, using: dependencies))
+        
+        let registerVC = RegisterVC(using: dependencies)
         navigationController!.pushViewController(registerVC, animated: true)
     }
     
     @objc private func restore() {
-        let restoreVC = RestoreVC()
+        // Reset the Onboarding cache to create a new user (in case the user previously went back)
+        dependencies.set(cache: .onboarding, to: Onboarding.Cache(flow: .loadAccount, using: dependencies))
+        
+        let restoreVC = RestoreVC(using: dependencies)
         navigationController!.pushViewController(restoreVC, animated: true)
     }
     
     @objc private func link() {
-        let linkVC = LinkDeviceVC()
+        // Reset the Onboarding cache to create a new user (in case the user previously went back)
+        dependencies.set(cache: .onboarding, to: Onboarding.Cache(flow: .link, using: dependencies))
+        
+        let linkVC = LinkDeviceVC(using: dependencies)
         navigationController!.pushViewController(linkVC, animated: true)
     }
 }

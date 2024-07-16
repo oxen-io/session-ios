@@ -1,7 +1,7 @@
 //  Copyright (c) 2018 Open Whisper Systems. All rights reserved.
 
 import Foundation
-import SignalCoreKit
+import SessionUtilitiesKit
 
 // This is intended to be a drop-in replacement for DispatchQueue
 // that processes its queue in reverse order.
@@ -47,7 +47,7 @@ public class ReverseDispatchQueue: NSObject {
             self.items.append(item)
 
             if ReverseDispatchQueue.isVerbose {
-                Logger.verbose("Enqueued[\(self.label)]: \(item.index)")
+                Log.verbose("[ReverseDispatchQueue] Enqueued[\(self.label)]: \(item.index)")
             }
 
             self.process()
@@ -64,7 +64,7 @@ public class ReverseDispatchQueue: NSObject {
                 return
             }
             if ReverseDispatchQueue.isVerbose {
-                Logger.verbose("Processing[\(self.label)]: \(item.index)")
+                Log.verbose("[ReverseDispatchQueue] Processing[\(self.label)]: \(item.index)")
             }
             item.workBlock()
 

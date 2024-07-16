@@ -1,9 +1,9 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
-import SessionUIKit
 
 final class DeletedMessageView: UIView {
     private static let iconSize: CGFloat = 18
@@ -29,7 +29,7 @@ final class DeletedMessageView: UIView {
     private func setUpViewHierarchy(textColor: ThemeValue) {
         // Image view
         let icon = UIImage(named: "ic_trash")?
-            .resizedImage(to: CGSize(
+            .resized(to: CGSize(
                 width: DeletedMessageView.iconSize,
                 height: DeletedMessageView.iconSize
             ))?

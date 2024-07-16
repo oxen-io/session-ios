@@ -1,20 +1,20 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 
-import Foundation
+import UIKit
 import SessionMessagingKit
-import SignalCoreKit
+import SessionUtilitiesKit
 
 class AddMoreRailItem: GalleryRailItem {
-    func buildRailItemView() -> UIView {
+    func buildRailItemView(using dependencies: Dependencies) -> UIView {
         let view = UIView()
         view.themeBackgroundColor = .backgroundSecondary
 
         let iconView = UIImageView(image: #imageLiteral(resourceName: "ic_plus_24").withRenderingMode(.alwaysTemplate))
         iconView.themeTintColor = .textPrimary
         view.addSubview(iconView)
-        iconView.setCompressionResistanceHigh()
-        iconView.setContentHuggingHigh()
-        iconView.autoCenterInSuperview()
+        iconView.center(in: view)
+        iconView.setContentHugging(to: .required)
+        iconView.setCompressionResistance(to: .required)
 
         return view
     }
@@ -35,7 +35,7 @@ class SignalAttachmentItem: Hashable {
     // This might be nil if the attachment is not a valid image.
     var imageEditorModel: ImageEditorModel?
 
-    init(attachment: SignalAttachment) {
+    init(attachment: SignalAttachment, using dependencies: Dependencies) {
         self.attachment = attachment
 
         // Try and make a ImageEditorModel.
@@ -45,10 +45,10 @@ class SignalAttachmentItem: Hashable {
             dataUrl.isFileURL {
             let path = dataUrl.path
             do {
-                imageEditorModel = try ImageEditorModel(srcImagePath: path)
+                imageEditorModel = try ImageEditorModel(srcImagePath: path, using: dependencies)
             } catch {
                 // Usually not an error; this usually indicates invalid input.
-                Logger.warn("Could not create image editor: \(error)")
+                Log.warn("[SignalAttachmentItem] Could not create image editor: \(error)")
             }
         }
     }
@@ -88,7 +88,7 @@ class AttachmentItemCollection {
 
     func itemAfter(item: SignalAttachmentItem) -> SignalAttachmentItem? {
         guard let currentIndex = attachmentItems.firstIndex(of: item) else {
-            owsFailDebug("currentIndex was unexpectedly nil")
+            Log.error("[AttachmentItemCollection] itemAfter currentIndex was unexpectedly nil.")
             return nil
         }
 
@@ -99,7 +99,7 @@ class AttachmentItemCollection {
 
     func itemBefore(item: SignalAttachmentItem) -> SignalAttachmentItem? {
         guard let currentIndex = attachmentItems.firstIndex(of: item) else {
-            owsFailDebug("currentIndex was unexpectedly nil")
+            Log.error("[AttachmentItemCollection] itemBefore currentIndex was unexpectedly nil.")
             return nil
         }
 

@@ -5,7 +5,7 @@ import Combine
 import Photos
 import CoreServices
 import SignalUtilitiesKit
-import SignalCoreKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 protocol PhotoLibraryDelegate: AnyObject {
@@ -138,7 +138,7 @@ class PhotoCollectionContents {
         _ = imageManager.requestImage(for: asset, targetSize: thumbnailSize, contentMode: .aspectFill, options: nil, resultHandler: resultHandler)
     }
 
-    private func requestImageDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: DataSource, dataUTI: String), Error> {
+    private func requestImageDataSource(for asset: PHAsset, using dependencies: Dependencies) -> AnyPublisher<(dataSource: (any DataSource), dataUTI: String), Error> {
         return Deferred {
             Future { [weak self] resolver in
                 
@@ -157,7 +157,7 @@ class PhotoCollectionContents {
                         return
                     }
                     
-                    guard let dataSource = DataSourceValue.dataSource(with: imageData, utiType: dataUTI) else {
+                    guard let dataSource = DataSourceValue(data: imageData, utiType: dataUTI, using: dependencies) else {
                         resolver(Result.failure(PhotoLibraryError.assertionError(description: "dataSource was unexpectedly nil")))
                         return
                     }
@@ -169,7 +169,7 @@ class PhotoCollectionContents {
         .eraseToAnyPublisher()
     }
 
-    private func requestVideoDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: DataSource, dataUTI: String), Error> {
+    private func requestVideoDataSource(for asset: PHAsset, using dependencies: Dependencies) -> AnyPublisher<(dataSource: (any DataSource), dataUTI: String), Error> {
         return Deferred {
             Future { [weak self] resolver in
                 
@@ -186,17 +186,17 @@ class PhotoCollectionContents {
                     exportSession.outputFileType = AVFileType.mp4
                     exportSession.metadataItemFilter = AVMetadataItemFilter.forSharing()
                     
-                    let exportPath = OWSFileSystem.temporaryFilePath(withFileExtension: "mp4")
+                    let exportPath = FileSystem.temporaryFilePath(fileExtension: "mp4", using: dependencies)
                     let exportURL = URL(fileURLWithPath: exportPath)
                     exportSession.outputURL = exportURL
                     
-                    Logger.debug("starting video export")
+                    Log.debug("[PhotoLibrary] Starting video export")
                     exportSession.exportAsynchronously { [weak exportSession] in
-                        Logger.debug("Completed video export")
+                        Log.debug("[PhotoLibrary] Completed video export")
                         
                         guard
                             exportSession?.status == .completed,
-                            let dataSource = DataSourcePath.dataSource(with: exportURL, shouldDeleteOnDeallocation: true)
+                            let dataSource = DataSourcePath(fileUrl: exportURL, shouldDeleteOnDeinit: true, using: dependencies)
                         else {
                             resolver(Result.failure(PhotoLibraryError.assertionError(description: "Failed to build data source for exported video URL")))
                             return
@@ -210,21 +210,21 @@ class PhotoCollectionContents {
         .eraseToAnyPublisher()
     }
 
-    func outgoingAttachment(for asset: PHAsset) -> AnyPublisher<SignalAttachment, Error> {
+    func outgoingAttachment(for asset: PHAsset, using dependencies: Dependencies) -> AnyPublisher<SignalAttachment, Error> {
         switch asset.mediaType {
             case .image:
-                return requestImageDataSource(for: asset)
+                return requestImageDataSource(for: asset, using: dependencies)
                     .map { (dataSource: DataSource, dataUTI: String) in
                         SignalAttachment
-                            .attachment(dataSource: dataSource, dataUTI: dataUTI, imageQuality: .medium)
+                            .attachment(dataSource: dataSource, dataUTI: dataUTI, imageQuality: .medium, using: dependencies)
                     }
                     .eraseToAnyPublisher()
                 
             case .video:
-                return requestVideoDataSource(for: asset)
+                return requestVideoDataSource(for: asset, using: dependencies)
                     .map { (dataSource: DataSource, dataUTI: String) in
                         SignalAttachment
-                            .attachment(dataSource: dataSource, dataUTI: dataUTI)
+                            .attachment(dataSource: dataSource, dataUTI: dataUTI, using: dependencies)
                     }
                     .eraseToAnyPublisher()
                 
@@ -316,8 +316,8 @@ class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
         }
 
         guard let photoCollection = fetchedCollection else {
-            Logger.info("Using empty photo collection.")
-            assert(PHPhotoLibrary.authorizationStatus() == .denied)
+            Log.debug("[PhotoLibrary] Using empty photo collection.")
+            Log.assert(PHPhotoLibrary.authorizationStatus() == .denied)
             return PhotoCollection.empty
         }
 
@@ -338,7 +338,7 @@ class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
             collectionIds.insert(collectionId)
 
             guard let assetCollection = collection as? PHAssetCollection else {
-                owsFailDebug("Asset collection has unexpected type: \(type(of: collection))")
+                Log.error("[PhotoLibrary] Asset collection has unexpected type: \(type(of: collection))")
                 return
             }
             let photoCollection = PhotoCollection(id: collectionId, collection: assetCollection)

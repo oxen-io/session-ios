@@ -41,22 +41,22 @@ public struct SnodeReceivedMessageInfo: Codable, FetchableRecord, MutablePersist
 // MARK: - Convenience
 
 public extension SnodeReceivedMessageInfo {
-    private static func key(for snode: LibSession.Snode, publicKey: String, namespace: SnodeAPI.Namespace) -> String {
+    private static func key(for snode: LibSession.Snode, swarmPublicKey: String, namespace: SnodeAPI.Namespace) -> String {
         guard namespace != .default else {
-            return "\(snode.address).\(publicKey)"
+            return "\(snode.address).\(swarmPublicKey)"
         }
         
-        return "\(snode.address).\(publicKey).\(namespace.rawValue)"
+        return "\(snode.address).\(swarmPublicKey).\(namespace.rawValue)"
     }
     
     init(
         snode: LibSession.Snode,
-        publicKey: String,
+        swarmPublicKey: String,
         namespace: SnodeAPI.Namespace,
         hash: String,
         expirationDateMs: Int64?
     ) {
-        self.key = SnodeReceivedMessageInfo.key(for: snode, publicKey: publicKey, namespace: namespace)
+        self.key = SnodeReceivedMessageInfo.key(for: snode, swarmPublicKey: swarmPublicKey, namespace: namespace)
         self.hash = hash
         self.expirationDateMs = (expirationDateMs ?? 0)
     }
@@ -65,79 +65,48 @@ public extension SnodeReceivedMessageInfo {
 // MARK: - GRDB Interactions
 
 public extension SnodeReceivedMessageInfo {
+    /// Delete any expired SnodeReceivedMessageInfo values associated to a specific node
     static func pruneExpiredMessageHashInfo(
+        _ db: Database,
         for snode: LibSession.Snode,
         namespace: SnodeAPI.Namespace,
-        associatedWith publicKey: String,
+        swarmPublicKey: String,
         using dependencies: Dependencies
-    ) {
-        // Delete any expired SnodeReceivedMessageInfo values associated to a specific node (even
-        // though this runs very quickly we fetch the rowIds we want to delete from a 'read' call
-        // to avoid blocking the write queue since this method is called very frequently)
-        let rowIds: [Int64] = dependencies.storage
-            .read { db in
-                // Only prune the hashes if new hashes exist for this Snode (if they don't then
-                // we don't want to clear out the legacy hashes)
-                let hasNonLegacyHash: Bool = SnodeReceivedMessageInfo
-                    .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, publicKey: publicKey, namespace: namespace))
-                    .isNotEmpty(db)
-                
-                guard hasNonLegacyHash else { return [] }
-                
-                return try SnodeReceivedMessageInfo
-                    .select(Column.rowID)
-                    .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, publicKey: publicKey, namespace: namespace))
-                    .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs <= SnodeAPI.currentOffsetTimestampMs())
-                    .asRequest(of: Int64.self)
-                    .fetchAll(db)
-            }
-            .defaulting(to: [])
+    ) throws {
+        let currentOffsetTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
+        let rowIds: [Int64] = try SnodeReceivedMessageInfo
+            .select(Column.rowID)
+            .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, swarmPublicKey: swarmPublicKey, namespace: namespace))
+            .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs <= currentOffsetTimestampMs)
+            .asRequest(of: Int64.self)
+            .fetchAll(db)
         
         // If there are no rowIds to delete then do nothing
         guard !rowIds.isEmpty else { return }
         
-        dependencies.storage.write { db in
-            try SnodeReceivedMessageInfo
-                .filter(rowIds.contains(Column.rowID))
-                .deleteAll(db)
-        }
+        try SnodeReceivedMessageInfo
+            .filter(rowIds.contains(Column.rowID))
+            .deleteAll(db)
     }
     
     /// This method fetches the last non-expired hash from the database for message retrieval
-    ///
-    /// **Note:** This method uses a `write` instead of a read because there is a single write queue for the database and it's
-    /// very common for this method to be called after the hash value has been updated but before the various `read` threads
-    /// have been updated, resulting in a pointless fetch for data the app has already received
     static func fetchLastNotExpired(
+        _ db: Database,
         for snode: LibSession.Snode,
         namespace: SnodeAPI.Namespace,
-        associatedWith publicKey: String,
+        swarmPublicKey: String,
         using dependencies: Dependencies
-    ) -> SnodeReceivedMessageInfo? {
-        return dependencies.storage.read { db in
-            let nonLegacyHash: SnodeReceivedMessageInfo? = try SnodeReceivedMessageInfo
-                .filter(
-                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == nil ||
-                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == false
-                )
-                .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, publicKey: publicKey, namespace: namespace))
-                .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs > SnodeAPI.currentOffsetTimestampMs())
-                .order(Column.rowID.desc)
-                .fetchOne(db)
-            
-            // If we have a non-legacy hash then return it immediately (legacy hashes had a different
-            // 'key' structure)
-            if nonLegacyHash != nil { return nonLegacyHash }
-            
-            return try SnodeReceivedMessageInfo
-                .filter(
-                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == nil ||
-                    SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == false
-                )
-                .filter(SnodeReceivedMessageInfo.Columns.key == publicKey)
-                .order(Column.rowID.desc)
-                .fetchOne(db)
-        }
+    ) throws -> SnodeReceivedMessageInfo? {
+        let currentOffsetTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
+        return try SnodeReceivedMessageInfo
+            .filter(
+                SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == nil ||
+                SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == false
+            )
+            .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, swarmPublicKey: swarmPublicKey, namespace: namespace))
+            .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs > currentOffsetTimestampMs)
+            .order(Column.rowID.desc)
+            .fetchOne(db)
     }
     
     /// There are some cases where the latest message can be removed from a swarm, if we then try to poll for that message the swarm

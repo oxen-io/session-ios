@@ -12,7 +12,7 @@ class PreparedRequestSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
 
-        @TestState var dependencies: Dependencies! = Dependencies()
+        @TestState var dependencies: TestDependencies! = TestDependencies()
         
         @TestState var urlRequest: URLRequest?
         @TestState var preparedRequest: Network.PreparedRequest<TestType>!
@@ -99,7 +99,7 @@ class PreparedRequestSpec: QuickSpec {
                 Just((responseInfo, jsonData))
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
-                    .decoded(as: TestType.self)
+                    .decoded(as: TestType.self, using: dependencies)
                     .sinkUntilComplete(
                         receiveValue: { result = $0 }
                     )
@@ -114,7 +114,7 @@ class PreparedRequestSpec: QuickSpec {
                 Just((responseInfo, nil))
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
-                    .decoded(as: [Int].self)
+                    .decoded(as: [Int].self, using: dependencies)
                     .mapError { error.setting(to: $0) }
                     .sinkUntilComplete()
                 
@@ -127,7 +127,7 @@ class PreparedRequestSpec: QuickSpec {
                 Just((responseInfo, Data([1, 2, 3])))
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
-                    .decoded(as: [Int].self)
+                    .decoded(as: [Int].self, using: dependencies)
                     .mapError { error.setting(to: $0) }
                     .sinkUntilComplete()
                 
@@ -140,7 +140,7 @@ class PreparedRequestSpec: QuickSpec {
                 Just((responseInfo, "{}".data(using: .utf8)))
                     .setFailureType(to: Error.self)
                     .eraseToAnyPublisher()
-                    .decoded(as: [Int].self)
+                    .decoded(as: [Int].self, using: dependencies)
                     .mapError { error.setting(to: $0) }
                     .sinkUntilComplete()
                 

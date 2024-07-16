@@ -2,11 +2,12 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 // MARK: - GalleryRailItem
 
 public protocol GalleryRailItem {
-    func buildRailItemView() -> UIView
+    func buildRailItemView(using dependencies: Dependencies) -> UIView
     func isEqual(to other: GalleryRailItem?) -> Bool
 }
 
@@ -29,8 +30,8 @@ public class GalleryRailCellView: UIView {
     
     let contentContainer: UIView = {
         let view = UIView()
-        view.autoPinToSquareAspectRatio()
         view.clipsToBounds = true
+        view.set(.width, to: .height, of: view)
 
         return view
     }()
@@ -43,7 +44,7 @@ public class GalleryRailCellView: UIView {
         layoutMargins = .zero
         clipsToBounds = false
         addSubview(contentContainer)
-        contentContainer.autoPinEdgesToSuperviewMargins()
+        contentContainer.pin(toMarginsOf: self)
         contentContainer.layer.cornerRadius = 4.8
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(didTap(sender:)))
@@ -63,7 +64,7 @@ public class GalleryRailCellView: UIView {
 
     // MARK: Content
 
-    func configure(item: GalleryRailItem, delegate: GalleryRailCellViewDelegate) {
+    func configure(item: GalleryRailItem, delegate: GalleryRailCellViewDelegate, using dependencies: Dependencies) {
         self.item = item
         self.delegate = delegate
 
@@ -71,9 +72,9 @@ public class GalleryRailCellView: UIView {
             view.removeFromSuperview()
         }
 
-        let itemView = item.buildRailItemView()
+        let itemView = item.buildRailItemView(using: dependencies)
         contentContainer.addSubview(itemView)
-        itemView.autoPinEdgesToSuperviewEdges()
+        itemView.pin(to: contentContainer)
     }
 
     // MARK: - Selected
@@ -127,14 +128,14 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         clipsToBounds = false
         
         addSubview(scrollView)
-        scrollView.autoPinEdgesToSuperviewMargins()
+        scrollView.pin(toMarginsOf: self)
         
         scrollView.addSubview(stackClippingView)
         stackClippingView.addSubview(stackView)
         
-        stackClippingView.autoPinEdgesToSuperviewEdges()
-        stackClippingView.autoMatch(.height, to: .height, of: scrollView)
-        stackView.autoPinEdgesToSuperviewEdges()
+        stackClippingView.pin(to: scrollView)
+        stackClippingView.set(.height, to: .height, of: scrollView)
+        stackView.pin(to: stackClippingView)
     }
 
     public required init?(coder aDecoder: NSCoder) {
@@ -148,7 +149,7 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         result.clipsToBounds = false
         result.layoutMargins = .zero
         result.isScrollEnabled = true
-        result.scrollIndicatorInsets = UIEdgeInsets(top: 0, leading: 0, bottom: -10, trailing: 0)
+        result.scrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: -10, right: 0)
         
         return result
     }()
@@ -171,7 +172,7 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
 
     // MARK: - Public
 
-    public func configureCellViews(album: [GalleryRailItem], focusedItem: GalleryRailItem?, cellViewBuilder: (GalleryRailItem) -> GalleryRailCellView) {
+    public func configureCellViews(album: [GalleryRailItem], focusedItem: GalleryRailItem?, using dependencies: Dependencies, cellViewBuilder: (GalleryRailItem) -> GalleryRailCellView) {
         let animationDuration: TimeInterval = 0.2
         let zippedItems = zip(album, self.cellViewItems)
 
@@ -215,6 +216,7 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         // Otherwise slide it away, recreate it and then slide it back
         let newCellViews: [GalleryRailCellView] = buildCellViews(
             items: album,
+            using: dependencies,
             cellViewBuilder: cellViewBuilder
         )
         
@@ -313,10 +315,10 @@ public class GalleryRailView: UIView, GalleryRailCellViewDelegate {
         }
     }
 
-    private func buildCellViews(items: [GalleryRailItem], cellViewBuilder: (GalleryRailItem) -> GalleryRailCellView) -> [GalleryRailCellView] {
+    private func buildCellViews(items: [GalleryRailItem], using dependencies: Dependencies, cellViewBuilder: (GalleryRailItem) -> GalleryRailCellView) -> [GalleryRailCellView] {
         return items.map { item in
             let cellView = cellViewBuilder(item)
-            cellView.configure(item: item, delegate: self)
+            cellView.configure(item: item, delegate: self, using: dependencies)
             return cellView
         }
     }

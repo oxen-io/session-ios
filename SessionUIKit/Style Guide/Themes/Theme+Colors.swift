@@ -2,12 +2,11 @@
 
 import UIKit.UIColor
 import SwiftUI
-import SessionUtilitiesKit
 
 // MARK: - Primary Colors
 
 public extension Theme {
-    enum PrimaryColor: String, Codable, CaseIterable, EnumStringSetting {
+    enum PrimaryColor: String, Codable, CaseIterable {
         case green
         case blue
         case purple

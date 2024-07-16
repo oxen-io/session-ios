@@ -13,7 +13,7 @@ class SnodeRequestSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var dependencies: Dependencies! = Dependencies()
+        @TestState var dependencies: TestDependencies! = TestDependencies()
         @TestState var batchRequest: Network.BatchRequest!
         
         // MARK: - a SnodeRequest

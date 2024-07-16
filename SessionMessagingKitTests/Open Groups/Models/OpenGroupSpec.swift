@@ -23,7 +23,6 @@ class OpenGroupSpec: QuickSpec {
                         name: "name",
                         roomDescription: nil,
                         imageId: nil,
-                        imageData: nil,
                         userCount: 0,
                         infoUpdates: 0,
                         sequenceNumber: 0,
@@ -47,7 +46,6 @@ class OpenGroupSpec: QuickSpec {
                         name: "name",
                         roomDescription: nil,
                         imageId: nil,
-                        imageData: nil,
                         userCount: 0,
                         infoUpdates: 0,
                         sequenceNumber: 0,
@@ -72,7 +70,6 @@ class OpenGroupSpec: QuickSpec {
                         name: "name",
                         roomDescription: nil,
                         imageId: nil,
-                        imageData: nil,
                         userCount: 0,
                         infoUpdates: 0,
                         sequenceNumber: 0,
@@ -81,7 +78,27 @@ class OpenGroupSpec: QuickSpec {
                     )
                     
                     expect(openGroup.debugDescription)
-                        .to(equal("OpenGroup(server: \"server\", roomToken: \"room\", id: \"server.room\", publicKey: \"1234\", isActive: true, name: \"name\", roomDescription: null, imageId: null, userCount: 0, infoUpdates: 0, sequenceNumber: 0, inboxLatestMessageId: 0, outboxLatestMessageId: 0, pollFailureCount: 0, permissions: ---)"))
+                        .to(equal("""
+                        OpenGroup(
+                            server: \"server\",
+                            roomToken: \"room\",
+                            id: \"server.room\",
+                            publicKey: \"1234\",
+                            isActive: true,
+                            name: \"name\",
+                            roomDescription: null,
+                            imageId: null,
+                            userCount: 0,
+                            infoUpdates: 0,
+                            sequenceNumber: 0,
+                            inboxLatestMessageId: 0,
+                            outboxLatestMessageId: 0,
+                            pollFailureCount: 0,
+                            permissions: ---,
+                            displayPictureFilename: null,
+                            lastDisplayPictureUpdate: 0.0
+                        )
+                        """))
                 }
             }
             

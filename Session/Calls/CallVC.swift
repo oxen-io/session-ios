@@ -12,6 +12,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     private static let floatingVideoViewWidth: CGFloat = (UIDevice.current.isIPad ? 160 : 80)
     private static let floatingVideoViewHeight: CGFloat = (UIDevice.current.isIPad ? 346: 173)
     
+    private let dependencies: Dependencies
     let call: SessionCall
     var latestKnownAudioOutputDeviceName: String?
     var durationTimer: Timer?
@@ -334,9 +335,12 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     
     // MARK: - Lifecycle
     
-    init(for call: SessionCall) {
+    init(for call: SessionCall, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.call = call
+        
         super.init(nibName: nil, bundle: nil)
+        
         setupStateChangeCallbacks()
         self.modalPresentationStyle = .overFullScreen
         self.modalTransitionStyle = .crossDissolve
@@ -430,7 +434,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         
         _ = call.videoCapturer // Force the lazy var to instantiate
         titleLabel.text = self.call.contactName
-        AppEnvironment.shared.callManager.startCall(call) { [weak self] error in
+        dependencies[singleton: .callManager].startCall(call) { [weak self] error in
             DispatchQueue.main.async {
                 if let _ = error {
                     self?.callInfoLabel.text = "Can't start a call."
@@ -520,13 +524,14 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     }
     
     private func addFloatingVideoView() {
-        guard Singleton.hasAppContext else { return }
+        guard
+            dependencies.hasInitialised(singleton: .appContext),
+            let window: UIWindow = dependencies[singleton: .appContext].mainWindow
+        else { return }
         
-        let safeAreaInsets = UIApplication.shared.keyWindow?.safeAreaInsets
-        Singleton.appContext.mainWindow?.addSubview(floatingViewContainer)
-        floatingViewContainer.autoPinEdge(toSuperviewEdge: .right, withInset: Values.smallSpacing)
-        let topMargin = (safeAreaInsets?.top ?? 0) + Values.veryLargeSpacing
-        floatingViewContainer.autoPinEdge(toSuperviewEdge: .top, withInset: topMargin)
+        window.addSubview(floatingViewContainer)
+        floatingViewContainer.pin(.top, to: .top, of: window, withInset: (window.safeAreaInsets.top + Values.veryLargeSpacing))
+        floatingViewContainer.pin(.right, to: .right, of: window, withInset: -Values.smallSpacing)
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -574,8 +579,8 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         switch UIDevice.current.orientation {
             case .portrait: rotateAllButtons(rotationAngle: 0)
             case .portraitUpsideDown: rotateAllButtons(rotationAngle: .pi)
-            case .landscapeLeft: rotateAllButtons(rotationAngle: .halfPi)
-            case .landscapeRight: rotateAllButtons(rotationAngle: .pi + .halfPi)
+            case .landscapeLeft: rotateAllButtons(rotationAngle: .pi * 0.5)
+            case .landscapeRight: rotateAllButtons(rotationAngle: .pi * 1.5)
             default: break
         }
     }
@@ -606,7 +611,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     }
     
     @objc private func answerCall() {
-        AppEnvironment.shared.callManager.answerCall(call) { [weak self] error in
+        dependencies[singleton: .callManager].answerCall(call) { [weak self] error in
             DispatchQueue.main.async {
                 if let _ = error {
                     self?.callInfoLabel.text = "Can't answer the call."
@@ -617,15 +622,17 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
     }
     
     @objc private func endCall() {
-        AppEnvironment.shared.callManager.endCall(call) { [weak self] error in
+        dependencies[singleton: .callManager].endCall(call) { [weak self, dependencies] error in
             if let _ = error {
                 self?.call.endSessionCall()
-                AppEnvironment.shared.callManager.reportCurrentCallEnded(reason: nil)
+                dependencies[singleton: .callManager].reportCurrentCallEnded(reason: nil)
             }
             
             DispatchQueue.main.async {
                 self?.conversationVC?.showInputAccessoryView()
-                self?.presentingViewController?.dismiss(animated: true, completion: nil)
+                self?.presentingViewController?.dismiss(animated: true) {
+                    self?.conversationVC?.becomeFirstResponder()
+                }
             }
         }
     }
@@ -641,7 +648,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
         self.shouldRestartCamera = false
         self.conversationVC?.showInputAccessoryView()
         
-        let miniCallView = MiniCallView(from: self)
+        let miniCallView = MiniCallView(from: self, using: dependencies)
         miniCallView.show()
         
         presentingViewController?.dismiss(animated: true, completion: nil)
@@ -659,7 +666,7 @@ final class CallVC: UIViewController, VideoPreviewDelegate {
             call.isVideoEnabled = false
         }
         else {
-            guard Permissions.requestCameraPermissionIfNeeded() else { return }
+            guard Permissions.requestCameraPermissionIfNeeded(using: dependencies) else { return }
             let previewVC = VideoPreviewVC()
             previewVC.delegate = self
             present(previewVC, animated: true, completion: nil)

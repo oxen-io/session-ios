@@ -2,11 +2,10 @@
 
 import UIKit.UIColor
 import SwiftUI
-import SessionUtilitiesKit
 
 // MARK: - Theme
 
-public enum Theme: String, CaseIterable, Codable, EnumStringSetting {
+public enum Theme: String, CaseIterable, Codable {
     case classicDark = "classic_dark"
     case classicLight = "classic_light"
     case oceanDark = "ocean_dark"
@@ -106,10 +105,10 @@ public protocol ThemedNavigation {
 
 // MARK: - ThemeValue
 
-public indirect enum ThemeValue: Hashable {
+public indirect enum ThemeValue: Hashable, Equatable {
     case value(ThemeValue, alpha: CGFloat)
     
-    // The 'highlighted' state of a colour will automatically lighten/darken a ThemeValue
+    // The 'highlighted' state of a color will automatically lighten/darken a ThemeValue
     // by a fixed amount depending on wither the theme is dark/light mode
     case highlighted(ThemeValue, alwaysDarken: Bool)
     

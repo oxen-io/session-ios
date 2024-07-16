@@ -12,16 +12,17 @@ public final class BackgroundPoller {
     public static var isValid: Bool = false
 
     public static func poll(
-        completionHandler: @escaping (UIBackgroundFetchResult) -> Void,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies,
+        completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        let (groupIds, servers): (Set<String>, Set<String>) = Storage.shared.read { db in
+        let (groupIds, servers): (Set<String>, Set<String>) = dependencies[singleton: .storage]
+            .read { db in
                 (
                     try ClosedGroup
                         .select(.threadId)
                         .joining(
                             required: ClosedGroup.members
-                                .filter(GroupMember.Columns.profileId == getUserHexEncodedPublicKey(db))
+                                .filter(GroupMember.Columns.profileId == dependencies[cache: .general].sessionId.hexString)
                         )
                         .asRequest(of: String.self)
                         .fetchSet(db),
@@ -77,18 +78,13 @@ public final class BackgroundPoller {
     private static func pollForMessages(
         using dependencies: Dependencies
     ) -> AnyPublisher<Void, Error> {
-        let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
-
-        return CurrentUserPoller().poll(
+        return dependencies[singleton: .currentUserPoller].poll(
             namespaces: CurrentUserPoller.namespaces,
-            for: userPublicKey,
             calledFromBackgroundPoller: true,
-            isBackgroundPollValid: { BackgroundPoller.isValid },
-            drainBehaviour: .alwaysRandom,
-            using: dependencies
+            isBackgroundPollValid: { BackgroundPoller.isValid }
         )
         .handleEvents(
-            receiveOutput: { _, _, validMessageCount, _ in
+            receiveOutput: { _, _, _, validMessageCount, _ in
                 Log.info("[BackgroundPoller] Received \(validMessageCount) valid \("message", number: validMessageCount).")
             }
         )
@@ -102,24 +98,22 @@ public final class BackgroundPoller {
     ) -> [AnyPublisher<Void, Error>] {
         // Fetch all closed groups (excluding any don't contain the current user as a
         // GroupMemeber as the user is no longer a member of those)
-        return groupIds.map { groupPublicKey in
-            return ClosedGroupPoller()
-                .poll(
-                    namespaces: ClosedGroupPoller.namespaces,
-                    for: groupPublicKey,
+        return groupIds
+            .map { publicKey in dependencies.mutate(cache: .groupPollers) { $0.getOrCreatePoller(for: publicKey) } }
+            .map { poller in
+                poller.poll(
+                    namespaces: GroupPoller.namespaces,
                     calledFromBackgroundPoller: true,
-                    isBackgroundPollValid: { BackgroundPoller.isValid },
-                    drainBehaviour: .alwaysRandom,
-                    using: dependencies
+                    isBackgroundPollValid: { BackgroundPoller.isValid }
                 )
                 .handleEvents(
-                    receiveOutput: { _, _, validMessageCount, _ in
-                        Log.info("[BackgroundPoller] Received \(validMessageCount) valid \("message", number: validMessageCount) for group: \(groupPublicKey).")
+                    receiveOutput: { _, _, _, validMessageCount, _ in
+                        Log.info("[BackgroundPoller] Received \(validMessageCount) valid \("message", number: validMessageCount) for group: \(poller.swarmPublicKey).")
                     }
                 )
                 .map { _ in () }
                 .eraseToAnyPublisher()
-        }
+            }
     }
     
     private static func pollForCommunityMessages(

@@ -1,10 +1,11 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
+//
+// stringlint:disable
 
 import UIKit
 import SessionUIKit
-import SignalCoreKit
+import SessionUtilitiesKit
 
-@objc
 public protocol VAlignTextViewDelegate: AnyObject {
     func textViewDidComplete()
 }
@@ -47,7 +48,7 @@ private class VAlignTextView: UITextView {
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     deinit {
@@ -60,9 +61,9 @@ private class VAlignTextView: UITextView {
         case .top:
             topOffset = 0
         case .center:
-            topOffset = max(0, (self.height() - contentSize.height) * 0.5)
+            topOffset = max(0, (self.bounds.height - contentSize.height) * 0.5)
         case .bottom:
-            topOffset = max(0, self.height() - contentSize.height)
+            topOffset = max(0, self.bounds.height - contentSize.height)
         }
         contentInset = UIEdgeInsets(top: topOffset, leading: 0, bottom: 0, trailing: 0)
     }
@@ -82,15 +83,12 @@ private class VAlignTextView: UITextView {
 
     @objc
     public func modifiedReturnPressed(sender: UIKeyCommand) {
-        Logger.verbose("")
-
         self.textViewDelegate?.textViewDidComplete()
     }
 }
 
 // MARK: -
 
-@objc
 public protocol ImageEditorTextViewControllerDelegate: AnyObject {
     func textEditDidComplete(textItem: ImageEditorTextItem)
     func textEditDidDelete(textItem: ImageEditorTextItem)
@@ -139,7 +137,7 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
 
     @available(*, unavailable, message: "use other init() instead.")
     required public init?(coder aDecoder: NSCoder) {
-        notImplemented()
+        fatalError("init(coder:) has not been implemented")
     }
 
     // MARK: - View Lifecycle
@@ -177,7 +175,7 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
         tintView.alpha = 0
         self.view.addSubview(tintView)
         
-        tintView.autoPinEdgesToSuperviewEdges()
+        tintView.pin(to: self.view)
         
         UIView.animate(withDuration: 0.25) {
             tintView.alpha = 0.4
@@ -188,16 +186,16 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
         self.view.layoutMargins = UIEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
 
         self.view.addSubview(textView)
-        textView.autoPinTopToSuperviewMargin()
-        textView.autoHCenterInSuperview()
-        self.autoPinView(toBottomOfViewControllerOrKeyboard: textView, avoidNotch: true)
+        textView.pin(.top, to: .top, of: view.layoutMarginsGuide)
+        textView.center(.horizontal, in: view)
+        self.pinViewToBottomOfViewControllerOrKeyboard(textView, avoidNotch: true)
 
         paletteView.delegate = self
         self.view.addSubview(paletteView)
-        paletteView.autoAlignAxis(.horizontal, toSameAxisOf: textView)
-        paletteView.autoPinEdge(toSuperviewEdge: .trailing, withInset: 0)
+        paletteView.center(.horizontal, in: textView)
+        paletteView.pin(.trailing, to: .trailing, of: self.view)
         // This will determine the text view's size.
-        paletteView.autoPinEdge(.leading, to: .trailing, of: textView, withOffset: 0)
+        paletteView.pin(.leading, to: .trailing, of: textView)
 
         let pinchGestureRecognizer = ImageEditorPinchGestureRecognizer(target: self, action: #selector(handlePinchGesture(_:)))
         pinchGestureRecognizer.referenceView = view
@@ -248,7 +246,7 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
 
     @objc
     public func handlePinchGesture(_ gestureRecognizer: ImageEditorPinchGestureRecognizer) {
-        AssertIsOnMainThread()
+        Log.assertOnMainThread()
 
         switch gestureRecognizer.state {
         case .began:
@@ -274,8 +272,6 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
     // MARK: - Events
 
     @objc func didTapUndo(sender: UIButton) {
-        Logger.verbose("")
-
         self.delegate?.textEditDidCancel()
 
         self.dismiss(animated: false) {
@@ -284,8 +280,6 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
     }
 
     @objc func didTapDone(sender: UIButton) {
-        Logger.verbose("")
-
         completeAndDismiss()
     }
 
@@ -298,7 +292,7 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
 
             // Ensure continuity of the new text item's location
             // with its apparent location in this text editor.
-            let locationInView = view.convert(textView.bounds.center, from: textView).clamp(view.bounds)
+            let locationInView = view.convert(textView.bounds.center, from: textView).clamp(to: view.bounds)
             let textCenterImageUnit = ImageEditorCanvasView.locationImageUnit(forLocationInView: locationInView,
                                                                               viewBounds: viewBounds,
                                                                               model: model,
@@ -308,7 +302,7 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
             let imageFrame = ImageEditorCanvasView.imageFrame(forViewSize: viewBounds.size,
                                                               imageSize: model.srcImageSizePixels,
                                                               transform: model.currentTransform())
-            let unitWidth = textView.width() / imageFrame.width
+            let unitWidth = textView.bounds.width / imageFrame.width
             newTextItem = textItem.copy(unitCenter: textCenterImageUnit).copy(unitWidth: unitWidth)
         }
 
@@ -316,19 +310,18 @@ public class ImageEditorTextViewController: OWSViewController, VAlignTextViewDel
         if let newFont = textView.font {
             font = newFont
         } else {
-            owsFailDebug("Missing font.")
+            Log.error("[ImageEditorTextViewController] Missing font.")
         }
         newTextItem = newTextItem.copy(font: font)
 
-        guard let text = textView.text?.ows_stripped(),
-            text.count > 0 else {
-                self.delegate?.textEditDidDelete(textItem: textItem)
+        guard let text = textView.text?.stripped, text.count > 0 else {
+            self.delegate?.textEditDidDelete(textItem: textItem)
 
-                self.dismiss(animated: false) {
-                    // Do nothing.
-                }
+            self.dismiss(animated: false) {
+                // Do nothing.
+            }
 
-                return
+            return
         }
 
         newTextItem = newTextItem.copy(withText: text, color: paletteView.selectedValue)

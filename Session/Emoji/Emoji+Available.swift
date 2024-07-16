@@ -2,22 +2,24 @@
 //
 // stringlint:disable
 
-import Foundation
-import SignalCoreKit
+import UIKit
 import SessionUtilitiesKit
 
 extension Emoji {
     private static let availableCache: Atomic<[Emoji:Bool]> = Atomic([:])
     private static let iosVersionKey = "iosVersion"
-    private static let cacheUrl = URL(fileURLWithPath: OWSFileSystem.appSharedDataDirectoryPath())
+    private static let cacheUrl = URL(fileURLWithPath: FileManager.default.appSharedDataDirectoryPath)
         .appendingPathComponent("Library")
         .appendingPathComponent("Caches")
         .appendingPathComponent("emoji.plist")
 
-    static func warmAvailableCache() {
-        owsAssertDebug(!Thread.isMainThread)
+    static func warmAvailableCache(using dependencies: Dependencies) {
+        Log.assertOnMainThread()
 
-        guard Singleton.hasAppContext && Singleton.appContext.isMainAppAndActive else { return }
+        guard
+            dependencies.hasInitialised(singleton: .appContext) &&
+            dependencies[singleton: .appContext].isMainAppAndActive
+        else { return }
 
         var availableCache = [Emoji: Bool]()
         var uncachedEmoji = [Emoji]()
@@ -29,28 +31,28 @@ extension Emoji {
         do {
             availableMap = try NSMutableDictionary(contentsOf: Self.cacheUrl, error: ())
         } catch {
-            Logger.info("Re-building emoji availability cache. Cache could not be loaded. \(error)")
+            Log.info("[Emoji] Re-building emoji availability cache. Cache could not be loaded. \(error)")
             uncachedEmoji = Emoji.allCases
         }
 
         let lastIosVersion = availableMap[iosVersionKey] as? String
         if lastIosVersion == iosVersion {
-            Logger.debug("Loading emoji availability cache (expect \(Emoji.allCases.count) items, found \(availableMap.count - 1)).")
+            Log.debug("[Emoji] Loading emoji availability cache (expect \(Emoji.allCases.count) items, found \(availableMap.count - 1)).")
             for emoji in Emoji.allCases {
                 if let available = availableMap[emoji.rawValue] as? Bool {
                     availableCache[emoji] = available
                 } else {
-                    Logger.warn("Emoji unexpectedly missing from cache: \(emoji).")
+                    Log.warn("[Emoji] Emoji unexpectedly missing from cache: \(emoji).")
                     uncachedEmoji.append(emoji)
                 }
             }
         } else if uncachedEmoji.isEmpty {
-            Logger.info("Re-building emoji availability cache. iOS version upgraded from \(lastIosVersion ?? "(none)") -> \(iosVersion)")
+            Log.info("[Emoji] Re-building emoji availability cache. iOS version upgraded from \(lastIosVersion ?? "(none)") -> \(iosVersion)")
             uncachedEmoji = Emoji.allCases
         }
 
         if !uncachedEmoji.isEmpty {
-            Logger.info("Checking emoji availability for \(uncachedEmoji.count) uncached emoji")
+            Log.info("[Emoji] Checking emoji availability for \(uncachedEmoji.count) uncached emoji")
             uncachedEmoji.forEach {
                 let available = isEmojiAvailable($0)
                 availableMap[$0.rawValue] = available
@@ -59,17 +61,17 @@ extension Emoji {
 
             availableMap[iosVersionKey] = iosVersion
             do {
-                // Use FileManager.createDirectory directly because OWSFileSystem.ensureDirectoryExists
+                // Use FileManager.createDirectory directly because FileSystem.ensureDirectoryExists
                 // can modify the protection, and this is a system-managed directory.
                 try FileManager.default.createDirectory(at: Self.cacheUrl.deletingLastPathComponent(),
                                                         withIntermediateDirectories: true)
                 try availableMap.write(to: Self.cacheUrl)
             } catch {
-                Logger.warn("Failed to save emoji availability cache; it will be recomputed next time! \(error)")
+                Log.warn("[Emoji] Failed to save emoji availability cache; it will be recomputed next time! \(error)")
             }
         }
 
-        Logger.info("Warmed emoji availability cache with \(availableCache.lazy.filter { $0.value }.count) available emoji for iOS \(iosVersion)")
+        Log.info("[Emoji] Warmed emoji availability cache with \(availableCache.lazy.filter { $0.value }.count) available emoji for iOS \(iosVersion)")
 
         Self.availableCache.mutate{ $0 = availableCache }
     }

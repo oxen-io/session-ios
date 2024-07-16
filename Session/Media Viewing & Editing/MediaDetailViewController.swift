@@ -7,7 +7,6 @@ import YYImage
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionMessagingKit
-import SignalCoreKit
 import SessionUtilitiesKit
 
 public enum MediaGalleryOption {
@@ -16,6 +15,7 @@ public enum MediaGalleryOption {
 }
 
 class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
+    private let dependencies: Dependencies
     public let galleryItem: MediaGalleryViewModel.Item
     public weak var delegate: MediaDetailViewControllerDelegate?
     private var image: UIImage?
@@ -46,7 +46,7 @@ class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
         result.addTarget(self, action: #selector(playVideo), for: .touchUpInside)
         result.alpha = 0
         
-        let playButtonSize: CGFloat = ScaleFromIPhone5(70)
+        let playButtonSize: CGFloat = Values.scaleFromIPhone5(70)
         result.set(.width, to: playButtonSize)
         result.set(.height, to: playButtonSize)
         
@@ -57,8 +57,10 @@ class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
     
     init(
         galleryItem: MediaGalleryViewModel.Item,
-        delegate: MediaDetailViewControllerDelegate? = nil
+        delegate: MediaDetailViewControllerDelegate? = nil,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.galleryItem = galleryItem
         self.delegate = delegate
         
@@ -67,6 +69,7 @@ class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
         // We cache the image data in case the attachment stream is deleted.
         galleryItem.attachment.thumbnail(
             size: .large,
+            using: dependencies,
             success: { [weak self] image, _ in
                 // Only reload the content if the view has already loaded (if it
                 // hasn't then it'll load with the image immediately)
@@ -200,7 +203,7 @@ class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
         self.scrollView.zoomScale = 1
         
         if self.galleryItem.attachment.isAnimated {
-            if self.galleryItem.attachment.isValid, let originalFilePath: String = self.galleryItem.attachment.originalFilePath {
+            if self.galleryItem.attachment.isValid, let originalFilePath: String = self.galleryItem.attachment.originalFilePath(using: dependencies) {
                 let animatedView: YYAnimatedImageView = YYAnimatedImageView()
                 animatedView.autoPlayAnimatedImage = false
                 animatedView.image = YYImage(contentsOfFile: originalFilePath)
@@ -345,7 +348,7 @@ class MediaDetailViewController: OWSViewController, UIScrollViewDelegate {
 
     @objc public func playVideo() {
         guard
-            let originalFilePath: String = self.galleryItem.attachment.originalFilePath,
+            let originalFilePath: String = self.galleryItem.attachment.originalFilePath(using: dependencies),
             FileManager.default.fileExists(atPath: originalFilePath)
         else { return SNLog("Missing video file") }
         

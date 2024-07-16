@@ -51,7 +51,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         case linkPreview
         case linkPreviewAttachment
 
-        case currentUserPublicKey
+        case currentUserSessionId
 
         // Post-Query Processing Data
 
@@ -70,8 +70,8 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         case isOnlyMessageInCluster
         case isLast
         case isLastOutgoing
-        case currentUserBlinded15PublicKey
-        case currentUserBlinded25PublicKey
+        case currentUserBlinded15SessionId
+        case currentUserBlinded25SessionId
         case optimisticMessageId
     }
     
@@ -134,7 +134,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     public let linkPreview: LinkPreview?
     public let linkPreviewAttachment: Attachment?
     
-    public let currentUserPublicKey: String
+    public let currentUserSessionId: String
     
     // Post-Query Processing Data
     
@@ -166,10 +166,12 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     public let shouldShowDateHeader: Bool
     
     /// This value will be used to populate the Context Menu and date header (if present)
-    public var dateForUI: Date { Date(timeIntervalSince1970: (TimeInterval(self.timestampMs) / 1000)) }
+    public var dateForUI: Date { Date(timeIntervalSince1970: TimeInterval(Double(self.timestampMs) / 1000)) }
     
     /// This value will be used to populate the Message Info (if present)
-    public var receivedDateForUI: Date { Date(timeIntervalSince1970: (TimeInterval(self.receivedAtTimestampMs) / 1000)) }
+    public var receivedDateForUI: Date {
+        Date(timeIntervalSince1970: TimeInterval(Double(self.receivedAtTimestampMs) / 1000))
+    }
     
     /// This value specifies whether the body contains only emoji characters
     public let containsOnlyEmoji: Bool?
@@ -191,11 +193,11 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     
     public let isLastOutgoing: Bool
     
-    /// This is the users blinded15 key (will only be set for messages within open groups)
-    public let currentUserBlinded15PublicKey: String?
+    /// This is the users blinded15 sessionId hex string (will only be set for messages within open groups)
+    public let currentUserBlinded15SessionId: String?
     
-    /// This is the users blinded25 key (will only be set for messages within open groups)
-    public let currentUserBlinded25PublicKey: String?
+    /// This is the users blinded25 sessionId hex string (will only be set for messages within open groups)
+    public let currentUserBlinded25SessionId: String?
     
     /// This is a temporary id used before an outgoing message is persisted into the database
     public let optimisticMessageId: UUID?
@@ -239,7 +241,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             quoteAttachment: self.quoteAttachment,
             linkPreview: self.linkPreview,
             linkPreviewAttachment: self.linkPreviewAttachment,
-            currentUserPublicKey: self.currentUserPublicKey,
+            currentUserSessionId: self.currentUserSessionId,
             attachments: (attachments ?? self.attachments),
             reactionInfo: (reactionInfo ?? self.reactionInfo),
             cellType: self.cellType,
@@ -255,8 +257,8 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             isOnlyMessageInCluster: self.isOnlyMessageInCluster,
             isLast: self.isLast,
             isLastOutgoing: self.isLastOutgoing,
-            currentUserBlinded15PublicKey: self.currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: self.currentUserBlinded25PublicKey,
+            currentUserBlinded15SessionId: self.currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: self.currentUserBlinded25SessionId,
             optimisticMessageId: self.optimisticMessageId
         )
     }
@@ -266,8 +268,9 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         nextModel: MessageViewModel?,
         isLast: Bool,
         isLastOutgoing: Bool,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?,
+        using dependencies: Dependencies
     ) -> MessageViewModel {
         let cellType: CellType = {
             guard self.isTypingIndicator != true else { return .typingIndicator }
@@ -418,7 +421,8 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
                         )
                     },
                     attachmentCount: self.attachments?.count,
-                    isOpenGroupInvitation: (self.linkPreview?.variant == .openGroupInvitation)
+                    isOpenGroupInvitation: (self.linkPreview?.variant == .openGroupInvitation),
+                    using: dependencies
                 )
             ),
             rawBody: self.body,
@@ -434,7 +438,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             quoteAttachment: self.quoteAttachment,
             linkPreview: self.linkPreview,
             linkPreviewAttachment: self.linkPreviewAttachment,
-            currentUserPublicKey: self.currentUserPublicKey,
+            currentUserSessionId: self.currentUserSessionId,
             attachments: self.attachments,
             reactionInfo: self.reactionInfo,
             cellType: cellType,
@@ -485,9 +489,45 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             isOnlyMessageInCluster: isOnlyMessageInCluster,
             isLast: isLast,
             isLastOutgoing: isLastOutgoing,
-            currentUserBlinded15PublicKey: currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: currentUserBlinded25PublicKey,
+            currentUserBlinded15SessionId: currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: currentUserBlinded25SessionId,
             optimisticMessageId: self.optimisticMessageId
+        )
+    }
+    
+    // MARK: - Functions
+    
+    public func attributedBody(using dependencies: Dependencies) -> NSAttributedString? {
+        let authorDisplayName: String = Profile.displayName(
+            for: self.threadVariant,
+            id: self.authorId,
+            name: self.authorNameInternal,
+            nickname: nil,      // Folded into 'authorName' within the Query
+            suppressId: false   // Show the id next to the author name if desired
+        )
+        
+        return Interaction.attributedPreviewText(
+            variant: self.variant,
+            body: self.body,
+            threadContactDisplayName: Profile.displayName(
+                for: self.threadVariant,
+                id: self.threadId,
+                name: self.threadContactNameInternal,
+                nickname: nil,      // Folded into 'threadContactNameInternal' within the Query
+                suppressId: false   // Show the id next to the author name if desired
+            ),
+            authorDisplayName: authorDisplayName,
+            attachmentDescriptionInfo: self.attachments?.first.map { firstAttachment in
+                Attachment.DescriptionInfo(
+                    id: firstAttachment.id,
+                    variant: firstAttachment.variant,
+                    contentType: firstAttachment.contentType,
+                    sourceFilename: firstAttachment.sourceFilename
+                )
+            },
+            attachmentCount: self.attachments?.count,
+            isOpenGroupInvitation: (self.linkPreview?.variant == .openGroupInvitation),
+            using: dependencies
         )
     }
 }
@@ -516,7 +556,7 @@ public extension MessageViewModel {
     }
     
     func canDoFollowingSetting() -> Bool {
-        guard self.authorId != self.currentUserPublicKey else { return false }
+        guard self.authorId != self.currentUserSessionId else { return false }
         guard self.threadVariant == .contact else { return false }
         return self.messageDisappearingConfiguration() != self.threadDisappearingConfiguration()
     }
@@ -660,7 +700,7 @@ public extension MessageViewModel {
         self.quoteAttachment = nil
         self.linkPreview = nil
         self.linkPreviewAttachment = nil
-        self.currentUserPublicKey = ""
+        self.currentUserSessionId = ""
         self.attachments = nil
         self.reactionInfo = nil
         
@@ -679,8 +719,8 @@ public extension MessageViewModel {
         self.isOnlyMessageInCluster = true
         self.isLast = isLast
         self.isLastOutgoing = isLastOutgoing
-        self.currentUserBlinded15PublicKey = nil
-        self.currentUserBlinded25PublicKey = nil
+        self.currentUserBlinded15SessionId = nil
+        self.currentUserBlinded25SessionId = nil
         self.optimisticMessageId = nil
     }
     
@@ -744,7 +784,7 @@ public extension MessageViewModel {
         self.quoteAttachment = quoteAttachment
         self.linkPreview = linkPreview
         self.linkPreviewAttachment = linkPreviewAttachment
-        self.currentUserPublicKey = currentUserProfile.id
+        self.currentUserSessionId = currentUserProfile.id
         self.attachments = attachments
         self.reactionInfo = nil
         
@@ -763,8 +803,8 @@ public extension MessageViewModel {
         self.isOnlyMessageInCluster = true
         self.isLast = false
         self.isLastOutgoing = false
-        self.currentUserBlinded15PublicKey = nil
-        self.currentUserBlinded25PublicKey = nil
+        self.currentUserBlinded15SessionId = nil
+        self.currentUserBlinded25SessionId = nil
         self.optimisticMessageId = optimisticMessageId
     }
 }
@@ -800,8 +840,8 @@ extension MessageViewModel {
     }
     
     fileprivate static func shouldShowDateBreak(between timestamp1: Int64, and timestamp2: Int64) -> Bool {
-        let date1: Date = Date(timeIntervalSince1970: (TimeInterval(timestamp1) / 1000))
-        let date2: Date = Date(timeIntervalSince1970: (TimeInterval(timestamp2) / 1000))
+        let date1: Date = Date(timeIntervalSince1970: TimeInterval(Double(timestamp1) / 1000))
+        let date2: Date = Date(timeIntervalSince1970: TimeInterval(Double(timestamp2) / 1000))
         
         return ((minutesFrom(date1, to: date2) ?? 0) > maxMinutesBetweenTwoDateBreaks)
     }
@@ -831,9 +871,9 @@ public extension MessageViewModel {
     }()
     
     static func baseQuery(
-        userPublicKey: String,
-        blinded15PublicKey: String?,
-        blinded25PublicKey: String?,
+        userSessionId: SessionId,
+        blinded15SessionId: SessionId?,
+        blinded25SessionId: SessionId?,
         orderSQL: SQL,
         groupSQL: SQL?
     ) -> (([Int64]) -> AdaptedFetchRequest<SQLRequest<MessageViewModel>>) {
@@ -910,7 +950,7 @@ public extension MessageViewModel {
                     \(linkPreview.allColumns),
                     \(linkPreviewAttachment.allColumns),
                     
-                    \(SQL("\(userPublicKey)")) AS \(ViewModel.Columns.currentUserPublicKey),
+                    \(SQL("\(userSessionId.hexString)")) AS \(ViewModel.Columns.currentUserSessionId),
             
                     -- All of the below properties are set in post-query processing but to prevent the
                     -- query from crashing when decoding we need to provide default values
@@ -937,10 +977,10 @@ public extension MessageViewModel {
                         \(quoteInteraction[.authorId]) = \(quote[.authorId]) OR (
                             -- A users outgoing message is stored in some cases using their standard id
                             -- but the quote will use their blinded id so handle that case
-                            \(quoteInteraction[.authorId]) = \(userPublicKey) AND
+                            \(quoteInteraction[.authorId]) = \(userSessionId.hexString) AND
                             (
-                                \(quote[.authorId]) = \(blinded15PublicKey ?? "''") OR
-                                \(quote[.authorId]) = \(blinded25PublicKey ?? "''")
+                                \(quote[.authorId]) = \(blinded15SessionId?.hexString ?? "''") OR
+                                \(quote[.authorId]) = \(blinded25SessionId?.hexString ?? "''")
                             )
                         )
                     )

@@ -12,8 +12,15 @@ public extension Identity {
     /// One case which can happen is if the app crashed during onboarding the user can be left in an invalid
     /// state (ie. with no display name) - the user would be asked to enter one on a subsequent launch to
     /// resolve the invalid state
-    static func userCompletedRequiredOnboarding(_ db: Database? = nil) -> Bool {
-        Identity.userExists(db) &&
-        !Profile.fetchOrCreateCurrentUser(db).name.isEmpty
+    static func userCompletedRequiredOnboarding(
+        _ db: Database? = nil,
+        using dependencies: Dependencies
+    ) -> Bool {
+        guard Identity.userExists(db, using: dependencies) else { return false }
+        
+        switch db {
+            case .none: return !Profile.fetchOrCreateCurrentUser(using: dependencies).name.isEmpty
+            case .some(let db): return !Profile.fetchOrCreateCurrentUser(db, using: dependencies).name.isEmpty
+        }
     }
 }

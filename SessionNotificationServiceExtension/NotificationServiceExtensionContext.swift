@@ -2,38 +2,40 @@
 //
 // stringlint:disable
 
-import Foundation
+import UIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class NotificationServiceExtensionContext: AppContext {
+    private let dependencies: Dependencies
     var _temporaryDirectory: String?
-    
     let appLaunchTime: Date = Date()
     let reportedApplicationState: UIApplication.State = .background
-    let isRTL: Bool = false
     
     var openSystemSettingsAction: UIAlertAction?
     var wasWokenUpByPushNotification = true
-
     var shouldProcessIncomingMessages: Bool { true }
-
-    lazy var buildTime: Date = {
-        guard let buildTimestamp = Bundle.main.object(forInfoDictionaryKey: "BuildTimestamp") as? TimeInterval, buildTimestamp > 0 else {
-            SNLog("No build timestamp; assuming app never expires.")
-            return .distantFuture
-        }
-        return .init(timeIntervalSince1970: buildTimestamp)
-    }()
 
     func canPresentNotifications() -> Bool { true }
     func mainApplicationStateOnLaunch() -> UIApplication.State { .inactive }
+    
+    // MARK: - Initialization
+
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        self.createTemporaryDirectory()
+    }
 
     // MARK: - Currently Unused
 
     var mainWindow: UIWindow?
 
-    func frontmostViewController() -> UIViewController? { nil }
-    func setNetworkActivityIndicatorVisible(_ value: Bool) { }
-    func setStatusBarHidden(_ isHidden: Bool, animated isAnimated: Bool) { }
+    static func determineDeviceRTL() -> Bool { false }
+    
+    // MARK: - Temporary Directories
+    
+    var temporaryDirectory: String { temporaryDirectory(using: dependencies) }
+    var temporaryDirectoryAccessibleAfterFirstAuth: String {
+        temporaryDirectoryAccessibleAfterFirstAuth(using: dependencies)
+    }
 }

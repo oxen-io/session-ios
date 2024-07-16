@@ -1,63 +1,72 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import SessionUtilitiesKit
 import SessionMessagingKit
-import SignalCoreKit
 import SessionUIKit
 
-public struct SessionApp {
-    // FIXME: Refactor this to be protocol based for unit testing (or even dynamic based on view hierarchy - do want to avoid needing to use the main thread to access them though)
-    static let homeViewController: Atomic<HomeVC?> = Atomic(nil)
-    static let currentlyOpenConversationViewController: Atomic<ConversationVC?> = Atomic(nil)
+// MARK: - Singleton
+
+public extension Singleton {
+    static let app: SingletonConfig<SessionAppType> = Dependencies.create(
+        identifier: "app",
+        createInstance: { dependencies in SessionApp(using: dependencies) }
+    )
+}
+
+// MARK: - SessionApp
+
+public class SessionApp: SessionAppType {
+    private let dependencies: Dependencies
+    private var homeViewController: HomeVC?
     
-    static var versionInfo: String {
-        let buildNumber: String = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String)
-            .map { " (\($0))" }
-            .defaulting(to: "")
-        let appVersion: String? = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
-            .map { "App: \($0)\(buildNumber)" }
-        #if DEBUG
-        let commitInfo: String? = (Bundle.main.infoDictionary?["GitCommitHash"] as? String).map { "Commit: \($0)" }
-        #else
-        let commitInfo: String? = nil
-        #endif
-        
-        let versionInfo: [String] = [
-            "iOS \(UIDevice.current.systemVersion)",
-            appVersion,
-            "libSession: \(LibSession.libSessionVersion)",
-            commitInfo
-        ].compactMap { $0 }
-        
-        return versionInfo.joined(separator: ", ")
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
     }
     
-    // MARK: - View Convenience Methods
+    // MARK: - Functions
     
-    public static func presentConversationCreatingIfNeeded(
+    public func setHomeViewController(_ homeViewController: HomeVC) {
+        self.homeViewController = homeViewController
+    }
+    
+    public func showHomeView() {
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.async {
+                self.showHomeView()
+            }
+        }
+        
+        let homeViewController: HomeVC = HomeVC(using: dependencies)
+        let navController: UINavigationController = StyledNavigationController(rootViewController: homeViewController)
+        (UIApplication.shared.delegate as? AppDelegate)?.window?.rootViewController = navController
+        self.homeViewController = homeViewController
+    }
+    
+    public func presentConversationCreatingIfNeeded(
         for threadId: String,
         variant: SessionThread.Variant,
-        action: ConversationViewModel.Action = .none,
         dismissing presentingViewController: UIViewController?,
         animated: Bool
     ) {
-        let threadInfo: (threadExists: Bool, isMessageRequest: Bool)? = Storage.shared.read { db in
+        guard let homeViewController: HomeVC = self.homeViewController else {
+            Log.error("[SessionApp] Unable to present conversation due to missing HomeVC.")
+            return
+        }
+        
+        let threadInfo: (threadExists: Bool, isMessageRequest: Bool)? = dependencies[singleton: .storage].read { [dependencies] db in
             let isMessageRequest: Bool = {
                 switch variant {
-                    case .contact:
+                    case .contact, .group:
                         return SessionThread
                             .isMessageRequest(
-                                id: threadId,
-                                variant: .contact,
-                                currentUserPublicKey: getUserHexEncodedPublicKey(db),
-                                shouldBeVisible: nil,
-                                contactIsApproved: (try? Contact
-                                    .filter(id: threadId)
-                                    .select(.isApproved)
-                                    .asRequest(of: Bool.self)
-                                    .fetchOne(db))
-                                    .defaulting(to: false),
+                                db,
+                                threadId: threadId,
+                                userSessionId: dependencies[cache: .general].sessionId,
                                 includeNonVisible: true
                             )
                         
@@ -68,73 +77,140 @@ public struct SessionApp {
             return (SessionThread.filter(id: threadId).isNotEmpty(db), isMessageRequest)
         }
         
-        // Store the post-creation logic in a closure to avoid duplication
-        let afterThreadCreated: () -> () = {
-            presentingViewController?.dismiss(animated: true, completion: nil)
-            
-            homeViewController.wrappedValue?.show(
-                threadId,
-                variant: variant,
-                isMessageRequest: (threadInfo?.isMessageRequest == true),
-                with: action,
-                focusedInteractionInfo: nil,
-                animated: animated
-            )
-        }
-        
         /// The thread should generally exist at the time of calling this method, but on the off chance it doesn't then we need to `fetchOrCreate` it and
         /// should do it on a background thread just in case something is keeping the DBWrite thread busy as in the past this could cause the app to hang
-        guard threadInfo?.threadExists == true else {
-            DispatchQueue.global(qos: .userInitiated).async {
-                Storage.shared.write { db in
-                    try SessionThread.fetchOrCreate(db, id: threadId, variant: variant, shouldBeVisible: nil)
-                }
-
-                // Send back to main thread for UI transitions
-                DispatchQueue.main.async {
-                    afterThreadCreated()
-                }
+        creatingThreadIfNeededThenRunOnMain(
+            threadId: threadId,
+            variant: variant,
+            threadExists: (threadInfo?.threadExists == true),
+            onComplete: { [weak self] in
+                self?.showConversation(
+                    threadId: threadId,
+                    threadVariant: variant,
+                    isMessageRequest: (threadInfo?.isMessageRequest == true),
+                    dismissing: presentingViewController,
+                    homeViewController: homeViewController,
+                    animated: animated
+                )
             }
-            return
-        }
-        
-        // Send to main thread if needed
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async {
-                afterThreadCreated()
-            }
-            return
-        }
-        
-        afterThreadCreated()
+        )
     }
-
-    // MARK: - Functions
     
-    public static func resetAppData(onReset: (() -> ())? = nil) {
-        LibSession.clearMemoryState()
-        LibSession.clearSnodeCache()
-        LibSession.suspendNetworkAccess()
-        Storage.resetAllStorage()
-        ProfileManager.resetProfileStorage()
+    public func createNewConversation() {
+        guard let homeViewController: HomeVC = self.homeViewController else { return }
+        
+        let newConversationVC = NewConversationVC(using: dependencies)
+        let navigationController = StyledNavigationController(rootViewController: newConversationVC)
+        if UIDevice.current.isIPad {
+            navigationController.modalPresentationStyle = .fullScreen
+        }
+        navigationController.modalPresentationCapturesStatusBarAppearance = true
+        homeViewController.present(navigationController, animated: true, completion: nil)
+    }
+    
+    public func resetData(onReset: (() -> ())) {
+        homeViewController = nil
+        LibSession.clearMemoryState(using: dependencies)
+        dependencies.mutate(cache: .libSessionNetwork) {
+            $0.clearSnodeCache()
+            $0.suspendNetworkAccess()
+        }
+        PushNotificationAPI.deleteKeys(using: dependencies)
+        Storage.resetAllStorage(using: dependencies)
+        DisplayPictureManager.resetStorage(using: dependencies)
         Attachment.resetAttachmentStorage()
-        AppEnvironment.shared.notificationPresenter.clearAllNotifications()
+        dependencies[singleton: .notificationsManager].clearAllNotifications()
+        try? dependencies[singleton: .keychain].removeAll()
         Log.flush()
 
-        onReset?()
+        onReset()
         exit(0)
     }
     
-    public static func showHomeView() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async {
-                self.showHomeView()
+    // MARK: - Internal Functions
+    
+    private func creatingThreadIfNeededThenRunOnMain(
+        threadId: String,
+        variant: SessionThread.Variant,
+        threadExists: Bool,
+        onComplete: @escaping () -> Void
+    ) {
+        guard !threadExists else {
+            switch Thread.isMainThread {
+                case true: return onComplete()
+                case false: return DispatchQueue.main.async(using: dependencies) { onComplete() }
             }
-            return
+        }
+        guard !Thread.isMainThread else {
+            return DispatchQueue.global(qos: .userInitiated).async(using: dependencies) { [weak self] in
+                self?.creatingThreadIfNeededThenRunOnMain(
+                    threadId: threadId,
+                    variant: variant,
+                    threadExists: threadExists,
+                    onComplete: onComplete
+                )
+            }
         }
         
-        let homeViewController: HomeVC = HomeVC()
-        let navController: UINavigationController = StyledNavigationController(rootViewController: homeViewController)
-        (UIApplication.shared.delegate as? AppDelegate)?.window?.rootViewController = navController
+        dependencies[singleton: .storage].write { [dependencies] db in
+            try SessionThread.fetchOrCreate(
+                db,
+                id: threadId,
+                variant: variant,
+                shouldBeVisible: nil,
+                calledFromConfig: nil,
+                using: dependencies
+            )
+        }
+        
+        DispatchQueue.main.async(using: dependencies) {
+            onComplete()
+        }
     }
+    
+    private func showConversation(
+        threadId: String,
+        threadVariant: SessionThread.Variant,
+        isMessageRequest: Bool,
+        dismissing presentingViewController: UIViewController?,
+        homeViewController: HomeVC,
+        animated: Bool
+    ) {
+        presentingViewController?.dismiss(animated: true, completion: nil)
+        
+        homeViewController.navigationController?.setViewControllers(
+            [
+                homeViewController,
+                (!isMessageRequest ? nil :
+                    SessionTableViewController(viewModel: MessageRequestsViewModel(using: dependencies))
+                ),
+                ConversationVC(
+                    threadId: threadId,
+                    threadVariant: threadVariant,
+                    focusedInteractionInfo: nil,
+                    using: dependencies
+                )
+            ].compactMap { $0 },
+            animated: animated
+        )
+    }
+}
+
+// MARK: - SessionAppType
+
+public protocol SessionAppType {
+    func setHomeViewController(_ homeViewController: HomeVC)
+    func showHomeView()
+    func presentConversationCreatingIfNeeded(
+        for threadId: String,
+        variant: SessionThread.Variant,
+        dismissing presentingViewController: UIViewController?,
+        animated: Bool
+    )
+    func createNewConversation()
+    func resetData(onReset: (() -> ()))
+}
+
+public extension SessionAppType {
+    func resetData() { resetData(onReset: {}) }
 }

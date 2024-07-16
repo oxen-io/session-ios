@@ -123,17 +123,17 @@ public enum WebSocketProtoError: Error {
 
     fileprivate class func parseProto(_ proto: WebSocketProtos_WebSocketRequestMessage) throws -> WebSocketProtoWebSocketRequestMessage {
         guard proto.hasVerb else {
-            throw WebSocketProtoError.invalidProtobuf(description: "\(String(describing: logTag)) missing required field: verb")
+            throw WebSocketProtoError.invalidProtobuf(description: "\(NSStringFromClass(self)) missing required field: verb")
         }
         let verb = proto.verb
 
         guard proto.hasPath else {
-            throw WebSocketProtoError.invalidProtobuf(description: "\(String(describing: logTag)) missing required field: path")
+            throw WebSocketProtoError.invalidProtobuf(description: "\(NSStringFromClass(self)) missing required field: path")
         }
         let path = proto.path
 
         guard proto.hasRequestID else {
-            throw WebSocketProtoError.invalidProtobuf(description: "\(String(describing: logTag)) missing required field: requestID")
+            throw WebSocketProtoError.invalidProtobuf(description: "\(NSStringFromClass(self)) missing required field: requestID")
         }
         let requestID = proto.requestID
 
@@ -290,12 +290,12 @@ extension WebSocketProtoWebSocketRequestMessage.WebSocketProtoWebSocketRequestMe
 
     fileprivate class func parseProto(_ proto: WebSocketProtos_WebSocketResponseMessage) throws -> WebSocketProtoWebSocketResponseMessage {
         guard proto.hasRequestID else {
-            throw WebSocketProtoError.invalidProtobuf(description: "\(String(describing: logTag)) missing required field: requestID")
+            throw WebSocketProtoError.invalidProtobuf(description: "\(NSStringFromClass(self)) missing required field: requestID")
         }
         let requestID = proto.requestID
 
         guard proto.hasStatus else {
-            throw WebSocketProtoError.invalidProtobuf(description: "\(String(describing: logTag)) missing required field: status")
+            throw WebSocketProtoError.invalidProtobuf(description: "\(NSStringFromClass(self)) missing required field: status")
         }
         let status = proto.status
 
@@ -439,7 +439,7 @@ extension WebSocketProtoWebSocketResponseMessage.WebSocketProtoWebSocketResponse
 
     fileprivate class func parseProto(_ proto: WebSocketProtos_WebSocketMessage) throws -> WebSocketProtoWebSocketMessage {
         guard proto.hasType else {
-            throw WebSocketProtoError.invalidProtobuf(description: "\(String(describing: logTag)) missing required field: type")
+            throw WebSocketProtoError.invalidProtobuf(description: "\(NSStringFromClass(self)) missing required field: type")
         }
         let type = WebSocketProtoWebSocketMessageTypeWrap(proto.type)
 

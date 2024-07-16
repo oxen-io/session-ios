@@ -12,7 +12,7 @@ class BatchRequestSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var dependencies: Dependencies! = Dependencies()
+        @TestState var dependencies: TestDependencies! = TestDependencies()
         @TestState var request: Network.BatchRequest!
         
         // MARK: - a BatchRequest.Child

@@ -3,7 +3,6 @@
 import Foundation
 import Combine
 import GRDB
-import SignalCoreKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 
@@ -59,15 +58,16 @@ public struct LinkPreview: Codable, Equatable, Hashable, FetchableRecord, Persis
     
     public init(
         url: String,
-        timestamp: TimeInterval = LinkPreview.timestampFor(
-            sentTimestampMs: TimeInterval(SnodeAPI.currentOffsetTimestampMs())  // Default to now
-        ),
+        timestamp: TimeInterval? = nil,
         variant: Variant = .standard,
         title: String?,
-        attachmentId: String? = nil
+        attachmentId: String? = nil,
+        using dependencies: Dependencies
     ) {
         self.url = url
-        self.timestamp = timestamp
+        self.timestamp = (timestamp ?? LinkPreview.timestampFor(
+            sentTimestampMs: dependencies[cache: .snodeAPI].currentOffsetTimestampMs()  // Default to now
+        ))
         self.variant = variant
         self.title = title
         self.attachmentId = attachmentId
@@ -128,18 +128,15 @@ public extension LinkPreview {
         return (floor(sentTimestampMs / 1000 / LinkPreview.timstampResolution) * LinkPreview.timstampResolution)
     }
     
-    static func generateAttachmentIfPossible(imageData: Data?, mimeType: String) throws -> Attachment? {
+    static func generateAttachmentIfPossible(imageData: Data?, mimeType: String, using dependencies: Dependencies) throws -> Attachment? {
         guard let imageData: Data = imageData, !imageData.isEmpty else { return nil }
-        guard let fileExtension: String = MIMETypeUtil.fileExtension(forMIMEType: mimeType) else { return nil }
+        guard let fileExtension: String = MimeTypeUtil.fileExtension(for: mimeType) else { return nil }
         
-        let filePath = OWSFileSystem.temporaryFilePath(withFileExtension: fileExtension)
+        let filePath = FileSystem.temporaryFilePath(fileExtension: fileExtension, using: dependencies)
         try imageData.write(to: NSURL.fileURL(withPath: filePath), options: .atomicWrite)
-                
-        guard let dataSource = DataSourcePath.dataSource(withFilePath: filePath, shouldDeleteOnDeallocation: true) else {
-            return nil
-        }
+        let dataSource: DataSourcePath = DataSourcePath(filePath: filePath, shouldDeleteOnDeinit: true, using: dependencies)
         
-        return Attachment(contentType: mimeType, dataSource: dataSource)
+        return Attachment(contentType: mimeType, dataSource: dataSource, using: dependencies)
     }
     
     static func isValidLinkUrl(_ urlString: String) -> Bool {
@@ -202,15 +199,19 @@ public extension LinkPreview {
             result = String(result[..<endIndex])
         }
         
-        return result.filterStringForDisplay()
+        return result.filteredForDisplay
     }
     
     // MARK: - Text Parsing
 
     private static var previewUrlCache: Atomic<NSCache<NSString, NSString>> = Atomic(NSCache())
 
-    static func previewUrl(for body: String?, selectedRange: NSRange? = nil) -> String? {
-        guard Storage.shared[.areLinkPreviewsEnabled] else { return nil }
+    static func previewUrl(
+        for body: String?,
+        selectedRange: NSRange? = nil,
+        using dependencies: Dependencies
+    ) -> String? {
+        guard dependencies[singleton: .storage, key: .areLinkPreviewsEnabled] else { return nil }
         guard let body: String = body else { return nil }
 
         if let cachedUrl = previewUrlCache.wrappedValue.object(forKey: body as NSString) as String? {
@@ -282,24 +283,34 @@ public extension LinkPreview {
         }
     }
     
-    private static func setCachedLinkPreview(_ linkPreviewDraft: LinkPreviewDraft, forPreviewUrl previewUrl: String) {
+    private static func setCachedLinkPreview(
+        _ linkPreviewDraft: LinkPreviewDraft,
+        forPreviewUrl previewUrl: String,
+        using dependencies: Dependencies
+    ) {
         assert(previewUrl == linkPreviewDraft.urlString)
 
         // Exit early if link previews are not enabled in order to avoid
         // tainting the cache.
-        guard Storage.shared[.areLinkPreviewsEnabled] else { return }
+        guard dependencies[singleton: .storage, key: .areLinkPreviewsEnabled] else { return }
 
         serialQueue.sync {
             linkPreviewDraftCache = linkPreviewDraft
         }
     }
     
-    static func tryToBuildPreviewInfo(previewUrl: String?) -> AnyPublisher<LinkPreviewDraft, Error> {
-        guard Storage.shared[.areLinkPreviewsEnabled] else {
+    static func tryToBuildPreviewInfo(
+        previewUrl: String?,
+        using dependencies: Dependencies
+    ) -> AnyPublisher<LinkPreviewDraft, Error> {
+        guard dependencies[singleton: .storage, key: .areLinkPreviewsEnabled] else {
             return Fail(error: LinkPreviewError.featureDisabled)
                 .eraseToAnyPublisher()
         }
-        guard let previewUrl: String = previewUrl else {
+        
+        // Force the url to lowercase to ensure we casing doesn't result in redownloading the
+        // details
+        guard let previewUrl: String = previewUrl?.lowercased() else {
             return Fail(error: LinkPreviewError.invalidInput)
                 .eraseToAnyPublisher()
         }
@@ -311,13 +322,18 @@ public extension LinkPreview {
         }
         
         return downloadLink(url: previewUrl)
-            .flatMap { data, response in
-                parseLinkDataAndBuildDraft(linkData: data, response: response, linkUrlString: previewUrl)
+            .flatMap { [dependencies] data, response in
+                parseLinkDataAndBuildDraft(
+                    linkData: data,
+                    response: response,
+                    linkUrlString: previewUrl,
+                    using: dependencies
+                )
             }
-            .tryMap { linkPreviewDraft -> LinkPreviewDraft in
+            .tryMap { [dependencies] linkPreviewDraft -> LinkPreviewDraft in
                 guard linkPreviewDraft.isValid() else { throw LinkPreviewError.noPreview }
                 
-                setCachedLinkPreview(linkPreviewDraft, forPreviewUrl: previewUrl)
+                setCachedLinkPreview(linkPreviewDraft, forPreviewUrl: previewUrl, using: dependencies)
 
                 return linkPreviewDraft
             }
@@ -328,7 +344,7 @@ public extension LinkPreview {
         url urlString: String,
         remainingRetries: UInt = 3
     ) -> AnyPublisher<(Data, URLResponse), Error> {
-        Logger.verbose("url: \(urlString)")
+        Log.verbose("[LinkPreview] Download url: \(urlString)")
 
         // let sessionConfiguration = ContentProxy.sessionConfiguration() // Loki: Signal's proxy appears to have been banned by YouTube
         let sessionConfiguration = URLSessionConfiguration.ephemeral
@@ -383,7 +399,8 @@ public extension LinkPreview {
     private static func parseLinkDataAndBuildDraft(
         linkData: Data,
         response: URLResponse,
-        linkUrlString: String
+        linkUrlString: String,
+        using dependencies: Dependencies
     ) -> AnyPublisher<LinkPreviewDraft, Error> {
         do {
             let contents = try parse(linkData: linkData, response: response)
@@ -412,7 +429,7 @@ public extension LinkPreview {
             }
 
             return LinkPreview
-                .downloadImage(url: imageUrl, imageMimeType: imageMimeType)
+                .downloadImage(url: imageUrl, imageMimeType: imageMimeType, using: dependencies)
                 .map { imageData -> LinkPreviewDraft in
                     // We always recompress images to Jpeg
                     LinkPreviewDraft(urlString: linkUrlString, title: title, jpegImageData: imageData)
@@ -447,12 +464,12 @@ public extension LinkPreview {
             title = normalizedTitle
         }
 
-        Logger.verbose("title: \(String(describing: title))")
+        Log.verbose("[LinkPreview] Title: \(String(describing: title))")
 
         guard let rawImageUrlString = content.ogImageUrlString ?? content.faviconUrlString else {
             return Contents(title: title)
         }
-        guard let imageUrlString = decodeHTMLEntities(inString: rawImageUrlString)?.ows_stripped() else {
+        guard let imageUrlString = decodeHTMLEntities(inString: rawImageUrlString)?.stripped else {
             return Contents(title: title)
         }
 
@@ -461,7 +478,8 @@ public extension LinkPreview {
     
     private static func downloadImage(
         url urlString: String,
-        imageMimeType: String
+        imageMimeType: String,
+        using dependencies: Dependencies
     ) -> AnyPublisher<Data, Error> {
         guard
             let url = URL(string: urlString),
@@ -473,14 +491,14 @@ public extension LinkPreview {
                 .eraseToAnyPublisher()
         }
         
-        return ProxiedContentDownloader.defaultDownloader
+        return dependencies[singleton: .proxiedContentDownloader]
             .requestAsset(
                 assetDescription: assetDescription,
                 priority: .high,
                 shouldIgnoreSignalProxy: true
             )
             .tryMap { asset, _ -> Data in
-                let imageSize = NSData.imageSize(forFilePath: asset.filePath, mimeType: imageMimeType)
+                let imageSize = Data.imageSize(for: asset.filePath, mimeType: imageMimeType, using: dependencies)
                 
                 guard imageSize.width > 0, imageSize.height > 0 else {
                     throw LinkPreviewError.invalidContent
@@ -494,8 +512,8 @@ public extension LinkPreview {
                 
                 // Loki: If it's a GIF then ensure its validity and don't download it as a JPG
                 if
-                    imageMimeType == OWSMimeTypeImageGif &&
-                    NSData(data: data).ows_isValidImage(withMimeType: OWSMimeTypeImageGif)
+                    imageMimeType == MimeTypeUtil.MimeType.imageGif &&
+                    data.isValidImage(mimeType: MimeTypeUtil.MimeType.imageGif)
                 {
                     return data
                 }
@@ -512,7 +530,7 @@ public extension LinkPreview {
                 }
 
                 guard
-                    let dstImage = srcImage.resized(withMaxDimensionPoints: maxImageSize),
+                    let dstImage = srcImage.resized(maxDimensionPoints: maxImageSize),
                     let dstData = dstImage.jpegData(compressionQuality: 0.8)
                 else { throw LinkPreviewError.invalidContent }
                 
@@ -547,9 +565,8 @@ public extension LinkPreview {
     
     private static func mimetype(forImageFileExtension imageFileExtension: String) -> String? {
         guard imageFileExtension.count > 0 else { return nil }
-        guard let imageMimeType = MIMETypeUtil.mimeType(forFileExtension: imageFileExtension) else { return nil }
         
-        return imageMimeType
+        return MimeTypeUtil.mimeType(for: imageFileExtension)
     }
     
     private static func decodeHTMLEntities(inString value: String) -> String? {

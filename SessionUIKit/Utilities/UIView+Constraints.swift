@@ -9,7 +9,11 @@ public protocol ConstraintUtilitiesEdge {}
 public extension UIView {
     enum HorizontalEdge: ConstraintUtilitiesEdge { case left, leading, right, trailing }
     enum VerticalEdge: ConstraintUtilitiesEdge { case top, bottom }
+    enum HorizontalMargin: ConstraintUtilitiesEdge { case left, leading, right, trailing }
+    enum VerticalMargin: ConstraintUtilitiesEdge { case top, bottom }
     enum Direction { case horizontal, vertical }
+    enum VerticalDirection { case vertical }
+    enum HorizontalDirection { case horizontal }
     enum Dimension { case width, height }
 }
 
@@ -36,6 +40,38 @@ extension UIView: Anchorable {
             case .bottom: return bottomAnchor
         }
     }
+    
+    public func attribute(from edge: UIView.HorizontalEdge) -> NSLayoutConstraint.Attribute {
+        switch edge {
+            case .left: return .left
+            case .leading: return .leading
+            case .right: return .right
+            case .trailing: return .trailing
+        }
+    }
+    
+    public func attribute(from edge: UIView.HorizontalMargin) -> NSLayoutConstraint.Attribute {
+        switch edge {
+            case .left: return .leftMargin
+            case .leading: return .leadingMargin
+            case .right: return .rightMargin
+            case .trailing: return .trailingMargin
+        }
+    }
+    
+    public func attribute(from edge: UIView.VerticalEdge) -> NSLayoutConstraint.Attribute {
+        switch edge {
+            case .top: return .top
+            case .bottom: return .bottom
+        }
+    }
+    
+    public func attribute(from edge: UIView.VerticalMargin) -> NSLayoutConstraint.Attribute {
+        switch edge {
+            case .top: return .topMargin
+            case .bottom: return .bottomMargin
+        }
+    }
 }
 
 extension UILayoutGuide: Anchorable {
@@ -56,9 +92,16 @@ extension UILayoutGuide: Anchorable {
     }
 }
 
-fileprivate extension NSLayoutConstraint {
+public extension NSLayoutConstraint {
+    @discardableResult
     func setting(isActive: Bool) -> NSLayoutConstraint {
         self.isActive = isActive
+        return self
+    }
+    
+    @discardableResult
+    func setting(priority: UILayoutPriority) -> NSLayoutConstraint {
+        self.priority = priority
         return self
     }
 }
@@ -89,6 +132,18 @@ public extension Anchorable {
     }
     
     @discardableResult
+    func pin(_ constraineeEdge: UIView.HorizontalEdge, lessThanOrEqualTo constrainerEdge: UIView.HorizontalEdge, of anchorable: Anchorable, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
+        (self as? UIView)?.translatesAutoresizingMaskIntoConstraints = false
+        
+        return anchor(from: constraineeEdge)
+            .constraint(
+                lessThanOrEqualTo: anchorable.anchor(from: constrainerEdge),
+                constant: inset
+            )
+            .setting(isActive: true)
+    }
+    
+    @discardableResult
     func pin(_ constraineeEdge: UIView.VerticalEdge, to constrainerEdge: UIView.VerticalEdge, of anchorable: Anchorable, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
         (self as? UIView)?.translatesAutoresizingMaskIntoConstraints = false
         
@@ -107,6 +162,18 @@ public extension Anchorable {
         return anchor(from: constraineeEdge)
             .constraint(
                 greaterThanOrEqualTo: anchorable.anchor(from: constrainerEdge),
+                constant: inset
+            )
+            .setting(isActive: true)
+    }
+    
+    @discardableResult
+    func pin(_ constraineeEdge: UIView.VerticalEdge, lessThanOrEqualTo constrainerEdge: UIView.VerticalEdge, of anchorable: Anchorable, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
+        (self as? UIView)?.translatesAutoresizingMaskIntoConstraints = false
+        
+        return anchor(from: constraineeEdge)
+            .constraint(
+                lessThanOrEqualTo: anchorable.anchor(from: constrainerEdge),
                 constant: inset
             )
             .setting(isActive: true)
@@ -139,6 +206,45 @@ public extension UIView {
     }
     
     @discardableResult
+    func pin(_ constraineeEdge: UIView.HorizontalEdge, toMargin constrainerMargin: UIView.HorizontalMargin, of constrainerView: UIView, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
+        translatesAutoresizingMaskIntoConstraints = false
+        
+        return NSLayoutConstraint(
+            item: self,
+            attribute: attribute(from: constraineeEdge),
+            relatedBy: .equal,
+            toItem: constrainerView,
+            attribute: constrainerView.attribute(from: constrainerMargin),
+            multiplier: 1,
+            constant: inset
+        )
+        .setting(isActive: true)
+    }
+    
+    @discardableResult
+    func pin(_ constraineeEdge: UIView.VerticalEdge, toMargin constrainerMargin: UIView.VerticalMargin, of constrainerView: UIView, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
+        translatesAutoresizingMaskIntoConstraints = false
+        
+        return NSLayoutConstraint(
+            item: self,
+            attribute: attribute(from: constraineeEdge),
+            relatedBy: .equal,
+            toItem: constrainerView,
+            attribute: constrainerView.attribute(from: constrainerMargin),
+            multiplier: 1,
+            constant: inset
+        )
+        .setting(isActive: true)
+    }
+    
+    func pin(toMarginsOf view: UIView) {
+        pin(.top, toMargin: .top, of: view)
+        pin(.leading, toMargin: .leading, of: view)
+        pin(.trailing, toMargin: .trailing, of: view)
+        pin(.bottom, toMargin: .bottom, of: view)
+    }
+    
+    @discardableResult
     func center(_ direction: Direction, in view: UIView, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
         translatesAutoresizingMaskIntoConstraints = false
         let constraint: NSLayoutConstraint = {
@@ -154,6 +260,24 @@ public extension UIView {
     func center(in view: UIView) {
         center(.horizontal, in: view)
         center(.vertical, in: view)
+    }
+    
+    @discardableResult
+    func center(_ direction: VerticalDirection, against constrainerEdge: UIView.VerticalEdge, of anchorable: Anchorable, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
+        translatesAutoresizingMaskIntoConstraints = false
+        
+        return centerYAnchor
+            .constraint(equalTo: anchorable.anchor(from: constrainerEdge), constant: inset)
+            .setting(isActive: true)
+    }
+    
+    @discardableResult
+    func center(_ direction: HorizontalDirection, against constrainerEdge: UIView.HorizontalEdge, of anchorable: Anchorable, withInset inset: CGFloat = 0) -> NSLayoutConstraint {
+        translatesAutoresizingMaskIntoConstraints = false
+        
+        return centerXAnchor
+            .constraint(equalTo: anchorable.anchor(from: constrainerEdge), constant: inset)
+            .setting(isActive: true)
     }
     
     @discardableResult
@@ -202,6 +326,25 @@ public extension UIView {
     }
     
     @discardableResult
+    func set(_ dimension: Dimension, greaterThanOrEqualTo otherDimension: Dimension, of view: UIView, withOffset offset: CGFloat = 0, multiplier: CGFloat = 1) -> NSLayoutConstraint {
+        translatesAutoresizingMaskIntoConstraints = false
+        let otherAnchor: NSLayoutDimension = {
+            switch otherDimension {
+                case .width: return view.widthAnchor
+                case .height: return view.heightAnchor
+            }
+        }()
+        let constraint: NSLayoutConstraint = {
+            switch dimension {
+            case .width: return widthAnchor.constraint(greaterThanOrEqualTo: otherAnchor, multiplier: multiplier, constant: offset)
+            case .height: return heightAnchor.constraint(greaterThanOrEqualTo: otherAnchor, multiplier: multiplier, constant: offset)
+            }
+        }()
+        constraint.isActive = true
+        return constraint
+    }
+    
+    @discardableResult
     func set(_ dimension: Dimension, lessThanOrEqualTo size: CGFloat) -> NSLayoutConstraint {
         translatesAutoresizingMaskIntoConstraints = false
         let constraint: NSLayoutConstraint = {
@@ -212,5 +355,48 @@ public extension UIView {
         }()
         constraint.isActive = true
         return constraint
+    }
+    
+    @discardableResult
+    func set(_ dimension: Dimension, lessThanOrEqualTo otherDimension: Dimension, of view: UIView, withOffset offset: CGFloat = 0, multiplier: CGFloat = 1) -> NSLayoutConstraint {
+        translatesAutoresizingMaskIntoConstraints = false
+        let otherAnchor: NSLayoutDimension = {
+            switch otherDimension {
+                case .width: return view.widthAnchor
+                case .height: return view.heightAnchor
+            }
+        }()
+        let constraint: NSLayoutConstraint = {
+            switch dimension {
+            case .width: return widthAnchor.constraint(lessThanOrEqualTo: otherAnchor, multiplier: multiplier, constant: offset)
+            case .height: return heightAnchor.constraint(lessThanOrEqualTo: otherAnchor, multiplier: multiplier, constant: offset)
+            }
+        }()
+        constraint.isActive = true
+        return constraint
+    }
+    
+    func setContentHugging(to priority: UILayoutPriority) {
+        setContentHuggingPriority(priority, for: .vertical)
+        setContentHuggingPriority(priority, for: .horizontal)
+    }
+    
+    func setContentHugging(_ direction: Direction, to priority: UILayoutPriority) {
+        switch direction {
+            case .vertical: setContentHuggingPriority(priority, for: .vertical)
+            case .horizontal: setContentHuggingPriority(priority, for: .horizontal)
+        }
+    }
+    
+    func setCompressionResistance(to priority: UILayoutPriority) {
+        setContentCompressionResistancePriority(priority, for: .vertical)
+        setContentCompressionResistancePriority(priority, for: .horizontal)
+    }
+    
+    func setCompressionResistance(_ direction: Direction, to priority: UILayoutPriority) {
+        switch direction {
+            case .vertical: setContentCompressionResistancePriority(priority, for: .vertical)
+            case .horizontal: setContentCompressionResistancePriority(priority, for: .horizontal)
+        }
     }
 }

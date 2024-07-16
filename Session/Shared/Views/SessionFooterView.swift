@@ -69,7 +69,7 @@ class SessionFooterView: UITableViewHeaderFooterView {
                     // Align to the start of the text in the cell
                     return (Values.largeSpacing + Values.mediumSpacing)
                 
-                case .edgeToEdge, .noBackground: return Values.largeSpacing
+                case .edgeToEdge, .noBackground, .noBackgroundEdgeToEdge: return Values.largeSpacing
             }
         }()
         

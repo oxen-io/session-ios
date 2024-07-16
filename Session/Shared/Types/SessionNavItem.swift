@@ -50,24 +50,26 @@ public struct SessionNavItem<Id: Equatable>: Equatable {
     // MARK: - Functions
     
     public func createBarButtonItem() -> DisposableBarButtonItem {
-        guard let systemItem: UIBarButtonItem.SystemItem = systemItem else {
-            return DisposableBarButtonItem(
-                image: image,
-                style: style,
-                target: nil,
-                action: nil,
-                accessibilityIdentifier: accessibilityIdentifier,
-                accessibilityLabel: accessibilityLabel
-            )
-        }
+        let result: DisposableBarButtonItem = {
+            guard let systemItem: UIBarButtonItem.SystemItem = systemItem else {
+                return DisposableBarButtonItem(
+                    image: image,
+                    style: style,
+                    target: nil,
+                    action: nil
+                )
+            }
 
-        return DisposableBarButtonItem(
-            barButtonSystemItem: systemItem,
-            target: nil,
-            action: nil,
-            accessibilityIdentifier: accessibilityIdentifier,
-            accessibilityLabel: accessibilityLabel
-        )
+            return DisposableBarButtonItem(
+                barButtonSystemItem: systemItem,
+                target: nil,
+                action: nil
+            )
+        }()
+        result.accessibilityIdentifier = accessibilityIdentifier
+        result.accessibilityLabel = accessibilityLabel
+
+        return result
     }
     
     // MARK: - Conformance
