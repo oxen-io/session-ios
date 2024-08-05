@@ -206,7 +206,7 @@ message DataMessage {
   repeated AttachmentPointer         attachments                    = 2;
   // optional GroupContext           group                          = 3;  // No longer used
   optional uint32                    flags                          = 4;
-  optional uint32                    expireTimer                    = 5;
+  // optional uint32                 expireTimer                    = 5;  // No longer used
   optional bytes                     profileKey                     = 6;
   optional uint64                    timestamp                      = 7;
   optional Quote                     quote                          = 8;

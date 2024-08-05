@@ -71,18 +71,10 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                 // Should only show one section of Disappearing Messages Type
                 expect(viewModel.tableData.count).to(equal(1))
                 
-                if Features.useNewDisappearingMessagesConfig {
-                    // Off
-                    // Disappear After Read
-                    // Disappear After Send
-                    expect(viewModel.tableData.first?.elements.count).to(equal(3))
-                } else {
-                    // Off
-                    // Legacy
-                    // Disappear After Read
-                    // Disappear After Send
-                    expect(viewModel.tableData.first?.elements.count).to(equal(4))
-                }
+                // Off
+                // Disappear After Read
+                // Disappear After Send
+                expect(viewModel.tableData.first?.elements.count).to(equal(3))
             }
             
             // MARK: -- has the correct default state
@@ -117,7 +109,6 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 rightAccessory: .radio(
                                     isSelected: { false }
                                 ),
-                                isEnabled: Features.useNewDisappearingMessagesConfig,
                                 accessibility: Accessibility(
                                     identifier: "Disappear after send option",
                                     label: "Disappear after send option"
