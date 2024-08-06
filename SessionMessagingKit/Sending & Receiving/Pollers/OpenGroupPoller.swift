@@ -491,14 +491,12 @@ extension OpenGroupAPI {
                                 return true
                             }
                             
-                            // Note: This might need to be updated in the future when we start tracking
-                            // user permissions if changes to permissions don't trigger a change to
-                            // the 'infoUpdates'
                             return (
                                 responseBody.activeUsers != existingOpenGroup.userCount || (
                                     responseBody.details != nil &&
                                     responseBody.details?.infoUpdates != existingOpenGroup.infoUpdates
-                                )
+                                ) ||
+                                OpenGroup.Permissions(roomInfo: responseBody) != existingOpenGroup.permissions
                             )
                         
                         default: return true

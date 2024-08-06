@@ -804,8 +804,10 @@ extension ConversationVC:
     }
     
     func hideInputAccessoryView() {
-        self.inputAccessoryView?.isHidden = true
-        self.inputAccessoryView?.alpha = 0
+        DispatchQueue.main.async {
+            self.inputAccessoryView?.isHidden = true
+            self.inputAccessoryView?.alpha = 0
+        }
     }
     
     func showInputAccessoryView() {
