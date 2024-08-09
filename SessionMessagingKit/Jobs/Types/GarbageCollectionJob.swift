@@ -335,6 +335,14 @@ public enum GarbageCollectionJob: JobExecutor {
                         )
                     """)
                 }
+                
+                if finalTypesToCollect.contains(.pruneExpiredLastHashRecords) {
+                    // Delete any expired SnodeReceivedMessageInfo values associated to a specific node
+                    try SnodeReceivedMessageInfo
+                        .select(Column.rowID)
+                        .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs <= timestampNow)
+                        .deleteAll(db)
+                }
             },
             completion: { _, _ in
                 // Dispatch async so we can swap from the write queue to a read one (we are done writing)
@@ -491,6 +499,7 @@ extension GarbageCollectionJob {
         case expiredUnreadDisappearingMessages // unread disappearing messages after 14 days
         case expiredPendingReadReceipts
         case shadowThreads
+        case pruneExpiredLastHashRecords
     }
     
     public struct Details: Codable {

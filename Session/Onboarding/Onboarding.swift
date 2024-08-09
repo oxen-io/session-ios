@@ -36,11 +36,8 @@ enum Onboarding {
             .poll(
                 namespaces: [.configUserProfile],
                 for: userPublicKey,
-                // Note: These values mean the received messages will be
-                // processed immediately rather than async as part of a Job
-                calledFromBackgroundPoller: true,
-                isBackgroundPollValid: { true },
                 drainBehaviour: .alwaysRandom,
+                forceSynchronousProcessing: true,
                 using: dependencies
             )
             .map { _ -> String? in

@@ -103,8 +103,7 @@ class MessageSendJobSpec: QuickSpec {
                 job = Job(
                     variant: .messageSend,
                     details: MessageReceiveJob.Details(
-                        messages: [MessageReceiveJob.Details.MessageInfo](),
-                        calledFromBackgroundPoller: false
+                        messages: [MessageReceiveJob.Details.MessageInfo]()
                     )
                 )
                 

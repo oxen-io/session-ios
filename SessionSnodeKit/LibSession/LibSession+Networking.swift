@@ -569,7 +569,15 @@ public extension LibSession {
                     throw NetworkError.badGateway
                 }
                 
-                throw SnodeAPIError.nodeNotFound(String(responseString.suffix(64)))
+                let nodeHex: String = String(responseString.suffix(64))
+                
+                for path in lastPaths.wrappedValue {
+                    if let index: Int = path.firstIndex(where: { $0.ed25519PubkeyHex == nodeHex }) {
+                        throw SnodeAPIError.nodeNotFound(index, nodeHex)
+                    }
+                }
+                
+                throw SnodeAPIError.nodeNotFound(nil, nodeHex)
                 
             case (504, _): throw NetworkError.gatewayTimeout
             case (_, .none): throw NetworkError.unknown

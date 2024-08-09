@@ -101,12 +101,8 @@ extension ConfigMessageReceiveJob {
         }
         
         public let messages: [MessageInfo]
-        private let calledFromBackgroundPoller: Bool
         
-        public init(
-            messages: [ProcessedMessage],
-            calledFromBackgroundPoller: Bool
-        ) {
+        public init(messages: [ProcessedMessage]) {
             self.messages = messages
                 .compactMap { processedMessage -> MessageInfo? in
                     switch processedMessage {
@@ -120,7 +116,6 @@ extension ConfigMessageReceiveJob {
                             )
                     }
             }
-            self.calledFromBackgroundPoller = calledFromBackgroundPoller
         }
     }
 }

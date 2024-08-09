@@ -91,12 +91,7 @@ public enum MessageReceiveJob: JobExecutor {
             guard !remainingMessagesToProcess.isEmpty else { return }
             
             updatedJob = try job
-                .with(
-                    details: Details(
-                        messages: remainingMessagesToProcess,
-                        calledFromBackgroundPoller: details.calledFromBackgroundPoller
-                    )
-                )
+                .with(details: Details(messages: remainingMessagesToProcess))
                 .defaulting(to: job)
                 .saved(db)
         }
@@ -215,31 +210,18 @@ extension MessageReceiveJob {
         }
         
         public let messages: [MessageInfo]
-        private let isBackgroundPoll: Bool
         
-        // Renamed variable for clarity (and didn't want to migrate old MessageReceiveJob
-        // values so didn't rename the original)
-        public var calledFromBackgroundPoller: Bool { isBackgroundPoll }
-        
-        public init(
-            messages: [ProcessedMessage],
-            calledFromBackgroundPoller: Bool
-        ) {
+        public init(messages: [ProcessedMessage]) {
             self.messages = messages.compactMap { processedMessage in
                 switch processedMessage {
                     case .config: return nil
                     case .standard(_, _, _, let messageInfo): return messageInfo
                 }
             }
-            self.isBackgroundPoll = calledFromBackgroundPoller
         }
         
-        public init(
-            messages: [MessageInfo],
-            calledFromBackgroundPoller: Bool
-        ) {
+        public init(messages: [MessageInfo]) {
             self.messages = messages
-            self.isBackgroundPoll = calledFromBackgroundPoller
         }
     }
 }

@@ -242,7 +242,7 @@ class ScreenLockUI {
                 Log.info("unlock screen lock failed.")
                 self?.clearAuthUIWhenActive()
                 self?.didLastUnlockAttemptFail = true
-                self?.showScreenLockFailureAlert(message: error.localizedDescription)
+                self?.showScreenLockFailureAlert(message: "\(error)")
             },
             unexpectedFailure: { [weak self] error in
                 Log.info("unlock screen lock unexpectedly failed.")

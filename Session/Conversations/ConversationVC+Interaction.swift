@@ -1812,7 +1812,7 @@ extension ConversationVC:
                                         let errorModal: ConfirmationModal = ConfirmationModal(
                                             info: ConfirmationModal.Info(
                                                 title: "COMMUNITY_ERROR_GENERIC".localized(),
-                                                body: .text(error.localizedDescription),
+                                                body: .text("\(error)"),
                                                 cancelTitle: "BUTTON_OK".localized(),
                                                 cancelStyle: .alert_text
                                             )

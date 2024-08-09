@@ -69,7 +69,7 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
             
             case (.other(let lhsError), .other(let rhsError)):
                 // Not ideal but the best we can do
-                return (lhsError.localizedDescription == rhsError.localizedDescription)
+                return ("\(lhsError)" == "\(rhsError)")
                 
             default: return false
         }

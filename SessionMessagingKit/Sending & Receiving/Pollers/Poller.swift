@@ -62,7 +62,10 @@ public class Poller {
         isPolling.mutate { $0[publicKey] = false }
         failureCount.mutate { $0[publicKey] = nil }
         drainBehaviour.mutate { $0[publicKey] = nil }
-        cancellables.mutate { $0[publicKey]?.cancel() }
+        cancellables.mutate {
+            $0[publicKey]?.cancel()
+            $0.removeAll()
+        }
     }
     
     // MARK: - Abstract Methods
@@ -116,10 +119,12 @@ public class Poller {
         
         // Store the publisher intp the cancellables dictionary
         cancellables.mutate { [weak self] cancellables in
+            cancellables[swarmPublicKey]?.cancel()
             cancellables[swarmPublicKey] = self?.poll(
                     namespaces: namespaces,
                     for: swarmPublicKey,
                     drainBehaviour: drainBehaviour,
+                    forceSynchronousProcessing: false,
                     using: dependencies
                 )
                 .subscribe(on: pollerQueue, using: dependencies)
@@ -193,6 +198,23 @@ public class Poller {
         }
     }
     
+    /// This doesn't do anything functional _but_ does mean if we get a crash from the `BackgroundPoller` we can better distinguish
+    /// it from a crash from a foreground poll
+    public func pollFromBackground(
+        namespaces: [SnodeAPI.Namespace],
+        for swarmPublicKey: String,
+        drainBehaviour: Atomic<SwarmDrainBehaviour>,
+        using dependencies: Dependencies
+    ) -> AnyPublisher<PollResponse, Error> {
+        return poll(
+            namespaces: namespaces,
+            for: swarmPublicKey,
+            drainBehaviour: drainBehaviour,
+            forceSynchronousProcessing: true,
+            using: dependencies
+        )
+    }
+    
     /// Polls the specified namespaces and processes any messages, returning an array of messages that were
     /// successfully processed
     ///
@@ -201,47 +223,31 @@ public class Poller {
     public func poll(
         namespaces: [SnodeAPI.Namespace],
         for swarmPublicKey: String,
-        calledFromBackgroundPoller: Bool = false,
-        isBackgroundPollValid: @escaping (() -> Bool) = { true },
         drainBehaviour: Atomic<SwarmDrainBehaviour>,
+        forceSynchronousProcessing: Bool,
         using dependencies: Dependencies
     ) -> AnyPublisher<PollResponse, Error> {
-        // If the polling has been cancelled then don't continue
-        guard
-            (calledFromBackgroundPoller && isBackgroundPollValid()) ||
-            isPolling.wrappedValue[swarmPublicKey] == true
-        else {
-            return Just(([], 0, 0, false))
-                .setFailureType(to: Error.self)
-                .eraseToAnyPublisher()
-        }
-        
         let pollerQueue: DispatchQueue = self.pollerQueue
         let configHashes: [String] = LibSession.configHashes(for: swarmPublicKey)
         
         // Fetch the messages
         return LibSession.getSwarm(swarmPublicKey: swarmPublicKey)
-            .tryFlatMapWithRandomSnode(drainBehaviour: drainBehaviour, using: dependencies) { snode -> AnyPublisher<[SnodeAPI.Namespace: (info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?)], Error> in
-                SnodeAPI.poll(
-                    namespaces: namespaces,
-                    refreshingConfigHashes: configHashes,
-                    from: snode,
-                    swarmPublicKey: swarmPublicKey,
-                    calledFromBackgroundPoller: calledFromBackgroundPoller,
-                    isBackgroundPollValid: isBackgroundPollValid,
-                    using: dependencies
-                )
-            }
-            .flatMap { [weak self] namespacedResults -> AnyPublisher<PollResponse, Error> in
-                guard
-                    (calledFromBackgroundPoller && isBackgroundPollValid()) ||
-                    self?.isPolling.wrappedValue[swarmPublicKey] == true
-                else {
-                    return Just(([], 0, 0, false))
-                        .setFailureType(to: Error.self)
-                        .eraseToAnyPublisher()
+            .tryFlatMapWithRandomSnode(drainBehaviour: drainBehaviour, using: dependencies) { snode -> AnyPublisher<Network.PreparedRequest<SnodeAPI.PollResponse>, Error> in
+                dependencies.storage.readPublisher(using: dependencies) { db in
+                    try SnodeAPI.preparedPoll(
+                        db,
+                        namespaces: namespaces,
+                        refreshingConfigHashes: configHashes,
+                        from: snode,
+                        swarmPublicKey: swarmPublicKey,
+                        using: dependencies
+                    )
                 }
-                
+            }
+            .flatMap { [dependencies] (request: Network.PreparedRequest<SnodeAPI.PollResponse>) -> AnyPublisher<(ResponseInfoType, SnodeAPI.PollResponse), Error> in
+                request.send(using: dependencies)
+            }
+            .flatMap { (_: ResponseInfoType, namespacedResults: SnodeAPI.PollResponse) -> AnyPublisher<([Job], [Job], PollResponse), Error> in
                 // Get all of the messages and sort them by their required 'processingOrder'
                 let sortedMessages: [(namespace: SnodeAPI.Namespace, messages: [SnodeReceivedMessage])] = namespacedResults
                     .compactMap { namespace, result in (result.data?.messages).map { (namespace, $0) } }
@@ -250,7 +256,7 @@ public class Poller {
                 
                 // No need to do anything if there are no messages
                 guard rawMessageCount > 0 else {
-                    return Just(([], 0, 0, false))
+                    return Just(([], [], ([], 0, 0, false)))
                         .setFailureType(to: Error.self)
                         .eraseToAnyPublisher()
                 }
@@ -265,10 +271,8 @@ public class Poller {
                 var messageCount: Int = 0
                 var processedMessages: [ProcessedMessage] = []
                 var hadValidHashUpdate: Bool = false
-                var configMessageJobsToRun: [Job] = []
-                var standardMessageJobsToRun: [Job] = []
                 
-                dependencies.storage.write { db in
+                return dependencies.storage.writePublisher(using: dependencies) { db -> ([Job], [Job], PollResponse) in
                     let allProcessedMessages: [ProcessedMessage] = sortedMessages
                         .compactMap { namespace, messages -> [ProcessedMessage]? in
                             let processedMessages: [ProcessedMessage] = messages
@@ -297,12 +301,7 @@ public class Poller {
                                                 break
                                                 
                                             case DatabaseError.SQLITE_ABORT:
-                                                /// In the background ignore 'SQLITE_ABORT' (it generally means the
-                                                /// BackgroundPoller has timed out
-                                                if !calledFromBackgroundPoller {
-                                                    Log.warn("Failed to the database being suspended (running in background with no background task).")
-                                                }
-                                                break
+                                                Log.warn("Failed to the database being suspended (running in background with no background task).")
                                                 
                                             default: Log.error("Failed to deserialize envelope due to error: \(error).")
                                         }
@@ -320,10 +319,7 @@ public class Poller {
                                     try LibSession.handleConfigMessages(
                                         db,
                                         messages: ConfigMessageReceiveJob
-                                            .Details(
-                                                messages: processedMessages,
-                                                calledFromBackgroundPoller: false
-                                            )
+                                            .Details(messages: processedMessages)
                                             .messages,
                                         publicKey: swarmPublicKey
                                     )
@@ -356,6 +352,7 @@ public class Poller {
                         .flatMap { $0 }
                     
                     // Add a job to process the config messages first
+                    var configMessageJobs: [Job] = []
                     let configJobIds: [Int64] = allProcessedMessages
                         .filter { $0.isConfigMessage && !$0.namespace.shouldHandleSynchronously }
                         .grouped { $0.threadId }
@@ -363,16 +360,13 @@ public class Poller {
                             messageCount += threadMessages.count
                             processedMessages += threadMessages
                             
-                            let jobToRun: Job? = Job(
+                            let job: Job? = Job(
                                 variant: .configMessageReceive,
                                 behaviour: .runOnce,
                                 threadId: threadId,
-                                details: ConfigMessageReceiveJob.Details(
-                                    messages: threadMessages,
-                                    calledFromBackgroundPoller: calledFromBackgroundPoller
-                                )
+                                details: ConfigMessageReceiveJob.Details(messages: threadMessages)
                             )
-                            configMessageJobsToRun = configMessageJobsToRun.appending(jobToRun)
+                            configMessageJobs = configMessageJobs.appending(job)
                             
                             // If we are force-polling then add to the JobRunner so they are
                             // persistent and will retry on the next app run if they fail but
@@ -380,16 +374,20 @@ public class Poller {
                             let updatedJob: Job? = dependencies.jobRunner
                                 .add(
                                     db,
-                                    job: jobToRun,
-                                    canStartJob: !calledFromBackgroundPoller,
+                                    job: job,
+                                    canStartJob: (
+                                        !forceSynchronousProcessing &&
+                                        (Singleton.hasAppContext && !Singleton.appContext.isInBackground)
+                                    ),
                                     using: dependencies
                                 )
-                                
+                            
                             return updatedJob?.id
                         }
                     
                     // Add jobs for processing non-config messages which are dependant on the config message
                     // processing jobs
+                    var standardMessageJobs: [Job] = []
                     allProcessedMessages
                         .filter { !$0.isConfigMessage && !$0.namespace.shouldHandleSynchronously }
                         .grouped { $0.threadId }
@@ -397,16 +395,13 @@ public class Poller {
                             messageCount += threadMessages.count
                             processedMessages += threadMessages
                             
-                            let jobToRun: Job? = Job(
+                            let job: Job? = Job(
                                 variant: .messageReceive,
                                 behaviour: .runOnce,
                                 threadId: threadId,
-                                details: MessageReceiveJob.Details(
-                                    messages: threadMessages,
-                                    calledFromBackgroundPoller: calledFromBackgroundPoller
-                                )
+                                details: MessageReceiveJob.Details(messages: threadMessages)
                             )
-                            standardMessageJobsToRun = standardMessageJobsToRun.appending(jobToRun)
+                            standardMessageJobs = standardMessageJobs.appending(job)
                             
                             // If we are force-polling then add to the JobRunner so they are
                             // persistent and will retry on the next app run if they fail but
@@ -414,8 +409,11 @@ public class Poller {
                             let updatedJob: Job? = dependencies.jobRunner
                                 .add(
                                     db,
-                                    job: jobToRun,
-                                    canStartJob: !calledFromBackgroundPoller,
+                                    job: job,
+                                    canStartJob: (
+                                        !forceSynchronousProcessing &&
+                                        (Singleton.hasAppContext && !Singleton.appContext.isInBackground)
+                                    ),
                                     using: dependencies
                                 )
                             
@@ -445,11 +443,14 @@ public class Poller {
                             otherKnownValidHashes: otherKnownHashes
                         )
                     }
+                    
+                    return (configMessageJobs, standardMessageJobs, (processedMessages, rawMessageCount, messageCount, hadValidHashUpdate))
                 }
-                
-                // If we aren't runing in a background poller then just finish immediately
-                guard calledFromBackgroundPoller else {
-                    return Just((processedMessages, rawMessageCount, messageCount, hadValidHashUpdate))
+            }
+            .flatMap { (configMessageJobs: [Job], standardMessageJobs: [Job], pollResponse: PollResponse) -> AnyPublisher<PollResponse, Error> in
+                // If we don't want to forcible process the response synchronously then just finish immediately
+                guard forceSynchronousProcessing else {
+                    return Just(pollResponse)
                         .setFailureType(to: Error.self)
                         .eraseToAnyPublisher()
                 }
@@ -457,7 +458,7 @@ public class Poller {
                 // We want to try to handle the receive jobs immediately in the background
                 return Publishers
                     .MergeMany(
-                        configMessageJobsToRun.map { job -> AnyPublisher<Void, Error> in
+                        configMessageJobs.map { job -> AnyPublisher<Void, Error> in
                             Deferred {
                                 Future<Void, Error> { resolver in
                                     // Note: In the background we just want jobs to fail silently
@@ -478,7 +479,7 @@ public class Poller {
                     .flatMap { _ in
                         Publishers
                             .MergeMany(
-                                standardMessageJobsToRun.map { job -> AnyPublisher<Void, Error> in
+                                standardMessageJobs.map { job -> AnyPublisher<Void, Error> in
                                     Deferred {
                                         Future<Void, Error> { resolver in
                                             // Note: In the background we just want jobs to fail silently
@@ -497,7 +498,7 @@ public class Poller {
                             )
                             .collect()
                     }
-                    .map { _ in (processedMessages, rawMessageCount, messageCount, hadValidHashUpdate) }
+                    .map { _ in pollResponse }
                     .eraseToAnyPublisher()
             }
             .eraseToAnyPublisher()

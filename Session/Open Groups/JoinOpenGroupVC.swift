@@ -210,7 +210,7 @@ final class JoinOpenGroupVC: BaseVC, UIPageViewControllerDataSource, UIPageViewC
                                 self?.dismiss(animated: true) { // Dismiss the loader
                                     self?.showError(
                                         title: "COMMUNITY_ERROR_GENERIC".localized(),
-                                        message: error.localizedDescription,
+                                        message: "\(error)",
                                         onError: onError
                                     )
                                 }

@@ -496,7 +496,7 @@ final class EditClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegat
                             case .failure(let error):
                                 self?.showError(
                                     title: "GROUP_UPDATE_ERROR_TITLE".localized(),
-                                    message: error.localizedDescription
+                                    message: "\(error)"
                                 )
                         }
                     }

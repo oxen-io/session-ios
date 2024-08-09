@@ -46,206 +46,184 @@ public final class SnodeAPI {
 
     // MARK: - Batching & Polling
     
-    public static func poll(
+    public typealias PollResponse = [SnodeAPI.Namespace: (info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?)]
+    
+    public static func preparedPoll(
+        _ db: Database,
         namespaces: [SnodeAPI.Namespace],
         refreshingConfigHashes: [String] = [],
         from snode: LibSession.Snode,
         swarmPublicKey: String,
-        calledFromBackgroundPoller: Bool,
-        isBackgroundPollValid: @escaping (() -> Bool),
         using dependencies: Dependencies
-    ) -> AnyPublisher<[SnodeAPI.Namespace: (info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?)], Error> {
-        guard let userED25519KeyPair = Identity.fetchUserEd25519KeyPair() else {
-            return Fail(error: SnodeAPIError.noKeyPair)
-                .eraseToAnyPublisher()
+    ) throws -> Network.PreparedRequest<PollResponse> {
+        guard let userED25519KeyPair = Identity.fetchUserEd25519KeyPair(db) else { throw SnodeAPIError.noKeyPair }
+        
+        let userX25519PublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
+        let namespaceLastHash: [SnodeAPI.Namespace: String] = try namespaces.reduce(into: [:]) { result, namespace in
+            guard namespace.shouldFetchSinceLastHash else { return }
+
+            result[namespace] = try SnodeReceivedMessageInfo
+                .fetchLastNotExpired(
+                    db,
+                    for: snode,
+                    namespace: namespace,
+                    associatedWith: swarmPublicKey,
+                    using: dependencies
+                )?
+                .hash
         }
+        var requests: [any ErasedPreparedRequest] = []
         
-        let userX25519PublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
-        
-        // Prune expired message hashes for this namespace on this service node
-        return Just(())
-            .setFailureType(to: Error.self)
-            .map { _ -> [SnodeAPI.Namespace: String] in
-                namespaces.reduce(into: [:]) { result, namespace in
-                    guard namespace.shouldFetchSinceLastHash else { return }
-                    
-                    // Prune expired message hashes for this namespace on this service node
-                    SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(
-                        for: snode,
-                        namespace: namespace,
-                        associatedWith: swarmPublicKey,
-                        using: dependencies
-                    )
-                    
-                    result[namespace] = SnodeReceivedMessageInfo
-                        .fetchLastNotExpired(
-                            for: snode,
-                            namespace: namespace,
-                            associatedWith: swarmPublicKey,
-                            using: dependencies
-                        )?
-                        .hash
-                }
-            }
-            .tryFlatMap { namespaceLastHash -> AnyPublisher<[SnodeAPI.Namespace: (info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?)], Error> in
-                var requests: [any ErasedPreparedRequest] = []
-                
-                // If we have any config hashes to refresh TTLs then add those requests first
-                if !refreshingConfigHashes.isEmpty {
-                    requests.append(
-                        try SnodeAPI.prepareRequest(
-                            request: Request(
-                                endpoint: .expire,
-                                swarmPublicKey: swarmPublicKey,
-                                body: UpdateExpiryRequest(
-                                    messageHashes: refreshingConfigHashes,
-                                    expiryMs: UInt64(
-                                        SnodeAPI.currentOffsetTimestampMs() +
-                                        (30 * 24 * 60 * 60 * 1000) // 30 days
-                                    ),
-                                    extend: true,
-                                    pubkey: userX25519PublicKey,
-                                    ed25519PublicKey: userED25519KeyPair.publicKey,
-                                    ed25519SecretKey: userED25519KeyPair.secretKey,
-                                    subkey: nil    // TODO: Need to get this
-                                )
+        // If we have any config hashes to refresh TTLs then add those requests first
+        if !refreshingConfigHashes.isEmpty {
+            requests.append(
+                try SnodeAPI.prepareRequest(
+                    request: Request(
+                        endpoint: .expire,
+                        swarmPublicKey: swarmPublicKey,
+                        body: UpdateExpiryRequest(
+                            messageHashes: refreshingConfigHashes,
+                            expiryMs: UInt64(
+                                SnodeAPI.currentOffsetTimestampMs() +
+                                (30 * 24 * 60 * 60 * 1000) // 30 days
                             ),
-                            responseType: UpdateExpiryResponse.self,
-                            using: dependencies
+                            extend: true,
+                            pubkey: userX25519PublicKey,
+                            ed25519PublicKey: userED25519KeyPair.publicKey,
+                            ed25519SecretKey: userED25519KeyPair.secretKey,
+                            subkey: nil    // TODO: Need to get this
                         )
-                    )
-                }
-                
-                // Determine the maxSize each namespace in the request should take up
-                let namespaceMaxSizeMap: [SnodeAPI.Namespace: Int64] = SnodeAPI.Namespace.maxSizeMap(for: namespaces)
-                let fallbackSize: Int64 = (namespaceMaxSizeMap.values.min() ?? 1)
-                
-                // Add the various 'getMessages' requests
-                requests.append(
-                    contentsOf: try namespaces.map { namespace -> any ErasedPreparedRequest in
-                        // Check if this namespace requires authentication
-                        guard namespace.requiresReadAuthentication else {
-                            return try SnodeAPI.prepareRequest(
-                                request: Request(
-                                    endpoint: .getMessages,
-                                    swarmPublicKey: swarmPublicKey,
-                                    body: LegacyGetMessagesRequest(
-                                        pubkey: swarmPublicKey,
-                                        lastHash: (namespaceLastHash[namespace] ?? ""),
-                                        namespace: namespace,
-                                        maxCount: nil,
-                                        maxSize: namespaceMaxSizeMap[namespace]
-                                            .defaulting(to: fallbackSize)
-                                    )
-                                ),
-                                responseType: GetMessagesResponse.self,
-                                using: dependencies
-                            )
-                        }
-                        
-                        return try SnodeAPI.prepareRequest(
-                            request: Request(
-                                endpoint: .getMessages,
-                                swarmPublicKey: swarmPublicKey,
-                                body: GetMessagesRequest(
-                                    lastHash: (namespaceLastHash[namespace] ?? ""),
-                                    namespace: namespace,
-                                    pubkey: swarmPublicKey,
-                                    subkey: nil,    // TODO: Need to get this
-                                    timestampMs: UInt64(SnodeAPI.currentOffsetTimestampMs()),
-                                    ed25519PublicKey: userED25519KeyPair.publicKey,
-                                    ed25519SecretKey: userED25519KeyPair.secretKey,
-                                    maxSize: namespaceMaxSizeMap[namespace]
-                                        .defaulting(to: fallbackSize)
-                                )
-                            ),
-                            responseType: GetMessagesResponse.self,
-                            using: dependencies
-                        )
-                    }
+                    ),
+                    responseType: UpdateExpiryResponse.self,
+                    using: dependencies
                 )
-                
-                // Actually send the request
-                return try SnodeAPI
-                    .prepareRequest(
+            )
+        }
+        
+        // Determine the maxSize each namespace in the request should take up
+        let namespaceMaxSizeMap: [SnodeAPI.Namespace: Int64] = SnodeAPI.Namespace.maxSizeMap(for: namespaces)
+        let fallbackSize: Int64 = (namespaceMaxSizeMap.values.min() ?? 1)
+        
+        // Add the various 'getMessages' requests
+        requests.append(
+            contentsOf: try namespaces.map { namespace -> any ErasedPreparedRequest in
+                // Check if this namespace requires authentication
+                guard namespace.requiresReadAuthentication else {
+                    return try SnodeAPI.prepareRequest(
                         request: Request(
-                            endpoint: .batch,
-                            snode: snode,
+                            endpoint: .getMessages,
                             swarmPublicKey: swarmPublicKey,
-                            body: Network.BatchRequest(requestsKey: .requests, requests: requests)
+                            body: LegacyGetMessagesRequest(
+                                pubkey: swarmPublicKey,
+                                lastHash: (namespaceLastHash[namespace] ?? ""),
+                                namespace: namespace,
+                                maxCount: nil,
+                                maxSize: namespaceMaxSizeMap[namespace]
+                                    .defaulting(to: fallbackSize)
+                            )
                         ),
-                        responseType: Network.BatchResponse.self,
-                        requireAllBatchResponses: true,
+                        responseType: GetMessagesResponse.self,
                         using: dependencies
                     )
-                    .send(using: dependencies)
-                    .map { (_: ResponseInfoType, batchResponse: Network.BatchResponse) -> [SnodeAPI.Namespace: (info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?)] in
-                        let messageResponses: [Network.BatchSubResponse<GetMessagesResponse>] = batchResponse
-                            .compactMap { $0 as? Network.BatchSubResponse<GetMessagesResponse> }
-                        
-                        /// Since we have extended the TTL for a number of messages we need to make sure we update the local
-                        /// `SnodeReceivedMessageInfo.expirationDateMs` values so we don't end up deleting them
-                        /// incorrectly before they actually expire on the swarm
-                        ///
-                        /// **Note:** If this was triggered from a background poll which is no longer valid then don't bother trying
-                        /// to write the changes (the database will be suspended)
-                        if
-                            (!calledFromBackgroundPoller || isBackgroundPollValid()),
-                            !refreshingConfigHashes.isEmpty,
-                            let refreshTTLSubReponse: Network.BatchSubResponse<UpdateExpiryResponse> = batchResponse
-                                .first(where: { $0 is Network.BatchSubResponse<UpdateExpiryResponse> })
-                                .asType(Network.BatchSubResponse<UpdateExpiryResponse>.self),
-                            let refreshTTLResponse: UpdateExpiryResponse = refreshTTLSubReponse.body,
-                            let validResults: [String: UpdateExpiryResponseResult] = try? refreshTTLResponse.validResultMap(
-                                sodium: sodium.wrappedValue,
-                                userX25519PublicKey: getUserHexEncodedPublicKey(),
-                                validationData: refreshingConfigHashes
-                            ),
-                            let targetResult: UpdateExpiryResponseResult = validResults[snode.ed25519PubkeyHex],
-                            let groupedExpiryResult: [UInt64: [String]] = targetResult.changed
-                                .updated(with: targetResult.unchanged)
-                                .groupedByValue()
-                                .nullIfEmpty()
-                        {
-                            dependencies.storage.writeAsync { db in
-                                try groupedExpiryResult.forEach { updatedExpiry, hashes in
-                                    try SnodeReceivedMessageInfo
-                                        .filter(hashes.contains(SnodeReceivedMessageInfo.Columns.hash))
-                                        .updateAll(
-                                            db,
-                                            SnodeReceivedMessageInfo.Columns.expirationDateMs
-                                                .set(to: updatedExpiry)
-                                        )
-                                }
-                            }
-                        }
-                        
-                        return zip(namespaces, messageResponses)
-                            .reduce(into: [:]) { result, next in
-                                guard let messageResponse: GetMessagesResponse = next.1.body else { return }
-                                
-                                let namespace: SnodeAPI.Namespace = next.0
-                                
-                                result[namespace] = (
-                                    info: next.1,
-                                    data: (
-                                        messages: messageResponse.messages
-                                            .compactMap { rawMessage -> SnodeReceivedMessage? in
-                                                SnodeReceivedMessage(
-                                                    snode: snode,
-                                                    publicKey: swarmPublicKey,
-                                                    namespace: namespace,
-                                                    rawMessage: rawMessage
-                                                )
-                                            },
-                                        lastHash: namespaceLastHash[namespace]
-                                    )
+                }
+                
+                return try SnodeAPI.prepareRequest(
+                    request: Request(
+                        endpoint: .getMessages,
+                        swarmPublicKey: swarmPublicKey,
+                        body: GetMessagesRequest(
+                            lastHash: (namespaceLastHash[namespace] ?? ""),
+                            namespace: namespace,
+                            pubkey: swarmPublicKey,
+                            subkey: nil,    // TODO: Need to get this
+                            timestampMs: UInt64(SnodeAPI.currentOffsetTimestampMs()),
+                            ed25519PublicKey: userED25519KeyPair.publicKey,
+                            ed25519SecretKey: userED25519KeyPair.secretKey,
+                            maxSize: namespaceMaxSizeMap[namespace]
+                                .defaulting(to: fallbackSize)
+                        )
+                    ),
+                    responseType: GetMessagesResponse.self,
+                    using: dependencies
+                )
+            }
+        )
+        
+        return try SnodeAPI
+            .prepareRequest(
+                request: Request(
+                    endpoint: .batch,
+                    snode: snode,
+                    swarmPublicKey: swarmPublicKey,
+                    body: Network.BatchRequest(requestsKey: .requests, requests: requests)
+                ),
+                responseType: Network.BatchResponse.self,
+                requireAllBatchResponses: true,
+                using: dependencies
+            )
+            .map { (_: ResponseInfoType, batchResponse: Network.BatchResponse) -> PollResponse in
+                let messageResponses: [Network.BatchSubResponse<GetMessagesResponse>] = batchResponse
+                    .compactMap { $0 as? Network.BatchSubResponse<GetMessagesResponse> }
+                
+                /// Since we have extended the TTL for a number of messages we need to make sure we update the local
+                /// `SnodeReceivedMessageInfo.expirationDateMs` values so we don't end up deleting them
+                /// incorrectly before they actually expire on the swarm
+                ///
+                /// **Note:** If this was triggered from a background poll which is no longer valid then don't bother trying
+                /// to write the changes (the database will be suspended)
+                if
+                    !refreshingConfigHashes.isEmpty,
+                    let refreshTTLSubReponse: Network.BatchSubResponse<UpdateExpiryResponse> = batchResponse
+                        .first(where: { $0 is Network.BatchSubResponse<UpdateExpiryResponse> })
+                        .asType(Network.BatchSubResponse<UpdateExpiryResponse>.self),
+                    let refreshTTLResponse: UpdateExpiryResponse = refreshTTLSubReponse.body,
+                    let validResults: [String: UpdateExpiryResponseResult] = try? refreshTTLResponse.validResultMap(
+                        sodium: sodium.wrappedValue,
+                        userX25519PublicKey: getUserHexEncodedPublicKey(),
+                        validationData: refreshingConfigHashes
+                    ),
+                    let targetResult: UpdateExpiryResponseResult = validResults[snode.ed25519PubkeyHex],
+                    let groupedExpiryResult: [UInt64: [String]] = targetResult.changed
+                        .updated(with: targetResult.unchanged)
+                        .groupedByValue()
+                        .nullIfEmpty()
+                {
+                    dependencies.storage.writeAsync { db in
+                        try groupedExpiryResult.forEach { updatedExpiry, hashes in
+                            try SnodeReceivedMessageInfo
+                                .filter(hashes.contains(SnodeReceivedMessageInfo.Columns.hash))
+                                .updateAll(
+                                    db,
+                                    SnodeReceivedMessageInfo.Columns.expirationDateMs
+                                        .set(to: updatedExpiry)
                                 )
-                            }
+                        }
                     }
-                    .eraseToAnyPublisher()
-        }
-        .eraseToAnyPublisher()
+                }
+                
+                return zip(namespaces, messageResponses)
+                    .reduce(into: [:]) { result, next in
+                        guard let messageResponse: GetMessagesResponse = next.1.body else { return }
+                        
+                        let namespace: SnodeAPI.Namespace = next.0
+                        
+                        result[namespace] = (
+                            info: next.1,
+                            data: (
+                                messages: messageResponse.messages
+                                    .compactMap { rawMessage -> SnodeReceivedMessage? in
+                                        SnodeReceivedMessage(
+                                            snode: snode,
+                                            publicKey: swarmPublicKey,
+                                            namespace: namespace,
+                                            rawMessage: rawMessage
+                                        )
+                                    },
+                                lastHash: namespaceLastHash[namespace]
+                            )
+                        )
+                    }
+            }
     }
     
     public static func preparedSequence(
@@ -271,6 +249,7 @@ public final class SnodeAPI {
     /// this directly remove the `@available` line
     @available(*, unavailable, message: "Avoid using this directly, use the pre-built `poll()` method instead")
     public static func getMessages(
+        _ db: Database,
         in namespace: SnodeAPI.Namespace,
         from snode: LibSession.Snode,
         swarmPublicKey: String,
@@ -278,16 +257,9 @@ public final class SnodeAPI {
     ) -> AnyPublisher<(info: ResponseInfoType, data: (messages: [SnodeReceivedMessage], lastHash: String?)?), Error> {
         return Deferred {
             Future<String?, Error> { resolver in
-                // Prune expired message hashes for this namespace on this service node
-                SnodeReceivedMessageInfo.pruneExpiredMessageHashInfo(
-                    for: snode,
-                    namespace: namespace,
-                    associatedWith: swarmPublicKey,
-                    using: dependencies
-                )
-                
-                let maybeLastHash: String? = SnodeReceivedMessageInfo
+                let maybeLastHash: String? = try? SnodeReceivedMessageInfo
                     .fetchLastNotExpired(
+                        db,
                         for: snode,
                         namespace: namespace,
                         associatedWith: swarmPublicKey,

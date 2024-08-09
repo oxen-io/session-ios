@@ -209,7 +209,7 @@ final class NukeDataModal: Modal {
                                         targetView: self?.view,
                                         info: ConfirmationModal.Info(
                                             title: "ALERT_ERROR_TITLE".localized(),
-                                            body: .text(error.localizedDescription),
+                                            body: .text("\(error)"),
                                             cancelTitle: "BUTTON_OK".localized(),
                                             cancelStyle: .alert_text
                                         )

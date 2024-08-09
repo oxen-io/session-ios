@@ -475,7 +475,7 @@ public enum PushNotificationAPI {
                         return keySpec
                     }
                     catch {
-                        SNLog("Setting keychain value failed with error: \(error.localizedDescription)")
+                        SNLog("Setting keychain value failed with error: \(error)")
                         throw StorageError.keySpecCreationFailed
                     }
                     

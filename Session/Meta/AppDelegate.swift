@@ -242,6 +242,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         Log.info("[AppDelegate] Setting 'isMainAppActive' to true.")
         UserDefaults.sharedLokiProject?[.isMainAppActive] = true
         
+        // FIXME: Seems like there are some discrepancies between the expectations of how the iOS lifecycle methods work, we should look into them and ensure the code behaves as expected (in this case there were situations where these two wouldn't get called when returning from the background)
+        Storage.resumeDatabaseAccess()
+        LibSession.resumeNetworkAccess()
+        
         ensureRootViewController(calledFrom: .didBecomeActive)
 
         Singleton.appReadiness.runNowOrWhenAppDidBecomeReady { [weak self] in
@@ -292,20 +296,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         Storage.resumeDatabaseAccess()
         LibSession.resumeNetworkAccess()
         
+        let queue: DispatchQueue = .global(qos: .userInitiated)
+        let poller: BackgroundPoller = BackgroundPoller()
+        var cancellable: AnyCancellable?
+        
         // Background tasks only last for a certain amount of time (which can result in a crash and a
         // prompt appearing for the user), we want to avoid this and need to make sure to suspend the
         // database again before the background task ends so we start a timer that expires 1 second
         // before the background task is due to expire in order to do so
         let cancelTimer: Timer = Timer.scheduledTimerOnMainThread(
-            withTimeInterval: (application.backgroundTimeRemaining - 1),
+            withTimeInterval: (application.backgroundTimeRemaining - 5),
             repeats: false
-        ) { timer in
+        ) { [poller] timer in
             timer.invalidate()
             
-            guard BackgroundPoller.isValid else { return }
+            guard cancellable != nil else { return }
             
             Log.info("Background poll failed due to manual timeout.")
-            BackgroundPoller.isValid = false
+            cancellable?.cancel()
             
             if Singleton.hasAppContext && Singleton.appContext.isInBackground {
                 LibSession.suspendNetworkAccess()
@@ -313,39 +321,42 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                 Log.flush()
             }
             
+            _ = poller // Capture poller to ensure it doesn't go out of scope
             completionHandler(.failed)
         }
         
-        // Flag the background poller as valid first and then trigger it to poll once the app is
-        // ready (we do this here rather than in `BackgroundPoller.poll` to avoid the rare edge-case
-        // that could happen when the timeout triggers before the app becomes ready which would have
-        // incorrectly set this 'isValid' flag to true after it should have timed out)
-        BackgroundPoller.isValid = true
-        
-        Singleton.appReadiness.runNowOrWhenAppDidBecomeReady {
+        Singleton.appReadiness.runNowOrWhenAppDidBecomeReady { [dependencies, poller] in
             // If the 'AppReadiness' process takes too long then it's possible for the user to open
             // the app after this closure is registered but before it's actually triggered - this can
             // result in the `BackgroundPoller` incorrectly getting called in the foreground, this check
             // is here to prevent that
-            guard Singleton.hasAppContext && Singleton.appContext.isInBackground else {
-                BackgroundPoller.isValid = false
-                return
-            }
+            guard Singleton.hasAppContext && Singleton.appContext.isInBackground else { return }
             
-            BackgroundPoller.poll { result in
-                guard BackgroundPoller.isValid else { return }
-                
-                BackgroundPoller.isValid = false
-                
-                if Singleton.hasAppContext && Singleton.appContext.isInBackground {
-                    LibSession.suspendNetworkAccess()
-                    Storage.suspendDatabaseAccess()
-                    Log.flush()
-                }
-                
-                cancelTimer.invalidate()
-                completionHandler(result)
-            }
+            cancellable = poller
+                .poll(using: dependencies)
+                .subscribe(on: queue, using: dependencies)
+                .receive(on: DispatchQueue.main, using: dependencies)
+                .sink(
+                    receiveCompletion: { [poller] result in
+                        // Ensure we haven't timed out yet
+                        guard cancelTimer.isValid else { return }
+                        
+                        if Singleton.hasAppContext && Singleton.appContext.isInBackground {
+                            LibSession.suspendNetworkAccess()
+                            Storage.suspendDatabaseAccess()
+                            Log.flush()
+                        }
+                        
+                        cancelTimer.invalidate()
+                        _ = poller // Capture poller to ensure it doesn't go out of scope
+                        
+                        switch result {
+                            case .failure: completionHandler(.failed)
+                            case .finished: completionHandler(.newData)
+                        }
+                    },
+                    receiveValue: { _ in }
+                )
         }
     }
     
