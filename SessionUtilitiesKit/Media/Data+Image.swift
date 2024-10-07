@@ -2,6 +2,7 @@
 
 import UIKit
 import ImageIO
+import UniformTypeIdentifiers
 import libwebp
 
 public extension Data {
@@ -20,7 +21,7 @@ public extension Data {
         
         return (
             count < maxFileSize &&
-            isValidImage(mimeType: nil, format: imageFormat) &&
+            isValidImage(type: nil, format: imageFormat) &&
             hasValidImageDimensions(isAnimated: isAnimated)
         )
     }
@@ -106,17 +107,15 @@ public extension Data {
     
     // MARK: - Initialization
     
-    init?(validImageDataAt path: String, mimeType: String? = nil) throws {
+    init?(validImageDataAt path: String, type: UTType? = nil, using dependencies: Dependencies) throws {
         let fileUrl: URL = URL(fileURLWithPath: path)
         
         guard
-            let mimeType: String = (mimeType ?? MimeTypeUtil.mimeType(for: fileUrl.pathExtension)),
-            !mimeType.isEmpty,
-            let fileSize: UInt64 = FileSystem.fileSize(of: path)
+            let type: UTType = type,
+            let fileSize: UInt64 = FileSystem.fileSize(of: path, using: dependencies),
+            fileSize <= SNUtilitiesKit.maxFileSize,
+            (type.isImage || type.isAnimated)
         else { return nil }
-        
-        guard fileSize <= FileSystem.maxFileSize else { return nil }
-        guard MimeTypeUtil.isImage(mimeType) || MimeTypeUtil.isAnimated(mimeType) else { return nil }
         
         self = try Data(contentsOf: fileUrl, options: [.dataReadingMapped])
     }
@@ -132,11 +131,11 @@ public extension Data {
         return Data.hasValidImageDimension(source: imageSource, isAnimated: isAnimated)
     }
     
-    func isValidImage(mimeType: String?) -> Bool {
-        return isValidImage(mimeType: mimeType, format: self.guessedImageFormat)
+    func isValidImage(type: UTType?) -> Bool {
+        return isValidImage(type: type, format: self.guessedImageFormat)
     }
     
-    func isValidImage(mimeType: String?, format: ImageFormat) -> Bool {
+    func isValidImage(type: UTType?, format: ImageFormat) -> Bool {
         // Don't trust the file extension; iOS (e.g. UIKit, Core Graphics) will happily
         // load a .gif with a .png file extension
         //
@@ -146,37 +145,26 @@ public extension Data {
         // deduced image format
         switch format {
             case .unknown: return false
-            case .png: return (mimeType == nil || mimeType == MimeTypeUtil.MimeType.imagePng)
-            case .jpeg: return (mimeType == nil || mimeType == MimeTypeUtil.MimeType.imageJpeg)
+            case .png: return (type == nil || type == .png)
+            case .jpeg: return (type == nil || type == .jpeg)
                 
             case .gif:
                 guard hasValidGifSize else { return false }
                 
-                return (mimeType == nil || mimeType == MimeTypeUtil.MimeType.imageGif)
+                return (type == nil || type == .gif)
                 
-            case .tiff:
-                return (
-                    mimeType == nil ||
-                    mimeType == MimeTypeUtil.MimeType.imageTiff1 ||
-                    mimeType == MimeTypeUtil.MimeType.imageTiff2
-                )
-
-            case .bmp:
-                return (
-                    mimeType == nil ||
-                    mimeType == MimeTypeUtil.MimeType.imageBmp1 ||
-                    mimeType == MimeTypeUtil.MimeType.imageBmp2
-                )
-                
-            case .webp:
-                return (mimeType == nil || mimeType == MimeTypeUtil.MimeType.imageWebp)
+            case .tiff: return (type == nil || type == .tiff || type == .xTiff)
+            case .bmp: return (type == nil || type == .bmp || type == .xWinBpm)
+            case .webp: return (type == nil || type == .webP)
         }
     }
     
-    static func isValidImage(at path: String, mimeType: String? = nil) -> Bool {
-        guard let data: Data = try? Data(validImageDataAt: path, mimeType: mimeType) else { return false }
+    static func isValidImage(at path: String, type: UTType? = nil, using dependencies: Dependencies) -> Bool {
+        guard let data: Data = try? Data(validImageDataAt: path, type: type, using: dependencies) else {
+            return false
+        }
         
-        return data.hasValidImageDimensions(isAnimated: (mimeType.map { MimeTypeUtil.isAnimated($0) } ?? false))
+        return data.hasValidImageDimensions(isAnimated: type?.isAnimated == true)
     }
     
     static func hasValidImageDimension(source: CGImageSource, isAnimated: Bool) -> Bool {
@@ -234,16 +222,16 @@ public extension Data {
         return ImageDimensions(pixelSize: CGSize(width: width, height: height), depthBytes: depthBytes)
     }
     
-    static func imageSize(for path: String, mimeType: String) -> CGSize {
+    static func imageSize(for path: String, type: UTType?, using dependencies: Dependencies) -> CGSize {
         let fileUrl: URL = URL(fileURLWithPath: path)
-        let isAnimated: Bool = MimeTypeUtil.isAnimated(mimeType)
+        let isAnimated: Bool = (type?.isAnimated ?? false)
         
         guard
-            let data: Data = try? Data(validImageDataAt: path, mimeType: mimeType),
-            let pixelSize: CGSize = imageSize(at: path, with: data, mimeType: mimeType, isAnimated: isAnimated)
+            let data: Data = try? Data(validImageDataAt: path, type: type, using: dependencies),
+            let pixelSize: CGSize = imageSize(at: path, with: data, type: type, isAnimated: isAnimated)
         else { return .zero }
         
-        guard mimeType != MimeTypeUtil.MimeType.imageWebp else { return pixelSize }
+        guard type != .webP else { return pixelSize }
                 
         // With CGImageSource we avoid loading the whole image into memory.
         let options: [String: Any] = [kCGImageSourceShouldCache as String: NSNumber(booleanLiteral: false)]
@@ -281,11 +269,11 @@ public extension Data {
         }
     }
     
-    private static func imageSize(at path: String, with data: Data?, mimeType: String?, isAnimated: Bool) -> CGSize? {
+    private static func imageSize(at path: String, with data: Data?, type: UTType?, isAnimated: Bool) -> CGSize? {
         let fileUrl: URL = URL(fileURLWithPath: path)
         
         // Need to custom handle WebP images via libwebp
-        guard mimeType != MimeTypeUtil.MimeType.imageWebp else {
+        guard type != .webP else {
             guard let targetData: Data = (data ?? (try? Data(contentsOf: fileUrl, options: [.dataReadingMapped]))) else {
                 return nil
             }

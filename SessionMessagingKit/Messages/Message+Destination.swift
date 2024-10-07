@@ -7,13 +7,14 @@ import SessionUtilitiesKit
 
 public extension Message {
     enum Destination: Codable, Hashable {
-        /// A message directed to another user
+        /// A one-to-one destination where `publicKey` is a `standard` `SessionId`
         case contact(publicKey: String)
         
         /// A message that was originally sent to another user but needs to be replicated to the current users swarm
         case syncMessage(originalRecipientPublicKey: String)
         
-        /// A message directed to group conversation
+        /// A one-to-one destination where `groupPublicKey` is a `standard` `SessionId` for legacy groups
+        /// and a `group` `SessionId` for updated groups
         case closedGroup(groupPublicKey: String)
         
         /// A message directed to an open group
@@ -21,8 +22,7 @@ public extension Message {
             roomToken: String,
             server: String,
             whisperTo: String? = nil,
-            whisperMods: Bool = false,
-            fileIds: [String]? = nil
+            whisperMods: Bool = false
         )
         
         /// A message directed to an open group inbox
@@ -31,6 +31,9 @@ public extension Message {
         public var defaultNamespace: SnodeAPI.Namespace? {
             switch self {
                 case .contact, .syncMessage: return .`default`
+                case .closedGroup(let groupId) where (try? SessionId.Prefix(from: groupId)) == .group:
+                    return .groupMessages
+                
                 case .closedGroup: return .legacyClosedGroup
                 case .openGroup, .openGroupInbox: return nil
             }
@@ -39,8 +42,7 @@ public extension Message {
         public static func from(
             _ db: Database,
             threadId: String,
-            threadVariant: SessionThread.Variant,
-            fileIds: [String]? = nil
+            threadVariant: SessionThread.Variant
         ) throws -> Message.Destination {
             switch threadVariant {
                 case .contact:
@@ -60,31 +62,14 @@ public extension Message {
                     
                     return .contact(publicKey: threadId)
                 
-                case .legacyGroup, .group:
-                    return .closedGroup(groupPublicKey: threadId)
+                case .legacyGroup, .group: return .closedGroup(groupPublicKey: threadId)
                 
                 case .community:
                     guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
                         throw StorageError.objectNotFound
                     }
                     
-                    return .openGroup(roomToken: openGroup.roomToken, server: openGroup.server, fileIds: fileIds)
-            }
-        }
-        
-        func with(fileIds: [String]) -> Message.Destination {
-            // Only Open Group messages support receiving the 'fileIds'
-            switch self {
-                case .openGroup(let roomToken, let server, let whisperTo, let whisperMods, _):
-                    return .openGroup(
-                        roomToken: roomToken,
-                        server: server,
-                        whisperTo: whisperTo,
-                        whisperMods: whisperMods,
-                        fileIds: fileIds
-                    )
-                    
-                default: return self
+                    return .openGroup(roomToken: openGroup.roomToken, server: openGroup.server)
             }
         }
     }

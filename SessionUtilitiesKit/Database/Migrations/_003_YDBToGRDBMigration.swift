@@ -15,10 +15,10 @@ enum _003_YDBToGRDBMigration: Migration {
     static func migrate(_ db: Database, using dependencies: Dependencies) throws {
         guard
             !SNUtilitiesKit.isRunningTests &&
-            Identity.userExists(db)
-        else { return Storage.update(progress: 1, for: self, in: target) }
+            Identity.userExists(db, using: dependencies)
+        else { return Storage.update(progress: 1, for: self, in: target, using: dependencies) }
         
-        Log.error("[Migration] Attempted to perform legacy migation")
+        Log.error(.migration, "Attempted to perform legacy migation")
         throw StorageError.migrationNoLongerSupported
     }
 }

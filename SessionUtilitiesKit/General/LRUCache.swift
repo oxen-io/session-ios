@@ -15,14 +15,18 @@ public class LRUCache<KeyType: Hashable & Equatable, ValueType> {
     public init(maxSize: Int) {
         self.maxSize = maxSize
 
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(didReceiveMemoryWarning),
-                                               name: UIApplication.didReceiveMemoryWarningNotification,
-                                               object: nil)
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(didEnterBackground),
-                                               name: .sessionDidEnterBackground,
-                                               object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didReceiveMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didEnterBackground),
+            name: .sessionDidEnterBackground,
+            object: nil
+        )
     }
 
     deinit {

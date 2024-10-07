@@ -10,7 +10,7 @@ public extension VisibleMessage {
         public let url: String?
         public let attachmentId: String?
 
-        public var isValid: Bool { title != nil && url != nil && attachmentId != nil }
+        public func isValid(using dependencies: Dependencies) -> Bool { title != nil && url != nil && attachmentId != nil }
         
         // MARK: - Initialization
 

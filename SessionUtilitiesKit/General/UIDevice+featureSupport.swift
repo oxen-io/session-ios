@@ -48,8 +48,8 @@ public extension UIDevice {
 
     @objc
     var isIPad: Bool {
-        let isNativeIPad = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiom.pad
-        let isCompatabilityModeIPad = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiom.phone && self.model.hasPrefix("iPad")
+        let isNativeIPad: Bool = (userInterfaceIdiom == .pad)
+        let isCompatabilityModeIPad: Bool = (userInterfaceIdiom == .phone && self.model.hasPrefix("iPad"))
 
         return isNativeIPad || isCompatabilityModeIPad
     }

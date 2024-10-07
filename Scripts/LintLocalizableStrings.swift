@@ -58,6 +58,16 @@ extension ProjectState {
         .contains("print(", caseSensitive: false),
         .contains("SNLog(", caseSensitive: false),
         .contains("Log.setup(", caseSensitive: false),
+        .containsAnd(
+            "primaryPrefix:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Log.setup(with: Logger(", caseSensitive: false))
+        ),
+        .containsAnd(
+            "customDirectory:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 2, .contains("Log.setup(with: Logger(", caseSensitive: false))
+        ),
         .contains("Log.verbose(", caseSensitive: false),
         .contains("Log.debug(", caseSensitive: false),
         .contains("Log.info(", caseSensitive: false),
@@ -66,11 +76,15 @@ extension ProjectState {
         .contains("Log.critical(", caseSensitive: false),
         .contains("Log.Category =", caseSensitive: false),
         .contains("logMessage:", caseSensitive: false),
+        .contains(".logging(", caseSensitive: false),
         .contains("owsFailDebug(", caseSensitive: false),
+        .contains("error: .other(", caseSensitive: false),
         .contains("#imageLiteral(resourceName:", caseSensitive: false),
         .contains("UIImage(named:", caseSensitive: false),
         .contains("UIImage(systemName:", caseSensitive: false),
         .contains("[UIImage imageNamed:", caseSensitive: false),
+        .contains("Image(", caseSensitive: false),
+        .contains("logo:", caseSensitive: false),
         .contains("UIFont(name:", caseSensitive: false),
         .contains(".dateFormat =", caseSensitive: false),
         .contains("accessibilityLabel =", caseSensitive: false),
@@ -80,6 +94,8 @@ extension ProjectState {
         .contains("accessibilityLabel:", caseSensitive: false),
         .contains("Accessibility(identifier:", caseSensitive: false),
         .contains("Accessibility(label:", caseSensitive: false),
+        .contains(".withAccessibility(identifier:", caseSensitive: false),
+        .contains(".withAccessibility(label:", caseSensitive: false),
         .contains("NSAttributedString.Key(", caseSensitive: false),
         .contains("Notification.Name(", caseSensitive: false),
         .contains("Notification.Key(", caseSensitive: false),
@@ -99,6 +115,21 @@ extension ProjectState {
             caseSensitive: false,
             .previousLine(numEarlier: 2, .contains("Accessibility(", caseSensitive: false))
         ),
+        .containsAnd(
+            "identifier:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains(".withAccessibility(", caseSensitive: false))
+        ),
+        .containsAnd(
+            "label:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains(".withAccessibility(", caseSensitive: false))
+        ),
+        .containsAnd(
+            "label:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 2, .contains(".withAccessibility(", caseSensitive: false))
+        ),
         .contains("SQL(", caseSensitive: false),
         .contains(" == ", caseSensitive: false),
         .contains("forResource:", caseSensitive: false),
@@ -111,12 +142,28 @@ extension ProjectState {
         .contains("separator:", caseSensitive: false),
         .contains("separatedBy:", caseSensitive: false),
         .nextLine(.contains(".put(key:", caseSensitive: false)),
+        .nextLine(
+            .containsAnd(
+                ".put(",
+                caseSensitive: false,
+                .nextLine(.contains("key:", caseSensitive: false))
+            )
+        ),
         .nextLine(.contains(".putNumber(", caseSensitive: false)),
         .nextLine(.contains(".localized()", caseSensitive: false)),
+        .contains(".localizedString(for:", caseSensitive: false),
         .regex(".*static var databaseTableName: String"),
         .regex("case .* = "),
         .regex("Error.*\\("),
-        .belowLineContaining("PreviewProvider")
+        .belowLineContaining("PreviewProvider"),
+        .regex("Crypto.*\\(id:"),
+        .containsAnd("id:", caseSensitive: false, .previousLine(numEarlier: 1, .regex("Crypto.*\\("))),
+        .regex(".*\\.like\\(\".*%\""),
+        .containsAnd(
+            "identifier:",
+            caseSensitive: false,
+            .previousLine(numEarlier: 1, .contains("Dependencies.create", caseSensitive: false))
+        )
     ]
 }
 

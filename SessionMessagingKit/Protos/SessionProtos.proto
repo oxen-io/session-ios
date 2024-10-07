@@ -201,10 +201,13 @@ message DataMessage {
     repeated KeyPairWrapper wrappers          = 7;
     optional uint32         expirationTimer   = 8;
   }
+    
+    
+  //  reserved 3;
+  //  reserved "group";
 
   optional string                    body                           = 1;
   repeated AttachmentPointer         attachments                    = 2;
-  // optional GroupContext           group                          = 3;  // No longer used
   optional uint32                    flags                          = 4;
   // optional uint32                 expireTimer                    = 5;  // No longer used
   optional bytes                     profileKey                     = 6;
@@ -217,6 +220,7 @@ message DataMessage {
   optional ClosedGroupControlMessage closedGroupControlMessage      = 104;
   optional string                    syncTarget                     = 105;
   optional bool                      blocksCommunityMessageRequests = 106;
+  optional GroupUpdateMessage        groupUpdateMessage             = 120;
 }
 
 message ReceiptMessage {
@@ -250,4 +254,84 @@ message AttachmentPointer {
   optional uint32  height      = 10;
   optional string  caption     = 11;
   optional string  url         = 101;
+}
+
+// Group Update Messages
+
+message GroupUpdateMessage {
+  optional GroupUpdateInviteMessage                  inviteMessage                 = 1;
+  optional GroupUpdateInfoChangeMessage              infoChangeMessage             = 2;
+  optional GroupUpdateMemberChangeMessage            memberChangeMessage           = 3;
+  optional GroupUpdatePromoteMessage                 promoteMessage                = 4;
+  optional GroupUpdateMemberLeftMessage              memberLeftMessage             = 5;
+  optional GroupUpdateInviteResponseMessage          inviteResponse                = 6;
+  optional GroupUpdateDeleteMemberContentMessage     deleteMemberContent           = 7;
+  optional GroupUpdateMemberLeftNotificationMessage  memberLeftNotificationMessage = 8;
+}
+
+message GroupUpdateInviteMessage {
+  // @required
+  required string         groupSessionId         = 1; // The `groupIdentityPublicKey` with a `03` prefix
+  // @required
+  required string         name                   = 2;
+  // @required
+  required bytes          memberAuthData         = 3;
+  // @required
+  required bytes          adminSignature         = 4;
+}
+
+message GroupUpdatePromoteMessage {
+  // @required
+  required bytes          groupIdentitySeed       = 1;
+  // @required
+  required string         name                    = 2;
+}
+
+message GroupUpdateInfoChangeMessage {
+  enum Type {
+    NAME                  = 1;
+    AVATAR                = 2;
+    DISAPPEARING_MESSAGES = 3;
+  }
+
+  // @required
+  required Type     type              = 1;
+  optional string   updatedName       = 2;
+  optional uint32   updatedExpiration = 3;
+  // @required
+  required bytes    adminSignature    = 4;
+}
+
+message GroupUpdateMemberChangeMessage {
+  enum Type {
+    ADDED    = 1;
+    REMOVED  = 2;
+    PROMOTED = 3;
+  }
+
+  // @required
+  required Type   type               = 1;
+  repeated string memberSessionIds   = 2;
+  optional bool   historyShared      = 3;
+  // @required
+  required bytes  adminSignature     = 4;
+}
+
+message GroupUpdateMemberLeftMessage {
+  // the pubkey of the member left is included as part of the closed group encryption logic (senderIdentity on desktop)
+}
+
+message GroupUpdateMemberLeftNotificationMessage {
+  // the pubkey of the member left is included as part of the closed group encryption logic (senderIdentity on desktop)
+}
+
+message GroupUpdateInviteResponseMessage {
+  // @required
+  required bool                      isApproved                = 1; // Whether the request was approved
+}
+
+message GroupUpdateDeleteMemberContentMessage {
+  repeated string memberSessionIds   = 1;
+  repeated string messageHashes      = 2;
+  optional bytes  adminSignature     = 3;
 }

@@ -32,11 +32,8 @@ extension SnodeAPI {
         public init(
             lastHash: String,
             namespace: SnodeAPI.Namespace?,
-            pubkey: String,
-            subkey: String?,
+            authMethod: AuthenticationMethod,
             timestampMs: UInt64,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8],
             maxCount: Int64? = nil,
             maxSize: Int64? = nil
         ) {
@@ -46,10 +43,7 @@ extension SnodeAPI {
             self.maxSize = maxSize
             
             super.init(
-                pubkey: pubkey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey,
-                subkey: subkey,
+                authMethod: authMethod,
                 timestampMs: timestampMs
             )
         }

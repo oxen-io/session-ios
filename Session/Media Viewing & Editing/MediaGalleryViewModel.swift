@@ -4,6 +4,7 @@ import Foundation
 import GRDB
 import DifferenceKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 import SwiftUI
 
@@ -27,6 +28,7 @@ public class MediaGalleryViewModel {
     
     // MARK: - Variables
     
+    public let dependencies: Dependencies
     public let threadId: String
     public let threadVariant: SessionThread.Variant
     private var focusedAttachmentId: String?
@@ -72,8 +74,10 @@ public class MediaGalleryViewModel {
         mediaType: MediaType,
         pageSize: Int = 1,
         focusedAttachmentId: String? = nil,
-        performInitialQuerySync: Bool = false
+        performInitialQuerySync: Bool = false,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.threadId = threadId
         self.threadVariant = threadVariant
         self.focusedAttachmentId = focusedAttachmentId
@@ -109,7 +113,8 @@ public class MediaGalleryViewModel {
                         self?.unobservedGalleryDataChanges = updatedData
                     }
                 )
-            }
+            },
+            using: dependencies
         )
         
         // Run the initial query on a backgorund thread so we don't block the push transition
@@ -350,8 +355,8 @@ public class MediaGalleryViewModel {
             return Item.baseQuery(orderSQL: orderSQL, customFilters: customFilters)([])
         }
 
-        func thumbnailImage(async: @escaping (UIImage) -> ()) {
-            attachment.thumbnail(size: .small, success: { image, _ in async(image) }, failure: {})
+        func thumbnailImage(using dependencies: Dependencies, async: @escaping (UIImage) -> ()) {
+            attachment.thumbnail(size: .small, using: dependencies, success: { image, _ in async(image) }, failure: {})
         }
     }
     
@@ -398,7 +403,7 @@ public class MediaGalleryViewModel {
         
         // Note: It's possible we already have cached album data for this interaction
         // but to avoid displaying stale data we re-fetch from the database anyway
-        let maybeAlbumInfo: AlbumInfo? = Storage.shared.read { db -> AlbumInfo in
+        let maybeAlbumInfo: AlbumInfo? = dependencies[singleton: .storage].read { db -> AlbumInfo in
             let attachment: TypedTableAlias<Attachment> = TypedTableAlias()
             let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
             let interactionAttachment: TypedTableAlias<InteractionAttachment> = TypedTableAlias()
@@ -534,7 +539,8 @@ public class MediaGalleryViewModel {
         interactionId: Int64,
         selectedAttachmentId: String,
         options: [MediaGalleryOption],
-        useTransitioningDelegate: Bool = true
+        useTransitioningDelegate: Bool = true,
+        using dependencies: Dependencies
     ) -> UIViewController? {
         // Load the data for the album immediately (needed before pushing to the screen so
         // transitions work nicely)
@@ -542,7 +548,8 @@ public class MediaGalleryViewModel {
             threadId: threadId,
             threadVariant: threadVariant,
             isPagedData: false,
-            mediaType: .media
+            mediaType: .media,
+            using: dependencies
         )
         viewModel.loadAndCacheAlbumData(for: interactionId, in: threadId)
         viewModel.replaceAlbumObservation(toObservationFor: interactionId)
@@ -574,7 +581,8 @@ public class MediaGalleryViewModel {
         threadId: String,
         threadVariant: SessionThread.Variant,
         focusedAttachmentId: String?,
-        performInitialQuerySync: Bool = false
+        performInitialQuerySync: Bool = false,
+        using dependencies: Dependencies
     ) -> MediaTileViewController {
         let viewModel: MediaGalleryViewModel = MediaGalleryViewModel(
             threadId: threadId,
@@ -583,11 +591,13 @@ public class MediaGalleryViewModel {
             mediaType: .media,
             pageSize: MediaTileViewController.itemPageSize,
             focusedAttachmentId: focusedAttachmentId,
-            performInitialQuerySync: performInitialQuerySync
+            performInitialQuerySync: performInitialQuerySync,
+            using: dependencies
         )
         
         return MediaTileViewController(
-            viewModel: viewModel
+            viewModel: viewModel,
+            using: dependencies
         )
     }
     
@@ -595,7 +605,8 @@ public class MediaGalleryViewModel {
         threadId: String,
         threadVariant: SessionThread.Variant,
         focusedAttachmentId: String?,
-        performInitialQuerySync: Bool = false
+        performInitialQuerySync: Bool = false,
+        using dependencies: Dependencies
     ) -> DocumentTileViewController {
         let viewModel: MediaGalleryViewModel = MediaGalleryViewModel(
             threadId: threadId,
@@ -604,11 +615,13 @@ public class MediaGalleryViewModel {
             mediaType: .document,
             pageSize: MediaTileViewController.itemPageSize,
             focusedAttachmentId: focusedAttachmentId,
-            performInitialQuerySync: performInitialQuerySync
+            performInitialQuerySync: performInitialQuerySync,
+            using: dependencies
         )
         
         return DocumentTileViewController(
-            viewModel: viewModel
+            viewModel: viewModel,
+            using: dependencies
         )
     }
     
@@ -616,25 +629,29 @@ public class MediaGalleryViewModel {
         threadId: String,
         threadVariant: SessionThread.Variant,
         focusedAttachmentId: String?,
-        performInitialQuerySync: Bool = false
+        performInitialQuerySync: Bool = false,
+        using dependencies: Dependencies
     ) -> AllMediaViewController {
         let mediaTitleViewController = createMediaTileViewController(
             threadId: threadId,
             threadVariant: threadVariant,
             focusedAttachmentId: focusedAttachmentId,
-            performInitialQuerySync: performInitialQuerySync
+            performInitialQuerySync: performInitialQuerySync,
+            using: dependencies
         )
         
         let documentTitleViewController = createDocumentTitleViewController(
             threadId: threadId,
             threadVariant: threadVariant,
             focusedAttachmentId: focusedAttachmentId,
-            performInitialQuerySync: performInitialQuerySync
+            performInitialQuerySync: performInitialQuerySync,
+            using: dependencies
         )
         
         return AllMediaViewController(
             mediaTitleViewController: mediaTitleViewController,
-            documentTitleViewController: documentTitleViewController
+            documentTitleViewController: documentTitleViewController,
+            using: dependencies
         )
     }
 }

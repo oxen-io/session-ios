@@ -6,6 +6,7 @@ import Quick
 import Nimble
 import SessionUIKit
 import SessionSnodeKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 @testable import Session
@@ -13,30 +14,24 @@ import SessionUtilitiesKit
 class NotificationContentViewModelSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: nil,
-            scheduler: .immediate
+        
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies[singleton: .scheduler] = .immediate
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
+            customWriter: try! DatabaseQueue(),
+            migrationTargets: [
+                SNUtilitiesKit.self,
+                SNSnodeKit.self,
+                SNMessagingKit.self,
+                DeprecatedUIKitMigrationTarget.self
+            ],
+            using: dependencies
         )
-        @TestState var mockStorage: Storage! = {
-            let result = SynchronousStorage(
-                customWriter: try! DatabaseQueue(),
-                migrationTargets: [
-                    SNUtilitiesKit.self,
-                    SNSnodeKit.self,
-                    SNMessagingKit.self,
-                    SNUIKit.self
-                ],
-                using: dependencies
-            )
-            dependencies.storage = result
-            
-            return result
-        }()
         @TestState var viewModel: NotificationContentViewModel! = NotificationContentViewModel(
             using: dependencies
         )
         @TestState var dataChangeCancellable: AnyCancellable? = viewModel.tableDataPublisher
-            .receive(on: ImmediateScheduler.shared)
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { viewModel.updateTableData($0) }
@@ -52,10 +47,8 @@ class NotificationContentViewModelSpec: QuickSpec {
 
             // MARK: -- has the correct number of items
             it("has the correct number of items") {
-                expect(viewModel.tableData.count)
-                    .to(equal(1))
-                expect(viewModel.tableData.first?.elements.count)
-                    .to(equal(3))
+                expect(viewModel.tableData.count).to(equal(1))
+                expect(viewModel.tableData.first?.elements.count).to(equal(3))
             }
             
             // MARK: -- has the correct default state
@@ -67,24 +60,24 @@ class NotificationContentViewModelSpec: QuickSpec {
                                 id: Preferences.NotificationPreviewType.nameAndPreview,
                                 position: .top,
                                 title: "notificationsContentShowNameAndContent".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { true }
+                                trailingAccessory: .radio(
+                                    isSelected: true
                                 )
                             ),
                             SessionCell.Info(
                                 id: Preferences.NotificationPreviewType.nameNoPreview,
                                 position: .middle,
                                 title: "notificationsContentShowNameOnly".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { false }
+                                trailingAccessory: .radio(
+                                    isSelected: false
                                 )
                             ),
                             SessionCell.Info(
                                 id: Preferences.NotificationPreviewType.noNameNoPreview,
                                 position: .bottom,
                                 title: "notificationsContentShowNoNameOrContent".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { false }
+                                trailingAccessory: .radio(
+                                    isSelected: false
                                 )
                             )
                         ])
@@ -98,7 +91,6 @@ class NotificationContentViewModelSpec: QuickSpec {
                 }
                 viewModel = NotificationContentViewModel(using: dependencies)
                 dataChangeCancellable = viewModel.tableDataPublisher
-                    .receive(on: ImmediateScheduler.shared)
                     .sink(
                         receiveCompletion: { _ in },
                         receiveValue: { viewModel.updateTableData($0) }
@@ -111,24 +103,24 @@ class NotificationContentViewModelSpec: QuickSpec {
                                 id: Preferences.NotificationPreviewType.nameAndPreview,
                                 position: .top,
                                 title: "notificationsContentShowNameAndContent".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { false }
+                                trailingAccessory: .radio(
+                                    isSelected: false
                                 )
                             ),
                             SessionCell.Info(
                                 id: Preferences.NotificationPreviewType.nameNoPreview,
                                 position: .middle,
                                 title: "notificationsContentShowNameOnly".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { true }
+                                trailingAccessory: .radio(
+                                    isSelected: true
                                 )
                             ),
                             SessionCell.Info(
                                 id: Preferences.NotificationPreviewType.noNameNoPreview,
                                 position: .bottom,
                                 title: "notificationsContentShowNoNameOrContent".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { false }
+                                trailingAccessory: .radio(
+                                    isSelected: false
                                 )
                             )
                         ])
@@ -141,7 +133,7 @@ class NotificationContentViewModelSpec: QuickSpec {
                 it("updates the saved preference") {
                     viewModel.tableData.first?.elements.last?.onTap?()
                     
-                    expect(mockStorage[.preferencesNotificationPreviewType])
+                    expect(dependencies[singleton: .storage, key: .preferencesNotificationPreviewType])
                         .to(equal(Preferences.NotificationPreviewType.noNameNoPreview))
                 }
                 
@@ -150,7 +142,6 @@ class NotificationContentViewModelSpec: QuickSpec {
                     var didDismissScreen: Bool = false
                     
                     dismissCancellable = viewModel.navigatableState.dismissScreen
-                        .receive(on: ImmediateScheduler.shared)
                         .sink(
                             receiveCompletion: { _ in },
                             receiveValue: { _ in didDismissScreen = true }

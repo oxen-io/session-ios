@@ -1,30 +1,34 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 public extension ProfilePictureView {
     func update(
         publicKey: String,
         threadVariant: SessionThread.Variant,
-        customImageData: Data?,
+        displayPictureFilename: String?,
         profile: Profile?,
         profileIcon: ProfileIcon = .none,
         additionalProfile: Profile? = nil,
-        additionalProfileIcon: ProfileIcon = .none
+        additionalProfileIcon: ProfileIcon = .none,
+        using dependencies: Dependencies
     ) {
-        let (info, additionalInfo): (Info?, Info?) = Self.getProfilePictureInfo(
+        let (info, additionalInfo): (Info?, Info?) = ProfilePictureView.getProfilePictureInfo(
             size: self.size,
             publicKey: publicKey,
             threadVariant: threadVariant,
-            customImageData: customImageData,
+            displayPictureFilename: displayPictureFilename,
             profile: profile,
             profileIcon: profileIcon,
             additionalProfile: additionalProfile,
-            additionalProfileIcon: additionalProfileIcon
+            additionalProfileIcon: additionalProfileIcon,
+            using: dependencies
         )
         
         guard let info: Info = info else { return }
+        
         update(info, additionalInfo: additionalInfo)
     }
     
@@ -32,14 +36,25 @@ public extension ProfilePictureView {
         size: Size,
         publicKey: String,
         threadVariant: SessionThread.Variant,
-        customImageData: Data?,
+        displayPictureFilename: String?,
         profile: Profile?,
         profileIcon: ProfileIcon = .none,
         additionalProfile: Profile? = nil,
-        additionalProfileIcon: ProfileIcon = .none
+        additionalProfileIcon: ProfileIcon = .none,
+        using dependencies: Dependencies
     ) -> (Info?, Info?) {
-        // If we are given 'customImageData' then only use that
-        guard customImageData == nil else { return (Info(imageData: customImageData), nil) }
+        // If we are given an explicit 'displayPictureFilename' then only use that (this could be for
+        // either Community conversations or updated groups)
+        if let displayPictureFilename: String = displayPictureFilename {
+            return (Info(
+                imageData: DisplayPictureManager.displayPicture(
+                    owner: .file(displayPictureFilename),
+                    using: dependencies
+                ),
+                icon: profileIcon
+            ), nil)
+        }
+        
         
         // Otherwise there are conversation-type-specific behaviours
         switch threadVariant {
@@ -73,7 +88,7 @@ public extension ProfilePictureView {
                 return (
                     Info(
                         imageData: (
-                            profile.map { ProfileManager.profileAvatar(profile: $0) } ??
+                            profile.map { DisplayPictureManager.displayPicture(owner: .user($0), using: dependencies) } ??
                             PlaceholderIcon.generate(
                                 seed: publicKey,
                                 text: (profile?.displayName(for: threadVariant))
@@ -90,7 +105,7 @@ public extension ProfilePictureView {
                         .map { otherProfile in
                             Info(
                                 imageData: (
-                                    ProfileManager.profileAvatar(profile: otherProfile) ??
+                                    DisplayPictureManager.displayPicture(owner: .user(otherProfile), using: dependencies) ??
                                     PlaceholderIcon.generate(
                                         seed: otherProfile.id,
                                         text: otherProfile.displayName(for: threadVariant),
@@ -122,7 +137,7 @@ public extension ProfilePictureView {
                 return (
                     Info(
                         imageData: (
-                            profile.map { ProfileManager.profileAvatar(profile: $0) } ??
+                            profile.map { DisplayPictureManager.displayPicture(owner: .user($0), using: dependencies) } ??
                             PlaceholderIcon.generate(
                                 seed: publicKey,
                                 text: (profile?.displayName(for: threadVariant))
@@ -146,21 +161,23 @@ public extension ProfilePictureSwiftUI {
         size: ProfilePictureView.Size,
         publicKey: String,
         threadVariant: SessionThread.Variant,
-        customImageData: Data?,
+        displayPictureFilename: String?,
         profile: Profile?,
         profileIcon: ProfilePictureView.ProfileIcon = .none,
         additionalProfile: Profile? = nil,
-        additionalProfileIcon: ProfilePictureView.ProfileIcon = .none
+        additionalProfileIcon: ProfilePictureView.ProfileIcon = .none,
+        using dependencies: Dependencies
     ) {
         let (info, additionalInfo) = ProfilePictureView.getProfilePictureInfo(
             size: size,
             publicKey: publicKey,
             threadVariant: threadVariant,
-            customImageData: customImageData,
+            displayPictureFilename: displayPictureFilename,
             profile: profile,
             profileIcon: profileIcon,
             additionalProfile: additionalProfile,
-            additionalProfileIcon: additionalProfileIcon
+            additionalProfileIcon: additionalProfileIcon,
+            using: dependencies
         )
         
         if let info = info {

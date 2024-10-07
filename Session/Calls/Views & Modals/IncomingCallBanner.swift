@@ -9,6 +9,8 @@ import SessionUtilitiesKit
 final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     private static let swipeToOperateThreshold: CGFloat = 60
     private var previousY: CGFloat = 0
+    
+    private let dependencies: Dependencies
     let call: SessionCall
     
     // MARK: - UI Components
@@ -32,41 +34,41 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         return result
     }()
     
-    private lazy var answerButton: UIButton = {
-        let result = UIButton(type: .custom)
-        result.setImage(
-            UIImage(named: "AnswerCall")?
-                .resized(to: CGSize(width: 24.8, height: 24.8))?
-                .withRenderingMode(.alwaysTemplate),
-            for: .normal
+    private lazy var answerButton: UIButton = UIButton(primaryAction: UIAction { [weak self] _ in self?.answerCall() })
+        .withConfiguration(
+            UIButton.Configuration
+                .plain()
+                .withImage(UIImage(named: "AnswerCall")?.withRenderingMode(.alwaysTemplate))
+                .withContentInsets(NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6))
         )
-        result.themeTintColor = .white
-        result.themeBackgroundColor = .callAccept_background
-        result.layer.cornerRadius = 24
-        result.addTarget(self, action: #selector(answerCall), for: .touchUpInside)
-        result.set(.width, to: 48)
-        result.set(.height, to: 48)
-        
-        return result
-    }()
+        .withImageViewContentMode(.scaleAspectFit)
+        .withThemeTintColor(.white)
+        .withThemeBackgroundColor(.callAccept_background)
+        .withAccessibility(
+            identifier: "Close button",
+            label: "Close button"
+        )
+        .withCornerRadius(24)
+        .with(.width, of: 48)
+        .with(.height, of: 48)
     
-    private lazy var hangUpButton: UIButton = {
-        let result = UIButton(type: .custom)
-        result.setImage(
-            UIImage(named: "EndCall")?
-                .resized(to: CGSize(width: 29.6, height: 11.2))?
-                .withRenderingMode(.alwaysTemplate),
-            for: .normal
+    private lazy var hangUpButton: UIButton = UIButton(primaryAction: UIAction { [weak self] _ in self?.endCall() })
+        .withConfiguration(
+            UIButton.Configuration
+                .plain()
+                .withImage(UIImage(named: "EndCall")?.withRenderingMode(.alwaysTemplate))
+                .withContentInsets(NSDirectionalEdgeInsets(top: 13, leading: 9, bottom: 13, trailing: 9))
         )
-        result.themeTintColor = .white
-        result.themeBackgroundColor = .callDecline_background
-        result.layer.cornerRadius = 24
-        result.addTarget(self, action: #selector(endCall), for: .touchUpInside)
-        result.set(.width, to: 48)
-        result.set(.height, to: 48)
-        
-        return result
-    }()
+        .withImageViewContentMode(.scaleAspectFit)
+        .withThemeTintColor(.white)
+        .withThemeBackgroundColor(.callDecline_background)
+        .withAccessibility(
+            identifier: "Close button",
+            label: "Close button"
+        )
+        .withCornerRadius(24)
+        .with(.width, of: 48)
+        .with(.height, of: 48)
     
     private lazy var panGestureRecognizer: UIPanGestureRecognizer = {
         let result = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
@@ -79,7 +81,8 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     
     public static var current: IncomingCallBanner?
     
-    init(for call: SessionCall) {
+    init(for call: SessionCall, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.call = call
         
         super.init(frame: CGRect.zero)
@@ -113,9 +116,12 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         profilePictureView.update(
             publicKey: call.sessionId,
             threadVariant: .contact,
-            customImageData: nil,
-            profile: Storage.shared.read { [sessionId = call.sessionId] db in Profile.fetchOrCreate(db, id: sessionId) },
-            additionalProfile: nil
+            displayPictureFilename: nil,
+            profile: dependencies[singleton: .storage].read { [sessionId = call.sessionId] db in
+                Profile.fetchOrCreate(db, id: sessionId)
+            },
+            additionalProfile: nil,
+            using: dependencies
         )
         displayNameLabel.text = call.contactName
         
@@ -168,7 +174,7 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
                         showCallVC(answer: false)
                     }
                     else {
-                        endCall()   // TODO: Or just put the call on hold?
+                        endCall()   // TODO: [CALLS] Or just put the call on hold?
                     }
                 }
                 else {
@@ -179,29 +185,29 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
         }
     }
     
-    @objc private func answerCall() {
+    private func answerCall() {
         showCallVC(answer: true)
     }
     
-    @objc private func endCall() {
-        AppEnvironment.shared.callManager.endCall(call) { error in
+    private func endCall() {
+        dependencies[singleton: .callManager].endCall(call) { [weak self, dependencies] error in
             if let _ = error {
-                self.call.endSessionCall()
-                AppEnvironment.shared.callManager.reportCurrentCallEnded(reason: nil)
+                self?.call.endSessionCall()
+                dependencies[singleton: .callManager].reportCurrentCallEnded(reason: nil)
             }
             
-            self.dismiss()
+            self?.dismiss()
         }
     }
     
     public func showCallVC(answer: Bool) {
         dismiss()
-        guard
-            Singleton.hasAppContext,
-            let presentingVC = Singleton.appContext.frontmostViewController
-        else { preconditionFailure() } // FIXME: Handle more gracefully
+        guard let presentingVC: UIViewController = dependencies[singleton: .appContext].frontMostViewController else {
+            Log.critical(.calls, "Failed to retrieve front view controller when showing the call UI")
+            return endCall()
+        }
         
-        let callVC = CallVC(for: self.call)
+        let callVC = CallVC(for: self.call, using: dependencies)
         if let conversationVC = (presentingVC as? TopBannerController)?.wrappedViewController() as? ConversationVC {
             callVC.conversationVC = conversationVC
             conversationVC.inputAccessoryView?.isHidden = true
@@ -216,9 +222,10 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
     }
     
     public func show() {
-        guard Singleton.hasAppContext, let window: UIWindow = Singleton.appContext.mainWindow else { return }
-        
         self.alpha = 0.0
+        
+        guard let window: UIWindow = dependencies[singleton: .appContext].mainWindow else { return }
+
         window.addSubview(self)
         
         let topMargin = window.safeAreaInsets.top - Values.smallSpacing
@@ -244,5 +251,4 @@ final class IncomingCallBanner: UIView, UIGestureRecognizerDelegate {
             self.removeFromSuperview()
         })
     }
-
 }

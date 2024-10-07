@@ -18,6 +18,7 @@ final class ReactionListSheet: BaseVC {
         }
     }
     
+    fileprivate let dependencies: Dependencies
     private let interactionId: Int64
     private let onDismiss: (() -> ())?
     private var messageViewModel: MessageViewModel = MessageViewModel()
@@ -103,9 +104,10 @@ final class ReactionListSheet: BaseVC {
         return result
     }()
     
-    // MARK: - Lifecycle
+    // MARK: - Initialization
     
-    init(for interactionId: Int64, onDismiss: (() -> ())? = nil) {
+    init(for interactionId: Int64, using dependencies: Dependencies, onDismiss: (() -> ())? = nil) {
+        self.dependencies = dependencies
         self.interactionId = interactionId
         self.onDismiss = onDismiss
         
@@ -119,6 +121,8 @@ final class ReactionListSheet: BaseVC {
     required init?(coder: NSCoder) {
         preconditionFailure("Use init(for:) instead.")
     }
+    
+    // MARK: - Lifecycle
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -225,7 +229,7 @@ final class ReactionListSheet: BaseVC {
                     return
                 }
                 
-                if reactionInfo.reaction.authorId == cellViewModel.currentUserPublicKey {
+                if reactionInfo.reaction.authorId == cellViewModel.currentUserSessionId {
                     updatedValue.insert(reactionInfo, at: 0)
                 }
                 else {
@@ -371,10 +375,10 @@ final class ReactionListSheet: BaseVC {
     
     @objc private func clearAllTapped() { clearAll() }
     
-    private func clearAll(using dependencies: Dependencies = Dependencies()) {
+    private func clearAll() {
         guard let selectedReaction: EmojiWithSkinTones = self.reactionSummaries.first(where: { $0.isSelected })?.emoji else { return }
         
-        delegate?.removeAllReactions(messageViewModel, for: selectedReaction.rawValue, using: dependencies)
+        delegate?.removeAllReactions(messageViewModel, for: selectedReaction.rawValue)
     }
 }
 
@@ -435,7 +439,7 @@ extension ReactionListSheet: UITableViewDelegate, UITableViewDataSource {
             with: SessionCell.Info(
                 id: cellViewModel,
                 position: Position.with(indexPath.row, count: self.selectedReactionUserList.count),
-                leftAccessory: .profile(id: authorId, profile: cellViewModel.profile),
+                leadingAccessory: .profile(id: authorId, profile: cellViewModel.profile),
                 title: (
                     cellViewModel.profile?.displayName() ??
                     Profile.truncated(
@@ -443,7 +447,7 @@ extension ReactionListSheet: UITableViewDelegate, UITableViewDataSource {
                         threadVariant: self.messageViewModel.threadVariant
                     )
                 ),
-                rightAccessory: (authorId != self.messageViewModel.currentUserPublicKey ? nil :
+                trailingAccessory: (authorId != self.messageViewModel.currentUserSessionId ? nil :
                     .icon(
                         UIImage(named: "X")?
                             .withRenderingMode(.alwaysTemplate),
@@ -451,8 +455,9 @@ extension ReactionListSheet: UITableViewDelegate, UITableViewDataSource {
                     )
                 ),
                 styling: SessionCell.StyleInfo(backgroundStyle: .edgeToEdge),
-                isEnabled: (authorId == self.messageViewModel.currentUserPublicKey)
-            )
+                isEnabled: (authorId == self.messageViewModel.currentUserSessionId)
+            ),
+            using: dependencies
         )
         
         return cell
@@ -470,7 +475,7 @@ extension ReactionListSheet: UITableViewDelegate, UITableViewDataSource {
                 .first(where: { $0.isSelected })?
                 .emoji,
             selectedReaction.rawValue == cellViewModel.reaction.emoji,
-            cellViewModel.reaction.authorId == self.messageViewModel.currentUserPublicKey
+            cellViewModel.reaction.authorId == self.messageViewModel.currentUserSessionId
         else { return }
         
         delegate?.removeReact(self.messageViewModel, for: selectedReaction)
@@ -602,13 +607,7 @@ extension ReactionListSheet {
 // MARK: - Delegate
 
 protocol ReactionDelegate: AnyObject {
-    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones, using dependencies: Dependencies)
-    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones, using dependencies: Dependencies)
-    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String, using dependencies: Dependencies)
-}
-
-extension ReactionDelegate {
-    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones) {
-        removeReact(cellViewModel, for: emoji, using: Dependencies())
-    }
+    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones)
+    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones)
+    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String)
 }

@@ -81,6 +81,13 @@ public extension Dictionary {
         
         self[key] = (self[key] ?? []).appending(value)
     }
+    
+    func appending<T>(_ value: T?, toArrayOn key: Key?) -> [Key: Value] where Value == [T] {
+        var updatedDictionary: [Key: Value] = self
+        updatedDictionary.append(value, toArrayOn: key)
+        
+        return updatedDictionary
+    }
 }
 
 public extension Dictionary where Value: Hashable {

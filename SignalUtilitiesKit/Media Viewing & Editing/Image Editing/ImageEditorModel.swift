@@ -1,6 +1,7 @@
 //  Copyright (c) 2019 Open Whisper Systems. All rights reserved.
 
 import UIKit
+import UniformTypeIdentifiers
 import SessionUtilitiesKit
 
 // Used to represent undo/redo operations.
@@ -41,6 +42,7 @@ public class ImageEditorModel {
         return true
     }
 
+    private let dependencies: Dependencies
     public let srcImagePath: String
     public let srcImageSizePixels: CGSize
     private var contents: ImageEditorContents
@@ -52,21 +54,23 @@ public class ImageEditorModel {
     //
     // * They are invalid.
     // * We can't determine their size / aspect-ratio.
-    public required init(srcImagePath: String) throws {
+    public required init(srcImagePath: String, using dependencies: Dependencies) throws {
+        self.dependencies = dependencies
         self.srcImagePath = srcImagePath
 
         let srcFileName = (srcImagePath as NSString).lastPathComponent
         let srcFileExtension = (srcFileName as NSString).pathExtension
-        guard let mimeType = MimeTypeUtil.mimeType(for: srcFileExtension) else {
-            Log.error("[ImageEditorModel] Couldn't determine MIME type for file.")
+        
+        guard let type: UTType = UTType(sessionFileExtension: srcFileExtension) else {
+            Log.error("[ImageEditorModel] Couldn't determine UTType for file.")
             throw ImageEditorError.invalidInput
         }
-        guard MimeTypeUtil.isImage(mimeType), !MimeTypeUtil.isAnimated(mimeType) else {
-            Log.error("[ImageEditorModel] Invalid MIME type: \(mimeType).")
+        guard type.isImage && !type.isAnimated else {
+            Log.error("[ImageEditorModel] Invalid MIME type: \(type.preferredMIMEType ?? "unknown").")
             throw ImageEditorError.invalidInput
         }
 
-        let srcImageSizePixels = Data.imageSize(for: srcImagePath, mimeType: mimeType)
+        let srcImageSizePixels = Data.imageSize(for: srcImagePath, type: type, using: dependencies)
         guard srcImageSizePixels.width > 0, srcImageSizePixels.height > 0 else {
             Log.error("[ImageEditorModel] Couldn't determine image size.")
             throw ImageEditorError.invalidInput
@@ -226,7 +230,7 @@ public class ImageEditorModel {
     public func temporaryFilePath(withFileExtension fileExtension: String) -> String {
         Log.assertOnMainThread()
 
-        let filePath = FileSystem.temporaryFilePath(fileExtension: fileExtension)
+        let filePath = FileSystem.temporaryFilePath(fileExtension: fileExtension, using: dependencies)
         temporaryFilePaths.append(filePath)
         return filePath
     }

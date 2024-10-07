@@ -1,64 +1,56 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
 import GRDB
 
-// MARK: - General.Cache
-
-public enum General {
-    public class Cache: GeneralCacheType {
-        public var encodedPublicKey: String? = nil
-        public var recentReactionTimestamps: [Int64] = []
-        
-        public func clearCachedUserPublicKey() {
-            encodedPublicKey = nil
-        }
-    }
-}
+// MARK: - Cache
 
 public extension Cache {
-    static let general: CacheInfo.Config<GeneralCacheType, ImmutableGeneralCacheType> = CacheInfo.create(
-        createInstance: { General.Cache() },
+    static let general: CacheConfig<GeneralCacheType, ImmutableGeneralCacheType> = Dependencies.create(
+        identifier: "general",
+        createInstance: { _ in General.Cache() },
         mutableInstance: { $0 },
         immutableInstance: { $0 }
     )
 }
 
-// MARK: - GeneralError
+// MARK: - General.Cache
 
-public enum GeneralError: Error {
-    case invalidSeed
-    case keyGenerationFailed
-    case randomGenerationFailed
-}
-
-// MARK: - Convenience
-
-public func getUserHexEncodedPublicKey(_ db: Database? = nil, using dependencies: Dependencies = Dependencies()) -> String {
-    if let cachedKey: String = dependencies.caches[.general].encodedPublicKey { return cachedKey }
-    
-    if let publicKey: Data = Identity.fetchUserPublicKey(db) { // Can be nil under some circumstances
-        let sessionId: SessionId = SessionId(.standard, publicKey: publicKey.bytes)
+public enum General {
+    public class Cache: GeneralCacheType {
+        public var sessionId: SessionId = SessionId.invalid
+        public var recentReactionTimestamps: [Int64] = []
+        public var placeholderCache: NSCache<NSString, UIImage> = {
+            let result = NSCache<NSString, UIImage>()
+            result.countLimit = 50
+            
+            return result
+        }()
+        public var contextualActionLookupMap: [Int: [String: [Int: Any]]] = [:]
         
-        dependencies.caches.mutate(cache: .general) { $0.encodedPublicKey = sessionId.hexString }
-        return sessionId.hexString
+        // MARK: - Functions
+        
+        public func setCachedSessionId(sessionId: SessionId) {
+            self.sessionId = sessionId
+        }
     }
-    
-    return ""
 }
 
 // MARK: - GeneralCacheType
 
-/// This is a read-only version of the `General.Cache` designed to avoid unintentionally mutating the instance in a
-/// non-thread-safe way
+/// This is a read-only version of the Cache designed to avoid unintentionally mutating the instance in a non-thread-safe way
 public protocol ImmutableGeneralCacheType: ImmutableCacheType {
-    var encodedPublicKey: String? { get }
+    var sessionId: SessionId { get }
     var recentReactionTimestamps: [Int64] { get }
+    var placeholderCache: NSCache<NSString, UIImage> { get }
+    var contextualActionLookupMap: [Int: [String: [Int: Any]]] { get }
 }
 
 public protocol GeneralCacheType: ImmutableGeneralCacheType, MutableCacheType {
-    var encodedPublicKey: String? { get set }
+    var sessionId: SessionId { get }
     var recentReactionTimestamps: [Int64] { get set }
+    var placeholderCache: NSCache<NSString, UIImage> { get }
+    var contextualActionLookupMap: [Int: [String: [Int: Any]]] { get set }
     
-    func clearCachedUserPublicKey()
+    func setCachedSessionId(sessionId: SessionId)
 }

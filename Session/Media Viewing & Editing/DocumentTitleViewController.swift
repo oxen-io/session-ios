@@ -2,10 +2,12 @@
 
 import UIKit
 import QuartzCore
+import UniformTypeIdentifiers
 import GRDB
 import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 public class DocumentTileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
@@ -18,6 +20,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     static let footerBarHeight: CGFloat = 40
     static let loadMoreHeaderHeight: CGFloat = 100
     
+    private let dependencies: Dependencies
     private let viewModel: MediaGalleryViewModel
     private var hasLoadedInitialData: Bool = false
     private var didFinishInitialLayout: Bool = false
@@ -28,9 +31,10 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     
     // MARK: - Initialization
 
-    init(viewModel: MediaGalleryViewModel) {
+    init(viewModel: MediaGalleryViewModel, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.viewModel = viewModel
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -75,7 +79,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
 
         // Add a custom back button if this is the only view controller
         if self.navigationController?.viewControllers.first == self {
-            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: dependencies)
             self.navigationItem.leftBarButtonItem = backButton
         }
         
@@ -330,7 +334,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
     public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: false)
         let attachment: Attachment = self.viewModel.galleryData[indexPath.section].elements[indexPath.row].attachment
-        guard let originalFilePath: String = attachment.originalFilePath else { return }
+        guard let originalFilePath: String = attachment.originalFilePath(using: dependencies) else { return }
         
         let fileUrl: URL = URL(fileURLWithPath: originalFilePath)
         
@@ -338,7 +342,7 @@ public class DocumentTileViewController: UIViewController, UITableViewDelegate, 
         if
             attachment.isText ||
             attachment.isMicrosoftDoc ||
-            attachment.contentType == MimeTypeUtil.MimeType.applicationPdf
+            attachment.contentType == UTType.mimeTypePdf
         {
             
             delegate?.preview(fileUrl: fileUrl)

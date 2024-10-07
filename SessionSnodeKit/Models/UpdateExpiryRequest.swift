@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtilitiesKit
 
 extension SnodeAPI {
     public class UpdateExpiryRequest: SnodeAuthenticatedRequestBody {
@@ -24,7 +25,7 @@ extension SnodeAPI {
         /// `expiry` timestamp then expiry will not be changed
         ///
         /// **Note:** This option is only supported starting at network version 19.3).  This option is not permitted when using
-        /// subkey authentication
+        /// subaccount authentication
         let shorten: Bool?
         
         /// If provided and set to true then the expiry is only extended, but not shortened.  If the expiry is already at or beyond
@@ -52,22 +53,14 @@ extension SnodeAPI {
             expiryMs: UInt64,
             shorten: Bool? = nil,
             extend: Bool? = nil,
-            pubkey: String,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8],
-            subkey: String?
+            authMethod: AuthenticationMethod
         ) {
             self.messageHashes = messageHashes
             self.expiryMs = expiryMs
             self.shorten = shorten
             self.extend = extend
             
-            super.init(
-                pubkey: pubkey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey,
-                subkey: subkey
-            )
+            super.init(authMethod: authMethod)
         }
         
         // MARK: - Coding

@@ -1,6 +1,7 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import GRDB
 import SessionMessagingKit
 import SessionUIKit
 import SessionUtilitiesKit
@@ -50,7 +51,8 @@ public extension UIContextualAction {
         tableView: UITableView,
         threadViewModel: SessionThreadViewModel,
         viewController: UIViewController?,
-        navigatableStateHolder: NavigatableStateHolder?
+        navigatableStateHolder: NavigatableStateHolder?,
+        using dependencies: Dependencies
     ) -> [UIContextualAction]? {
         guard !actions.isEmpty else { return nil }
         
@@ -95,6 +97,7 @@ public extension UIContextualAction {
                             ),
                             themeTintColor: .white,
                             themeBackgroundColor: .conversationButton_swipeRead,    // Always Custom
+                            accessibility: Accessibility(identifier: (isUnread ? "Mark Read button" : "Mark Unread button")),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -106,10 +109,11 @@ public extension UIContextualAction {
                                     case true: threadViewModel.markAsRead(
                                         target: .threadAndInteractions(
                                             interactionsBeforeInclusive: threadViewModel.interactionId
-                                        )
+                                        ),
+                                        using: dependencies
                                     )
                                         
-                                    case false: threadViewModel.markAsUnread()
+                                    case false: threadViewModel.markAsUnread(using: dependencies)
                                 }
                             }
                             completionHandler(true)
@@ -140,13 +144,14 @@ public extension UIContextualAction {
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
                                     onConfirm: { _ in
-                                        Storage.shared.writeAsync { db in
+                                        dependencies[singleton: .storage].writeAsync { db in
                                             try SessionThread.deleteOrLeave(
                                                 db,
                                                 threadId: threadViewModel.threadId,
                                                 threadVariant: threadViewModel.threadVariant,
                                                 groupLeaveType: .silent,
-                                                calledFromConfigHandling: false
+                                                calledFromConfig: nil,
+                                                using: dependencies
                                             )
                                         }
                                         
@@ -167,6 +172,7 @@ public extension UIContextualAction {
                             icon: UIImage(systemName: "eye.slash"),
                             themeTintColor: .white,
                             themeBackgroundColor: themeBackgroundColor,
+                            accessibility: Accessibility(identifier: "Hide button"),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -174,7 +180,9 @@ public extension UIContextualAction {
                         ) { _, _, completionHandler  in
                             switch threadViewModel.threadId {
                                 case SessionThreadViewModel.messageRequestsSectionId:
-                                    Storage.shared.write { db in db[.hasHiddenMessageRequests] = true }
+                                    dependencies[singleton: .storage].write { db in
+                                        db[.hasHiddenMessageRequests] = true
+                                    }
                                     completionHandler(true)
                                     
                                 default:
@@ -190,13 +198,14 @@ public extension UIContextualAction {
                                             cancelStyle: .alert_text,
                                             dismissOnConfirm: true,
                                             onConfirm: { _ in
-                                                Storage.shared.writeAsync { db in
+                                                dependencies[singleton: .storage].writeAsync { db in
                                                     try SessionThread.deleteOrLeave(
                                                         db,
                                                         threadId: threadViewModel.threadId,
                                                         threadVariant: threadViewModel.threadVariant,
                                                         groupLeaveType: .silent,
-                                                        calledFromConfigHandling: false
+                                                        calledFromConfig: nil,
+                                                        using: dependencies
                                                     )
                                                 }
                                                 
@@ -224,6 +233,9 @@ public extension UIContextualAction {
                             ),
                             themeTintColor: .white,
                             themeBackgroundColor: .conversationButton_swipeTertiary,    // Always Tertiary
+                            accessibility: Accessibility(
+                                identifier: (threadViewModel.threadPinnedPriority > 0 ? "Pin button" : "Unpin button")
+                            ),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -237,13 +249,15 @@ public extension UIContextualAction {
                             
                             // Delay the change to give the cell "unswipe" animation some time to complete
                             DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + unswipeAnimationDelay) {
-                                Storage.shared.writeAsync { db in
+                                dependencies[singleton: .storage].writeAsync { db in
                                     try SessionThread
                                         .filter(id: threadViewModel.threadId)
                                         .updateAllAndConfig(
                                             db,
                                             SessionThread.Columns.pinnedPriority
-                                                .set(to: (threadViewModel.threadPinnedPriority == 0 ? 1 : 0))
+                                                .set(to: (threadViewModel.threadPinnedPriority == 0 ? 1 : 0)),
+                                            calledFromConfig: nil,
+                                            using: dependencies
                                         )
                                 }
                             }
@@ -264,6 +278,9 @@ public extension UIContextualAction {
                             iconHeight: Values.mediumFontSize,
                             themeTintColor: .white,
                             themeBackgroundColor: themeBackgroundColor,
+                            accessibility: Accessibility(
+                                identifier: (threadViewModel.threadMutedUntilTimestamp == nil ? "Mute button" : "Unmute button")
+                            ),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -277,7 +294,7 @@ public extension UIContextualAction {
                             
                             // Delay the change to give the cell "unswipe" animation some time to complete
                             DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + unswipeAnimationDelay) {
-                                Storage.shared.writeAsync { db in
+                                dependencies[singleton: .storage].writeAsync { db in
                                     let currentValue: TimeInterval? = try SessionThread
                                         .filter(id: threadViewModel.threadId)
                                         .select(.mutedUntilTimestamp)
@@ -311,6 +328,7 @@ public extension UIContextualAction {
                             iconHeight: Values.mediumFontSize,
                             themeTintColor: .white,
                             themeBackgroundColor: themeBackgroundColor,
+                            accessibility: Accessibility(identifier: "Block button"),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -327,6 +345,31 @@ public extension UIContextualAction {
                                 (!threadIsMessageRequest ? nil : Contact.Columns.didApproveMe.set(to: true)),
                                 (!threadIsMessageRequest ? nil : Contact.Columns.isApproved.set(to: false))
                             ].compactMap { $0 }
+                            let profileInfo: (id: String, profile: Profile?)? = dependencies[singleton: .storage].read { db in
+                                switch threadViewModel.threadVariant {
+                                    case .contact:
+                                        return (
+                                            threadViewModel.threadId,
+                                            try Profile.fetchOne(db, id: threadViewModel.threadId)
+                                        )
+                                        
+                                    case .group:
+                                        let firstAdmin: GroupMember? = try GroupMember
+                                            .filter(GroupMember.Columns.groupId == threadViewModel.threadId)
+                                            .filter(GroupMember.Columns.role == GroupMember.Role.admin)
+                                            .fetchOne(db)
+                                        
+                                        return try firstAdmin
+                                            .map { admin in
+                                                (
+                                                    admin.profileId,
+                                                    try Profile.fetchOne(db, id: admin.profileId)
+                                                )
+                                            }
+                                        
+                                    default: return nil
+                                }
+                            }
                             
                             let performBlock: (UIViewController?) -> () = { viewController in
                                 (tableView.cellForRow(at: indexPath) as? SwipeActionOptimisticCell)?
@@ -337,24 +380,48 @@ public extension UIContextualAction {
                                 
                                 // Delay the change to give the cell "unswipe" animation some time to complete
                                 DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + unswipeAnimationDelay) {
-                                    Storage.shared
+                                    dependencies[singleton: .storage]
                                         .writePublisher { db in
                                             // Create the contact if it doesn't exist
-                                            try Contact
-                                                .fetchOrCreate(db, id: threadViewModel.threadId)
-                                                .save(db)
-                                            try Contact
-                                                .filter(id: threadViewModel.threadId)
-                                                .updateAllAndConfig(db, contactChanges)
+                                            switch (threadViewModel.threadVariant, profileInfo?.id) {
+                                                case (.contact, _):
+                                                    try Contact
+                                                        .fetchOrCreate(db, id: threadViewModel.threadId, using: dependencies)
+                                                        .upsert(db)
+                                                    try Contact
+                                                        .filter(id: threadViewModel.threadId)
+                                                        .updateAllAndConfig(
+                                                            db,
+                                                            contactChanges,
+                                                            calledFromConfig: nil,
+                                                            using: dependencies
+                                                        )
+                                                    
+                                                case (.group, .some(let contactId)):
+                                                    try Contact
+                                                        .fetchOrCreate(db, id: contactId, using: dependencies)
+                                                        .upsert(db)
+                                                    try Contact
+                                                        .filter(id: contactId)
+                                                        .updateAllAndConfig(
+                                                            db,
+                                                            contactChanges,
+                                                            calledFromConfig: nil,
+                                                            using: dependencies
+                                                        )
+                                                    
+                                                default: break
+                                            }
                                             
                                             // Blocked message requests should be deleted
                                             if threadIsMessageRequest {
                                                 try SessionThread.deleteOrLeave(
                                                     db,
                                                     threadId: threadViewModel.threadId,
-                                                    threadVariant: .contact,
+                                                    threadVariant: threadViewModel.threadVariant,
                                                     groupLeaveType: .silent,
-                                                    calledFromConfigHandling: false
+                                                    calledFromConfig: nil,
+                                                    using: dependencies
                                                 )
                                             }
                                         }
@@ -399,6 +466,7 @@ public extension UIContextualAction {
                             iconHeight: Values.mediumFontSize,
                             themeTintColor: .white,
                             themeBackgroundColor: themeBackgroundColor,
+                            accessibility: Accessibility(identifier: "Leave button"),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -439,14 +507,15 @@ public extension UIContextualAction {
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
                                     onConfirm: { _ in
-                                        Storage.shared.writeAsync { db in
+                                        dependencies[singleton: .storage].writeAsync { db in
                                             do {
                                                 try SessionThread.deleteOrLeave(
                                                     db,
                                                     threadId: threadViewModel.threadId,
                                                     threadVariant: threadViewModel.threadVariant,
                                                     groupLeaveType: .standard,
-                                                    calledFromConfigHandling: false
+                                                    calledFromConfig: nil,
+                                                    using: dependencies
                                                 )
                                             } catch {
                                                 DispatchQueue.main.async {
@@ -469,7 +538,6 @@ public extension UIContextualAction {
                                                     )
                                                 }
                                             }
-                                            
                                         }
                                         
                                         completionHandler(true)
@@ -489,6 +557,7 @@ public extension UIContextualAction {
                             icon: UIImage(named: "ic_bin"),
                             themeTintColor: .white,
                             themeBackgroundColor: themeBackgroundColor,
+                            accessibility: Accessibility(identifier: "Delete button"),
                             side: side,
                             actionIndex: targetIndex,
                             indexPath: indexPath,
@@ -509,9 +578,10 @@ public extension UIContextualAction {
                             }()
                             let confirmationModalExplanation: NSAttributedString = {
                                 guard !isMessageRequest else {
-                                    return NSAttributedString(
-                                        string: "messageRequestsDelete".localized()
-                                    )
+                                    switch threadViewModel.threadVariant {
+                                        case .group: return NSAttributedString(string: "groupInviteDelete".localized())
+                                        default: return NSAttributedString(string: "messageRequestsDelete".localized())
+                                    }
                                 }
                                 
                                 guard threadViewModel.currentUserIsClosedGroupAdmin == false else {
@@ -545,13 +615,14 @@ public extension UIContextualAction {
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
                                     onConfirm: { _ in
-                                        Storage.shared.writeAsync { db in
+                                        dependencies[singleton: .storage].writeAsync { db in
                                             try SessionThread.deleteOrLeave(
                                                 db,
                                                 threadId: threadViewModel.threadId,
                                                 threadVariant: threadViewModel.threadVariant,
                                                 groupLeaveType: (isMessageRequest ? .silent : .forced),
-                                                calledFromConfigHandling: false
+                                                calledFromConfig: nil,
+                                                using: dependencies
                                             )
                                         }
                                         

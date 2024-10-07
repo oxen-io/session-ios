@@ -85,7 +85,7 @@ NS_ASSUME_NONNULL_BEGIN
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 
-    [DeviceSleepManager.sharedInstance removeBlockWithBlockObject:self];
+    [DeviceSleepManager_objc removeBlockWithBlockObject:self];
 
     [self stop];
 }
@@ -147,14 +147,14 @@ NS_ASSUME_NONNULL_BEGIN
 
     [self.audioPlayer play];
     [self.audioPlayerPoller invalidate];
-    self.audioPlayerPoller = [NSTimer weakScheduledTimerWithTimeInterval:.05f
-                                                                  target:self
-                                                                selector:@selector(audioPlayerUpdated:)
-                                                                userInfo:nil
-                                                                 repeats:YES];
+    
+    __weak OWSAudioPlayer *weakSelf = self;
+    self.audioPlayerPoller = [NSTimer weakScheduledTimerWithTimeInterval:.05f repeats:YES onFire:^(NSTimer * _Nonnull timer) {
+        [weakSelf audioPlayerUpdated:timer];
+    }];
 
     // Prevent device from sleeping while playing audio.
-    [DeviceSleepManager.sharedInstance addBlockWithBlockObject:self];
+    [DeviceSleepManager_objc addBlockWithBlockObject:self];
 }
 
 - (void)setCurrentTime:(NSTimeInterval)currentTime
@@ -185,7 +185,7 @@ NS_ASSUME_NONNULL_BEGIN
     [self.delegate setAudioProgress:(CGFloat)[self.audioPlayer currentTime] duration:(CGFloat)[self.audioPlayer duration]];
 
     [self endAudioActivities];
-    [DeviceSleepManager.sharedInstance removeBlockWithBlockObject:self];
+    [DeviceSleepManager_objc removeBlockWithBlockObject:self];
 }
 
 - (void)stop
@@ -196,7 +196,7 @@ NS_ASSUME_NONNULL_BEGIN
     [self.delegate setAudioProgress:0 duration:0];
 
     [self endAudioActivities];
-    [DeviceSleepManager.sharedInstance removeBlockWithBlockObject:self];
+    [DeviceSleepManager_objc removeBlockWithBlockObject:self];
 }
 
 - (void)endAudioActivities

@@ -7,6 +7,12 @@ import Combine
 import GRDB
 import DifferenceKit
 
+// MARK: - Log.Category
+
+private extension Log.Category {
+    static let cat: Log.Category = .create("PagedDatabaseObserver", defaultLevel: .info)
+}
+
 // MARK: - PagedDatabaseObserver
 
 /// This type manages observation and paging for the provided dataQuery
@@ -21,6 +27,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
     
     // MARK: - Variables
     
+    private let dependencies: Dependencies
     private let pagedTableName: String
     private let idColumnName: String
     public var pageInfo: Atomic<PagedData.PageInfo>
@@ -59,11 +66,13 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         orderSQL: SQL,
         dataQuery: @escaping ([Int64]) -> any FetchRequest<T>,
         associatedRecords: [ErasedAssociatedRecord] = [],
-        onChangeUnsorted: @escaping ([T], PagedData.PageInfo) -> ()
+        onChangeUnsorted: @escaping ([T], PagedData.PageInfo) -> (),
+        using dependencies: Dependencies
     ) {
         let associatedTables: Set<String> = associatedRecords.map { $0.databaseTableName }.asSet()
         assert(!associatedTables.contains(pagedTable.databaseTableName), "The paged table cannot also exist as an associatedRecord")
         
+        self.dependencies = dependencies
         self.pagedTableName = pagedTable.databaseTableName
         self.idColumnName = idColumn.name
         self.pageInfo = Atomic(PagedData.PageInfo(pageSize: pageSize))
@@ -138,7 +147,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             // Retrieve the pagedRowId for the related value that is
             // getting deleted
             let pagedTableName: String = self.pagedTableName
-            let pagedRowIds: [Int64] = Storage.shared
+            let pagedRowIds: [Int64] = dependencies[singleton: .storage]
                 .read { db in
                     PagedData.pagedRowIdsForRelatedRowIds(
                         db,
@@ -228,8 +237,8 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
             .filter { $0.kind == .delete }
         
         // Process and retrieve the updated data
-        let updatedData: UpdatedData = Storage.shared
-            .read { db -> UpdatedData in
+        let updatedData: UpdatedData = dependencies[singleton: .storage]
+            .read { [dependencies] db -> UpdatedData in
                 // If there aren't any direct or related changes then early-out
                 guard !directChanges.isEmpty || !relatedChanges.isEmpty || !relatedDeletions.isEmpty else {
                     return (dataCache, pageInfo, false, getAssociatedDataInfo(db, pageInfo))
@@ -426,8 +435,8 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                     do { return try dataQuery(targetRowIds).fetchAll(db) }
                     catch {
                         // If the database is suspended then don't bother logging (as we already know why)
-                        if !Storage.shared.isSuspended {
-                            Log.error("[PagedDatabaseObserver] Error fetching data during change: \(error)")
+                        if !dependencies[singleton: .storage].isSuspended {
+                            Log.error(.cat, "Error fetching data during change: \(error)")
                         }
                         
                         return []
@@ -501,7 +510,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
         let orderSQL: SQL = self.orderSQL
         let dataQuery: ([Int64]) -> any FetchRequest<T> = self.dataQuery
         
-        let loadedPage: (data: [T]?, pageInfo: PagedData.PageInfo, failureCallback: (() -> ())?)? = Storage.shared.read { [weak self] db in
+        let loadedPage: (data: [T]?, pageInfo: PagedData.PageInfo, failureCallback: (() -> ())?)? = dependencies[singleton: .storage].read { [weak self] db in
             typealias QueryInfo = (limit: Int, offset: Int, updatedCacheOffset: Int)
             let totalCount: Int = PagedData.totalCount(
                 db,
@@ -739,7 +748,7 @@ public class PagedDatabaseObserver<ObservedTable, T>: TransactionObserver where 
                 }
             }
             catch {
-                SNLog("[PagedDatabaseObserver] Error loading data: \(error)")
+                Log.error(.cat, "Error loading data: \(error)")
                 throw error
             }
 
@@ -1401,7 +1410,7 @@ public class AssociatedRecord<T, PagedType>: ErasedAssociatedRecord where T: Fet
             return true
         }
         catch {
-            SNLog("[PagedDatabaseObserver] Error loading associated data: \(error)")
+            Log.error(.cat, "Error loading associated data: \(error)")
             return hasOtherChanges
         }
     }

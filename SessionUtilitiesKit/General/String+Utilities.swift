@@ -75,6 +75,12 @@ public extension String {
         // for more details.
         return text.replacingOccurrences(of: "%", with: "%%")
     }
+    
+    func appending(_ other: String?) -> String {
+        guard let value: String = other else { return self }
+        
+        return self.appending(value)
+    }
 }
 
 // MARK: - Formatting
@@ -277,7 +283,7 @@ public extension String {
     }
     
     private var filterUnsafeFilenameCharacters: String {
-        var unsafeCharacterSet: CharacterSet = CharacterSet.unsafeFilenameCharacterSet
+        let unsafeCharacterSet: CharacterSet = CharacterSet.unsafeFilenameCharacterSet
         
         guard self.rangeOfCharacter(from: unsafeCharacterSet) != nil else { return self }
         

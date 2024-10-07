@@ -42,8 +42,8 @@ public final class TypingIndicator: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies) else { return false }
         return kind != nil
     }
 
@@ -75,7 +75,7 @@ public final class TypingIndicator: ControlMessage {
 
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> TypingIndicator? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String, using dependencies: Dependencies) -> TypingIndicator? {
         guard let typingIndicatorProto = proto.typingMessage else { return nil }
         let kind = Kind.fromProto(typingIndicatorProto.action)
         return TypingIndicator(kind: kind)

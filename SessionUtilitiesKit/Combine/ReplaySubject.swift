@@ -1,5 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
+import Foundation
 import Combine
 
 /// A subject that stores the last `bufferSize` emissions and emits them for every new subscriber

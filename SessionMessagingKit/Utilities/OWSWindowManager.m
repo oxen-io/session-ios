@@ -68,6 +68,9 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
 // UIWindowLevel_ScreenBlocking() if active.
 @property (nonatomic) UIWindow *screenBlockingWindow;
 
+// Behind everything, especially the root window (specified in AppDelegate).
+@property (nonatomic) UIWindowLevel backgroundWindowLevel;
+
 @end
 
 #pragma mark -
@@ -90,10 +93,11 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
     return self;
 }
 
-- (void)setupWithRootWindow:(UIWindow *)rootWindow screenBlockingWindow:(UIWindow *)screenBlockingWindow
+- (void)setupWithRootWindow:(UIWindow *)rootWindow screenBlockingWindow:(UIWindow *)screenBlockingWindow backgroundWindowLevel:(UIWindowLevel)backgroundWindowLevel
 {
     self.rootWindow = rootWindow;
     self.screenBlockingWindow = screenBlockingWindow;
+    self.backgroundWindowLevel = backgroundWindowLevel;
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(didChangeStatusBarFrame:)
@@ -181,7 +185,7 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
     // Never hide the blocking window (that can lead to bad frames).
     // Instead, manipulate its window level to move it in front of
     // or behind the root window.
-    self.screenBlockingWindow.windowLevel = UIWindowLevel_Background;
+    self.screenBlockingWindow.windowLevel = self.backgroundWindowLevel;
 }
 
 #pragma mark - Fixit

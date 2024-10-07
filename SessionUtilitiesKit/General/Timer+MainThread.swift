@@ -6,7 +6,7 @@ extension Timer {
     @discardableResult public static func scheduledTimerOnMainThread(
         withTimeInterval timeInterval: TimeInterval,
         repeats: Bool = false,
-        using dependencies: Dependencies = Dependencies(),
+        using dependencies: Dependencies,
         block: @escaping (Timer) -> Void
     ) -> Timer {
         let timer = Timer(timeInterval: timeInterval, repeats: repeats, block: block)
@@ -15,7 +15,7 @@ extension Timer {
         // timeInterval for execution and append it to the execution set so the test can
         // trigger the logic in a synchronous way)
         guard !dependencies.forceSynchronous else {
-            dependencies.asyncExecutions.appendTo(Int(ceil(dependencies.dateNow.timeIntervalSince1970 + timeInterval))) {
+            dependencies.async(at: dependencies.dateNow.timeIntervalSince1970 + timeInterval) {
                 block(timer)
             }
             return timer
@@ -23,5 +23,20 @@ extension Timer {
         
         RunLoop.main.add(timer, forMode: .common)
         return timer
+    }
+}
+
+// MARK: - Objective-C Extensions
+
+public extension Timer {
+    /// **Note:** We should look to remove the use of this when we can (`OWSAudioPlayer`) as there is no good way to provide the
+    /// proper instance of `Dependencies` so it can't be tested well - luckily the usage isn't going to break anything outside of tests
+    @objc static func weakScheduledTimer(timeInterval: TimeInterval, repeats: Bool, onFire: @escaping (Timer) -> ()) -> Timer {
+        return Timer.scheduledTimerOnMainThread(
+            withTimeInterval: timeInterval,
+            repeats: repeats,
+            using: Dependencies.createEmpty(),
+            block: onFire
+        )
     }
 }

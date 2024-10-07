@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import SessionUtilitiesKit
 
 extension SnodeAPI {
     public class DeleteMessagesRequest: SnodeAuthenticatedRequestBody {
@@ -25,18 +26,12 @@ extension SnodeAPI {
         public init(
             messageHashes: [String],
             requireSuccessfulDeletion: Bool,
-            swarmPublicKey: String,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8]
+            authMethod: AuthenticationMethod
         ) {
             self.messageHashes = messageHashes
             self.requireSuccessfulDeletion = requireSuccessfulDeletion
             
-            super.init(
-                pubkey: swarmPublicKey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey
-            )
+            super.init(authMethod: authMethod)
         }
         
         // MARK: - Coding

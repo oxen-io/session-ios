@@ -1,7 +1,6 @@
-#import <Foundation/Foundation.h>
+// Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
 
-FOUNDATION_EXPORT double SessionUtilitiesKitVersionNumber;
-FOUNDATION_EXPORT const unsigned char SessionUtilitiesKitVersionString[];
+#ifndef SessionUtilitiesKit_h
+#define SessionUtilitiesKit_h
 
-#import <SessionUtilitiesKit/NSTimer+Proxying.h>
-#import <SessionUtilitiesKit/NSUserDefaults+OWS.h>
+#endif /* SessionUtilitiesKit_h */

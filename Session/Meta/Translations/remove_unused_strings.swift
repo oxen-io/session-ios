@@ -1,5 +1,7 @@
 #!/usr/bin/env xcrun swift
 
+// stringlint:disable
+
 import Foundation
 
 // The way this works is:

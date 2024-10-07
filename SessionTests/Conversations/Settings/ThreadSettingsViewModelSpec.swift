@@ -6,6 +6,7 @@ import Quick
 import Nimble
 import SessionUIKit
 import SessionSnodeKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 @testable import Session
@@ -14,43 +15,34 @@ class ThreadSettingsViewModelSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var mockGeneralCache: MockGeneralCache! = MockGeneralCache(
-            initialSetup: { cache in
-                cache.when { $0.encodedPublicKey }.thenReturn("05\(TestConstants.publicKey)")
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies[singleton: .scheduler] = .immediate
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
+            customWriter: try! DatabaseQueue(),
+            migrationTargets: [
+                SNUtilitiesKit.self,
+                SNSnodeKit.self,
+                SNMessagingKit.self,
+                DeprecatedUIKitMigrationTarget.self
+            ],
+            using: dependencies,
+            initialData: { db in
+                try Identity(
+                    variant: .x25519PublicKey,
+                    data: Data(hex: TestConstants.publicKey)
+                ).insert(db)
+                
+                try SessionThread(id: "TestId", variant: .contact, creationDateTimestamp: 0, using: dependencies).insert(db)
+                try Profile(id: "05\(TestConstants.publicKey)", name: "TestMe").insert(db)
+                try Profile(id: "TestId", name: "TestUser").insert(db)
             }
         )
-        @TestState var mockCaches: MockCaches! = MockCaches()
-            .setting(cache: .general, to: mockGeneralCache)
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: nil,
-            caches: mockCaches,
-            scheduler: .immediate
+        @TestState(cache: .general, in: dependencies) var mockGeneralCache: MockGeneralCache! = MockGeneralCache(
+            initialSetup: { cache in
+                cache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: TestConstants.publicKey))
+            }
         )
-        @TestState var mockStorage: Storage! = {
-            let result = SynchronousStorage(
-                customWriter: try! DatabaseQueue(),
-                migrationTargets: [
-                    SNUtilitiesKit.self,
-                    SNSnodeKit.self,
-                    SNMessagingKit.self,
-                    SNUIKit.self
-                ],
-                initialData: { db in
-                    try Identity(
-                        variant: .x25519PublicKey,
-                        data: Data(hex: TestConstants.publicKey)
-                    ).insert(db)
-                    
-                    try SessionThread(id: "TestId",variant: .contact, creationDateTimestamp: 0).insert(db)
-                    try Profile(id: "05\(TestConstants.publicKey)", name: "TestMe").insert(db)
-                    try Profile(id: "TestId", name: "TestUser").insert(db)
-                },
-                using: dependencies
-            )
-            dependencies.storage = result
-            
-            return result
-        }()
         @TestState var threadVariant: SessionThread.Variant! = .contact
         @TestState var didTriggerSearchCallbackTriggered: Bool! = false
         @TestState var viewModel: ThreadSettingsViewModel! = ThreadSettingsViewModel(
@@ -61,7 +53,6 @@ class ThreadSettingsViewModelSpec: QuickSpec {
             },
             using: dependencies
         )
-        
         @TestState var disposables: [AnyCancellable]! = [
             viewModel.tableDataPublisher
                 .receive(on: ImmediateScheduler.shared)
@@ -143,7 +134,8 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         try SessionThread(
                             id: "05\(TestConstants.publicKey)",
                             variant: .contact,
-                            creationDateTimestamp: 0
+                            creationDateTimestamp: 0,
+                            using: dependencies
                         ).insert(db)
                     }
                     
@@ -308,7 +300,8 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         try SessionThread(
                             id: "TestId",
                             variant: .contact,
-                            creationDateTimestamp: 0
+                            creationDateTimestamp: 0,
+                            using: dependencies
                         ).insert(db)
                     }
                 }
@@ -442,7 +435,8 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         try SessionThread(
                             id: "TestId",
                             variant: .legacyGroup,
-                            creationDateTimestamp: 0
+                            creationDateTimestamp: 0,
+                            using: dependencies
                         ).insert(db)
                     }
                     
@@ -488,7 +482,8 @@ class ThreadSettingsViewModelSpec: QuickSpec {
                         try SessionThread(
                             id: "TestId",
                             variant: .community,
-                            creationDateTimestamp: 0
+                            creationDateTimestamp: 0,
+                            using: dependencies
                         ).insert(db)
                     }
                     

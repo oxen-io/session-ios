@@ -41,10 +41,12 @@ import SessionUtilitiesKit
         self.spacing = kDotMaxHSpacing
         self.alignment = .center
 
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(didBecomeActive),
-                                               name: .sessionDidBecomeActive,
-                                               object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didBecomeActive),
+            name: .sessionDidBecomeActive,
+            object: nil
+        )
     }
 
     deinit {

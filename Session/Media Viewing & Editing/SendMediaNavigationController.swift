@@ -5,6 +5,7 @@ import Combine
 import Photos
 import SignalUtilitiesKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 class SendMediaNavigationController: UINavigationController {
@@ -146,7 +147,7 @@ class SendMediaNavigationController: UINavigationController {
     }
 
     private func didTapCameraModeButton() {
-        Permissions.requestCameraPermissionIfNeeded { [weak self] in
+        Permissions.requestCameraPermissionIfNeeded(using: dependencies) { [weak self] in
             DispatchQueue.main.async {
                 self?.fadeTo(viewControllers: ((self?.captureViewController).map { [$0] } ?? []))
             }
@@ -154,7 +155,7 @@ class SendMediaNavigationController: UINavigationController {
     }
 
     private func didTapMediaLibraryModeButton() {
-        Permissions.requestLibraryPermissionIfNeeded(isSavingMedia: false) { [weak self] in
+        Permissions.requestLibraryPermissionIfNeeded(isSavingMedia: false, using: dependencies) { [weak self] in
             DispatchQueue.main.async {
                 self?.fadeTo(viewControllers: ((self?.mediaLibraryViewController).map { [$0] } ?? []))
             }
@@ -211,14 +212,14 @@ class SendMediaNavigationController: UINavigationController {
     // MARK: Child VC's
 
     private lazy var captureViewController: PhotoCaptureViewController = {
-        let vc = PhotoCaptureViewController()
+        let vc = PhotoCaptureViewController(using: dependencies)
         vc.delegate = self
 
         return vc
     }()
 
     private lazy var mediaLibraryViewController: ImagePickerGridController = {
-        let vc = ImagePickerGridController()
+        let vc = ImagePickerGridController(using: dependencies)
         vc.delegate = self
         vc.collectionView.accessibilityLabel = "Images"
 
@@ -232,7 +233,7 @@ class SendMediaNavigationController: UINavigationController {
         }
 
         guard
-            let approvalViewController = AttachmentApprovalViewController(
+            let approvalViewController: AttachmentApprovalViewController = AttachmentApprovalViewController(
                 mode: .sharedNavigation,
                 threadId: self.threadId,
                 threadVariant: self.threadVariant,
@@ -646,7 +647,7 @@ private class DoneButton: UIView {
 
     private lazy var chevron: UIView = {
         let image: UIImage = {
-            guard Singleton.hasAppContext && Singleton.appContext.isRTL else { return #imageLiteral(resourceName: "small_chevron_right") }
+            guard Dependencies.isRTL else { return #imageLiteral(resourceName: "small_chevron_right") }
             
             return #imageLiteral(resourceName: "small_chevron_left")
         }()

@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
+import UniformTypeIdentifiers
 import SessionUtilitiesKit
 
 class ImagePickerHandler: NSObject, UIImagePickerControllerDelegate & UINavigationControllerDelegate {
@@ -38,8 +39,8 @@ class ImagePickerHandler: NSObject, UIImagePickerControllerDelegate & UINavigati
             guard
                 let resourceValues: URLResourceValues = (try? imageUrl.resourceValues(forKeys: [.typeIdentifierKey])),
                 let type: Any = resourceValues.allValues.first?.value,
-                let utiTypeString: String = type as? String,
-                MimeTypeUtil.isAnimated(utiType: utiTypeString)
+                let typeString: String = type as? String,
+                UTType.isAnimated(typeString)
             else {
                 let viewController: CropScaleImageViewController = CropScaleImageViewController(
                     srcImage: rawAvatar,

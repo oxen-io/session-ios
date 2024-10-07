@@ -2,8 +2,10 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 class EmojiPickerSheet: BaseVC {
+    private let dependencies: Dependencies
     let completionHandler: (EmojiWithSkinTones?) -> Void
     let dismissHandler: () -> Void
     
@@ -40,7 +42,7 @@ class EmojiPickerSheet: BaseVC {
         return result
     }()
 
-    private let collectionView = EmojiPickerCollectionView()
+    private lazy var collectionView = EmojiPickerCollectionView(using: dependencies)
 
     private lazy var searchBar: SearchBar = {
         let result = SearchBar()
@@ -53,7 +55,8 @@ class EmojiPickerSheet: BaseVC {
 
     // MARK: - Initialization
 
-    init(completionHandler: @escaping (EmojiWithSkinTones?) -> Void, dismissHandler: @escaping () -> Void) {
+    init(completionHandler: @escaping (EmojiWithSkinTones?) -> Void, dismissHandler: @escaping () -> Void, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.completionHandler = completionHandler
         self.dismissHandler = dismissHandler
         

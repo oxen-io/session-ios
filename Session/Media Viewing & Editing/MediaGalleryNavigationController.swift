@@ -30,7 +30,7 @@ class MediaGalleryNavigationController: UINavigationController {
         
         view.themeBackgroundColor = .newConversation_background
         
-        // Insert a view to ensure the nav bar colour goes to the top of the screen
+        // Insert a view to ensure the nav bar color goes to the top of the screen
         relayoutBackgroundView()
     }
 

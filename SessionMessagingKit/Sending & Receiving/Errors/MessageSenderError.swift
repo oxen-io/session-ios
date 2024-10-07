@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtilitiesKit
 
 public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
     case invalidMessage
@@ -19,8 +20,9 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
     case noThread
     case noKeyPair
     case invalidClosedGroupUpdate
+    case invalidConfigMessageHandling
     
-    case other(Error)
+    case other(Log.Category?, String, Error)
 
     internal var isRetryable: Bool {
         switch self {
@@ -48,7 +50,8 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
             case .noThread: return "Couldn't find a thread associated with the given group public key (MessageSenderError.noThread)."
             case .noKeyPair: return "Couldn't find a private key associated with the given group public key (MessageSenderError.noKeyPair)."
             case .invalidClosedGroupUpdate: return "Invalid group update (MessageSenderError.invalidClosedGroupUpdate)."
-            case .other(let error): return "\(error)"
+            case .invalidConfigMessageHandling: return "Invalid handling of a config message (MessageSenderError.invalidConfigMessageHandling)."
+            case .other(_, _, let error): return "\(error)"
         }
     }
     
@@ -67,9 +70,12 @@ public enum MessageSenderError: Error, CustomStringConvertible, Equatable {
             case (.invalidClosedGroupUpdate, .invalidClosedGroupUpdate): return true
             case (.blindingFailed, .blindingFailed): return true
             
-            case (.other(let lhsError), .other(let rhsError)):
+            case (.other(_, let lhsDescription, let lhsError), .other(_, let rhsDescription, let rhsError)):
                 // Not ideal but the best we can do
-                return ("\(lhsError)" == "\(rhsError)")
+                return (
+                    lhsDescription == rhsDescription &&
+                    "\(lhsError)" == "\(rhsError)"
+                )
                 
             default: return false
         }

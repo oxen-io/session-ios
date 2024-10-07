@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtilitiesKit
 
 extension SnodeAPI {
     public final class DeleteAllBeforeRequest: SnodeAuthenticatedRequestBody, UpdatableTimestamp {
@@ -34,18 +35,14 @@ extension SnodeAPI {
         public init(
             beforeMs: UInt64,
             namespace: SnodeAPI.Namespace?,
-            pubkey: String,
-            timestampMs: UInt64,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8]
+            authMethod: AuthenticationMethod,
+            timestampMs: UInt64
         ) {
             self.beforeMs = beforeMs
             self.namespace = namespace
             
             super.init(
-                pubkey: pubkey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey,
+                authMethod: authMethod,
                 timestampMs: timestampMs
             )
         }
@@ -73,10 +70,8 @@ extension SnodeAPI {
             return DeleteAllBeforeRequest(
                 beforeMs: self.beforeMs,
                 namespace: self.namespace,
-                pubkey: self.pubkey,
-                timestampMs: timestampMs,
-                ed25519PublicKey: self.ed25519PublicKey,
-                ed25519SecretKey: self.ed25519SecretKey
+                authMethod: self.authMethod,
+                timestampMs: timestampMs
             )
         }
     }

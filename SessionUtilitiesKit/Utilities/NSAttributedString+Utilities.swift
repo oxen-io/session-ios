@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import UIKit.UIFont
 
 public extension NSAttributedString {
     static func with(_ attrStrings: [NSAttributedString]) -> NSAttributedString {

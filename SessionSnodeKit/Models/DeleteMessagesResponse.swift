@@ -50,10 +50,10 @@ extension DeleteMessagesResponse: ValidatableResponse {
                 result[next.key] = false
                 
                 if let reason: String = next.value.reason, let statusCode: Int = next.value.code {
-                    SNLog("Couldn't delete data from: \(next.key) due to error: \(reason) (\(statusCode)).")
+                    Log.warn("Couldn't delete data from: \(next.key) due to error: \(reason) (\(statusCode)).")
                 }
                 else {
-                    SNLog("Couldn't delete data from: \(next.key).")
+                    Log.warn("Couldn't delete data from: \(next.key).")
                 }
                 return
             }
@@ -63,7 +63,7 @@ extension DeleteMessagesResponse: ValidatableResponse {
                 .appending(contentsOf: validationData.joined().bytes)
                 .appending(contentsOf: next.value.deleted.joined().bytes)
             
-            result[next.key] = dependencies.crypto.verify(
+            result[next.key] = dependencies[singleton: .crypto].verify(
                 .signature(
                     message: verificationBytes,
                     publicKey: Data(hex: next.key).bytes,

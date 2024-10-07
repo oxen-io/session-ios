@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 final class CallMissedTipsModal: Modal {
     private let caller: String

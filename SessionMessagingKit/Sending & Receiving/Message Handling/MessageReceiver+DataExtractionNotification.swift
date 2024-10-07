@@ -22,23 +22,23 @@ extension MessageReceiver {
         
         let timestampMs: Int64 = (
             message.sentTimestamp.map { Int64($0) } ??
-            SnodeAPI.currentOffsetTimestampMs()
+            dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
         )
         
-        let wasRead: Bool = LibSession.timestampAlreadyRead(
+        let wasRead: Bool = dependencies[cache: .libSession].timestampAlreadyRead(
             threadId: threadId,
             threadVariant: threadVariant,
             timestampMs: (timestampMs * 1000),
-            userPublicKey: getUserHexEncodedPublicKey(db),
-            openGroup: nil,
-            using: dependencies
+            userSessionId: dependencies[cache: .general].sessionId,
+            openGroup: nil
         )
         let messageExpirationInfo: Message.MessageExpirationInfo = Message.getMessageExpirationInfo(
             threadVariant: threadVariant,
             wasRead: wasRead,
             serverExpirationTimestamp: serverExpirationTimestamp,
             expiresInSeconds: message.expiresInSeconds,
-            expiresStartedAtMs: message.expiresStartedAtMs
+            expiresStartedAtMs: message.expiresStartedAtMs,
+            using: dependencies
         )
         _ = try Interaction(
             serverHash: message.serverHash,
@@ -54,7 +54,8 @@ extension MessageReceiver {
             timestampMs: timestampMs,
             wasRead: wasRead,
             expiresInSeconds: messageExpirationInfo.expiresInSeconds,
-            expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs
+            expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs,
+            using: dependencies
         )
         .inserted(db)
         
@@ -65,7 +66,8 @@ extension MessageReceiver {
                 threadVariant: threadVariant,
                 serverHash: message.serverHash,
                 expiresInSeconds: messageExpirationInfo.expiresInSeconds,
-                expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs
+                expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs,
+                using: dependencies
             )
         }
     }

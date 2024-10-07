@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import Foundation
+import SessionUtilitiesKit
 
 extension SnodeAPI {
     public final class DeleteAllMessagesRequest: SnodeAuthenticatedRequestBody, UpdatableTimestamp {
@@ -30,17 +31,13 @@ extension SnodeAPI {
         
         public init(
             namespace: SnodeAPI.Namespace,
-            pubkey: String,
-            timestampMs: UInt64,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8]
+            authMethod: AuthenticationMethod,
+            timestampMs: UInt64
         ) {
             self.namespace = namespace
             
             super.init(
-                pubkey: pubkey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey,
+                authMethod: authMethod,
                 timestampMs: timestampMs
             )
         }
@@ -64,10 +61,8 @@ extension SnodeAPI {
         public func with(timestampMs: UInt64) -> DeleteAllMessagesRequest {
             return DeleteAllMessagesRequest(
                 namespace: self.namespace,
-                pubkey: self.pubkey,
-                timestampMs: timestampMs,
-                ed25519PublicKey: self.ed25519PublicKey,
-                ed25519SecretKey: self.ed25519SecretKey
+                authMethod: self.authMethod,
+                timestampMs: timestampMs
             )
         }
     }

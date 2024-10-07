@@ -6,9 +6,10 @@ import SessionUtilitiesKit
 // MARK: - Singleton
 
 public extension Singleton {
-    // FIXME: This will be reworked to be part of dependencies in the Groups Rebuild branch
-    fileprivate static var _appReadiness: Atomic<AppReadiness> = Atomic(AppReadiness())
-    static var appReadiness: AppReadiness { _appReadiness.wrappedValue }
+    static let appReadiness: SingletonConfig<AppReadiness> = Dependencies.create(
+        identifier: "appReadiness",
+        createInstance: { _ in AppReadiness() }
+    )
 }
 
 // MARK: - AppReadiness
@@ -43,7 +44,7 @@ public class AppReadiness {
     
     public func runNowOrWhenAppWillBecomeReady(closure: @escaping () -> ()) {
         // We don't need to do any "on app ready" work in the tests.
-        guard !SNUtilitiesKitConfiguration.isRunningTests else { return }
+        guard !SNUtilitiesKit.isRunningTests else { return }
         guard !isAppReady else {
             guard Thread.isMainThread else {
                 DispatchQueue.main.async { [weak self] in self?.runNowOrWhenAppWillBecomeReady(closure: closure) }
@@ -58,7 +59,7 @@ public class AppReadiness {
     
     public func runNowOrWhenAppDidBecomeReady(closure: @escaping () -> ()) {
         // We don't need to do any "on app ready" work in the tests.
-        guard !SNUtilitiesKitConfiguration.isRunningTests else { return }
+        guard !SNUtilitiesKit.isRunningTests else { return }
         guard !isAppReady else {
             guard Thread.isMainThread else {
                 DispatchQueue.main.async { [weak self] in self?.runNowOrWhenAppDidBecomeReady(closure: closure) }
