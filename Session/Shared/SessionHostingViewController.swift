@@ -166,7 +166,6 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
                         .localized()
                 ),
                 confirmTitle: "quitButton".localized(),
-                confirmAccessibility: Accessibility(identifier: "Quit"),
                 confirmStyle: .danger,
                 cancelStyle: .textPrimary,
                 onConfirm: { [weak self] confirmationModal in

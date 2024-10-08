@@ -123,7 +123,7 @@ public struct SessionTextField<ExplanationView>: View where ExplanationView: Vie
                         .accessibility(
                             Accessibility(
                                 identifier: "Error message",
-                                label: "Error message"
+                                label: error ?? previousError
                             )
                         )
                 } else {

@@ -96,7 +96,6 @@ extension ConversationVC:
                     title: "callsPermissionsRequired".localized(),
                     body: .text("callsPermissionsRequiredDescription".localized()),
                     confirmTitle: "sessionSettings".localized(),
-                    confirmAccessibility: Accessibility(identifier: "Settings"),
                     dismissOnConfirm: false // Custom dismissal logic
                 ) { [weak self] _ in
                     self?.dismiss(animated: true) {
@@ -160,9 +159,7 @@ extension ConversationVC:
                         .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
                 ),
                 confirmTitle: "blockUnblock".localized(),
-                confirmAccessibility: Accessibility(identifier: "Confirm block"),
-                confirmStyle: .danger, 
-                cancelAccessibility: Accessibility(identifier: "Cancel block"),
+                confirmStyle: .danger,
                 cancelStyle: .alert_text,
                 dismissOnConfirm: false // Custom dismissal logic
             ) { [weak self] _ in
@@ -921,9 +918,7 @@ extension ConversationVC:
                 info: ConfirmationModal.Info(
                     title: "disappearingMessagesFollowSetting".localized(),
                     body: .attributedText(modalBodyString.formatted(baseFont: .systemFont(ofSize: Values.smallFontSize))),
-                    accessibility: Accessibility(identifier: "Follow setting dialog"),
                     confirmTitle: modalConfirmTitle,
-                    confirmAccessibility: Accessibility(identifier: "Set button"),
                     confirmStyle: .danger,
                     cancelStyle: .textPrimary,
                     dismissOnConfirm: false // Custom dismissal logic
@@ -955,8 +950,6 @@ extension ConversationVC:
                     title: "attachmentsAutoDownloadModalTitle".localized(),
                     body: .attributedText(message),
                     confirmTitle: "download".localized(),
-                    confirmAccessibility: Accessibility(identifier: "Download media"),
-                    cancelAccessibility: Accessibility(identifier: "Don't download media"),
                     dismissOnConfirm: false // Custom dismissal logic
                 ) { [weak self] _ in
                     self?.viewModel.trustContact()

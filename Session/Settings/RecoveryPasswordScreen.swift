@@ -254,15 +254,7 @@ struct RecoveryPasswordScreen: View {
                 title: "recoveryPasswordHidePermanently".localized(),
                 body: .text("recoveryPasswordHidePermanentlyDescription1".localized()),
                 confirmTitle: "theContinue".localized(),
-                confirmAccessibility: Accessibility(
-                    identifier: "Continue",
-                    label: "Continue"
-                ),
                 confirmStyle: .danger,
-                cancelAccessibility: Accessibility(
-                    identifier: "Cancel",
-                    label: "Cancel"
-                ),
                 cancelStyle: .textPrimary,
                 onConfirm: { modal in
                     guard let presentingViewController: UIViewController = modal.presentingViewController else {
@@ -274,16 +266,8 @@ struct RecoveryPasswordScreen: View {
                             title: "recoveryPasswordHidePermanently".localized(),
                             body: .text("recoveryPasswordHidePermanentlyDescription2".localized()),
                             confirmTitle: "cancel".localized(),
-                            confirmAccessibility: Accessibility(
-                                identifier: "Cancel",
-                                label: "Cancel"
-                            ),
                             confirmStyle: .textPrimary,
                             cancelTitle: "yes".localized(),
-                            cancelAccessibility: Accessibility(
-                                identifier: "Confirm button",
-                                label: "Confirm button"
-                            ),
                             cancelStyle: .danger,
                             onCancel: { modal in
                                 modal.dismiss(animated: true) {

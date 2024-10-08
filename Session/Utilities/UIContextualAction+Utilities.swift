@@ -133,9 +133,6 @@ public extension UIContextualAction {
                                     title: "clearMessages".localized(),
                                     body: .text("clearMessagesNoteToSelfDescription".localized()),
                                     confirmTitle: "clear".localized(),
-                                    confirmAccessibility: Accessibility(
-                                        identifier: "Clear"
-                                    ),
                                     confirmStyle: .danger,
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
@@ -183,9 +180,6 @@ public extension UIContextualAction {
                                             title: "noteToSelfHide".localized(),
                                             body: .text("noteToSelfHideDescription".localized()),
                                             confirmTitle: "hide".localized(),
-                                            confirmAccessibility: Accessibility(
-                                                identifier: "Hide"
-                                            ),
                                             confirmStyle: .danger,
                                             cancelStyle: .alert_text,
                                             dismissOnConfirm: true,
@@ -375,7 +369,6 @@ public extension UIContextualAction {
                                                     .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
                                             ),
                                             confirmTitle: "block".localized(),
-                                            confirmAccessibility: Accessibility(identifier: "Confirm block"),
                                             confirmStyle: .danger,
                                             cancelStyle: .alert_text,
                                             dismissOnConfirm: true,
@@ -432,9 +425,6 @@ public extension UIContextualAction {
                                     title: confirmationModalTitle,
                                     body: .attributedText(confirmationModalExplanation),
                                     confirmTitle: "leave".localized(),
-                                    confirmAccessibility: Accessibility(
-                                        identifier: "Leave"
-                                    ),
                                     confirmStyle: .danger,
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,
@@ -538,9 +528,6 @@ public extension UIContextualAction {
                                     title: confirmationModalTitle,
                                     body: .attributedText(confirmationModalExplanation),
                                     confirmTitle: "delete".localized(),
-                                    confirmAccessibility: Accessibility(
-                                        identifier: "Confirm delete"
-                                    ),
                                     confirmStyle: .danger,
                                     cancelStyle: .alert_text,
                                     dismissOnConfirm: true,

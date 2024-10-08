@@ -207,13 +207,7 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                         info: ConfirmationModal.Info(
                             title: "clearAll".localized(),
                             body: .text("messageRequestsClearAllExplanation".localized()),
-                            accessibility: Accessibility(
-                                identifier: "Clear all"
-                            ),
                             confirmTitle: "clear".localized(),
-                            confirmAccessibility: Accessibility(
-                                identifier: "Clear"
-                            ),
                             confirmStyle: .danger,
                             cancelStyle: .alert_text,
                             onConfirm: { _ in

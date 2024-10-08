@@ -707,7 +707,6 @@ class ThreadSettingsViewModel: SessionTableViewModel, NavigationItemSource, Navi
                                     "blockUnblock".localized() :
                                     "block".localized()
                                 ),
-                                confirmAccessibility: Accessibility(identifier: "Confirm block"),
                                 confirmStyle: .danger,
                                 cancelStyle: .alert_text
                             ),

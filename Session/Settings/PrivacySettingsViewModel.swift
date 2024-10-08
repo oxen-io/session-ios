@@ -308,7 +308,6 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                 body: .text("callsVoiceAndVideoModalDescription".localized()),
                                 showCondition: .disabled,
                                 confirmTitle: "theContinue".localized(),
-                                confirmAccessibility: Accessibility(identifier: "Enable"),
                                 confirmStyle: .danger,
                                 cancelStyle: .alert_text,
                                 onConfirm: { _ in Permissions.requestMicrophonePermissionIfNeeded() }
