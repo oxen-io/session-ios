@@ -5,7 +5,37 @@ import GRDB
 import SessionUtilitiesKit
 
 public final class ExpirationTimerUpdate: ControlMessage {
+    private enum CodingKeys: String, CodingKey {
+        case syncTarget
+    }
+    
+    public var syncTarget: String?
+    
     public override var isSelfSendValid: Bool { true }
+    
+    public init(syncTarget: String? = nil) {
+        super.init()
+        
+        self.syncTarget = syncTarget
+    }
+    
+    // MARK: - Codable
+        
+    required init(from decoder: Decoder) throws {
+        try super.init(from: decoder)
+        
+        let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
+        
+        syncTarget = try? container.decode(String.self, forKey: .syncTarget)
+    }
+    
+    public override func encode(to encoder: Encoder) throws {
+        try super.encode(to: encoder)
+        
+        var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encodeIfPresent(syncTarget, forKey: .syncTarget)
+    }
 
     // MARK: - Proto Conversion
     
@@ -15,12 +45,15 @@ public final class ExpirationTimerUpdate: ControlMessage {
         let isExpirationTimerUpdate = (dataMessageProto.flags & UInt32(SNProtoDataMessage.SNProtoDataMessageFlags.expirationTimerUpdate.rawValue)) != 0
         guard isExpirationTimerUpdate else { return nil }
         
-        return ExpirationTimerUpdate()
+        return ExpirationTimerUpdate(
+            syncTarget: dataMessageProto.syncTarget
+        )
     }
 
     public override func toProto(_ db: Database, threadId: String) -> SNProtoContent? {
         let dataMessageProto = SNProtoDataMessage.builder()
         dataMessageProto.setFlags(UInt32(SNProtoDataMessage.SNProtoDataMessageFlags.expirationTimerUpdate.rawValue))
+        if let syncTarget = syncTarget { dataMessageProto.setSyncTarget(syncTarget) }
         let contentProto = SNProtoContent.builder()
         
         // DisappearingMessagesConfiguration
@@ -39,7 +72,9 @@ public final class ExpirationTimerUpdate: ControlMessage {
     
     public var description: String {
         """
-        ExpirationTimerUpdate()
+        ExpirationTimerUpdate(
+            syncTarget: \(syncTarget ?? "null"),
+        )
         """
     }
 }

@@ -929,7 +929,33 @@ extension ConversationVC:
                     dismissOnConfirm: false // Custom dismissal logic
                 ) { [weak self] _ in
                     dependencies.storage.writeAsync { db in
-                        try messageDisappearingConfig.save(db)
+                        let userPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
+                        let currentTimestampMs: Int64 = SnodeAPI.currentOffsetTimestampMs()
+                        
+                        let interactionId = try messageDisappearingConfig
+                            .saved(db)
+                            .insertControlMessage(
+                                db,
+                                threadVariant: cellViewModel.threadVariant,
+                                authorId: userPublicKey,
+                                timestampMs: currentTimestampMs,
+                                serverHash: nil,
+                                serverExpirationTimestamp: nil
+                            )
+                        
+                        let expirationTimerUpdateMessage: ExpirationTimerUpdate = ExpirationTimerUpdate()
+                            .with(sentTimestamp: UInt64(currentTimestampMs))
+                            .with(messageDisappearingConfig)
+
+                        try MessageSender.send(
+                            db,
+                            message: expirationTimerUpdateMessage,
+                            interactionId: interactionId,
+                            threadId: cellViewModel.threadId,
+                            threadVariant: cellViewModel.threadVariant,
+                            using: dependencies
+                        )
+                        
                         try LibSession
                             .update(
                                 db,

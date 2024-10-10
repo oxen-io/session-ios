@@ -262,6 +262,7 @@ public extension Message {
     static func shouldSync(message: Message) -> Bool {
         switch message {
             case is VisibleMessage: return true
+            case is ExpirationTimerUpdate: return true
             case is UnsendRequest: return true
             
             case let controlMessage as ClosedGroupControlMessage:
@@ -288,6 +289,7 @@ public extension Message {
                 
                 switch message {
                     case let message as VisibleMessage: maybeSyncTarget = message.syncTarget
+                    case let message as ExpirationTimerUpdate: maybeSyncTarget = message.syncTarget
                     default: maybeSyncTarget = nil
                 }
                 
