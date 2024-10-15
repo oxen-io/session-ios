@@ -15,18 +15,47 @@ class OpenGroupAPISpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var mockNetwork: MockNetwork! = MockNetwork()
-        @TestState var mockCrypto: MockCrypto! = MockCrypto(
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies.dateNow = Date(timeIntervalSince1970: 1234567890)
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
+            customWriter: try! DatabaseQueue(),
+            migrationTargets: [
+                SNUtilitiesKit.self,
+                SNMessagingKit.self
+            ],
+            using: dependencies,
+            initialData: { db in
+                try Identity(variant: .x25519PublicKey, data: Data(hex: TestConstants.publicKey)).insert(db)
+                try Identity(variant: .x25519PrivateKey, data: Data(hex: TestConstants.privateKey)).insert(db)
+                try Identity(variant: .ed25519PublicKey, data: Data(hex: TestConstants.edPublicKey)).insert(db)
+                try Identity(variant: .ed25519SecretKey, data: Data(hex: TestConstants.edSecretKey)).insert(db)
+                
+                try OpenGroup(
+                    server: "testServer",
+                    roomToken: "testRoom",
+                    publicKey: TestConstants.publicKey,
+                    isActive: true,
+                    name: "Test",
+                    roomDescription: nil,
+                    imageId: nil,
+                    userCount: 0,
+                    infoUpdates: 0,
+                    sequenceNumber: 0,
+                    inboxLatestMessageId: 0,
+                    outboxLatestMessageId: 0
+                ).insert(db)
+                try Capability(openGroupServer: "testserver", variant: .sogs, isMissing: false).insert(db)
+            }
+        )
+        @TestState(singleton: .network, in: dependencies) var mockNetwork: MockNetwork! = MockNetwork()
+        @TestState(singleton: .crypto, in: dependencies) var mockCrypto: MockCrypto! = MockCrypto(
             initialSetup: { crypto in
                 crypto
-                    .when { $0.generate(.hash(message: anyArray(), key: anyArray(), length: any())) }
+                    .when { $0.generate(.hash(message: .any, key: .any, length: .any)) }
                     .thenReturn([])
                 crypto
-                    .when { crypto in
-                        crypto.generate(
-                            .blinded15KeyPair(serverPublicKey: any(), ed25519SecretKey: anyArray())
-                        )
-                    }
+                    .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                     .thenReturn(
                         KeyPair(
                             publicKey: Data(hex: TestConstants.publicKey).bytes,
@@ -34,63 +63,22 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     )
                 crypto
-                    .when { $0.generate(.signatureBlind15(message: anyArray(), serverPublicKey: any(), ed25519SecretKey: anyArray())) }
+                    .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                     .thenReturn("TestSogsSignature".bytes)
                 crypto
-                    .when { $0.generate(.signature(message: anyArray(), ed25519SecretKey: anyArray())) }
-                    .thenReturn("TestSignature".bytes)
+                    .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
+                    .thenReturn(Authentication.Signature.standard(signature: "TestSignature".bytes))
                 crypto
-                    .when { $0.generate(.signatureXed25519(data: anyArray(), curve25519PrivateKey: anyArray())) }
+                    .when { $0.generate(.signatureXed25519(data: .any, curve25519PrivateKey: .any)) }
                     .thenReturn("TestStandardSignature".bytes)
                 crypto
                     .when { $0.generate(.randomBytes(16)) }
-                    .thenReturn(Data(base64Encoded: "pK6YRtQApl4NhECGizF0Cg==")!.bytes)
+                    .thenReturn(Array(Data(base64Encoded: "pK6YRtQApl4NhECGizF0Cg==")!))
                 crypto
                     .when { $0.generate(.randomBytes(24)) }
-                    .thenReturn(Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!.bytes)
+                    .thenReturn(Array(Data(base64Encoded: "pbTUizreT0sqJ2R2LloseQDyVL2RYztD")!))
             }
         )
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: nil,
-            network: mockNetwork,
-            crypto: mockCrypto,
-            dateNow: Date(timeIntervalSince1970: 1234567890)
-        )
-        @TestState var mockStorage: Storage! = {
-            let result = SynchronousStorage(
-                customWriter: try! DatabaseQueue(),
-                migrationTargets: [
-                    SNUtilitiesKit.self,
-                    SNMessagingKit.self
-                ],
-                initialData: { db in
-                    try Identity(variant: .x25519PublicKey, data: Data(hex: TestConstants.publicKey)).insert(db)
-                    try Identity(variant: .x25519PrivateKey, data: Data(hex: TestConstants.privateKey)).insert(db)
-                    try Identity(variant: .ed25519PublicKey, data: Data(hex: TestConstants.edPublicKey)).insert(db)
-                    try Identity(variant: .ed25519SecretKey, data: Data(hex: TestConstants.edSecretKey)).insert(db)
-                    
-                    try OpenGroup(
-                        server: "testServer",
-                        roomToken: "testRoom",
-                        publicKey: TestConstants.publicKey,
-                        isActive: true,
-                        name: "Test",
-                        roomDescription: nil,
-                        imageId: nil,
-                        userCount: 0,
-                        infoUpdates: 0,
-                        sequenceNumber: 0,
-                        inboxLatestMessageId: 0,
-                        outboxLatestMessageId: 0
-                    ).insert(db)
-                    try Capability(openGroupServer: "testserver", variant: .sogs, isMissing: false).insert(db)
-                },
-                using: dependencies
-            )
-            dependencies.storage = result
-            
-            return result
-        }()
         @TestState var disposables: [AnyCancellable]! = []
         @TestState var error: Error?
         
@@ -110,8 +98,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/batch"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/batch"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                     expect(preparedRequest?.batchEndpoints.count).to(equal(3))
                     expect(preparedRequest?.batchEndpoints[test: 0].asType(OpenGroupAPI.Endpoint.self))
                         .to(equal(.capabilities))
@@ -149,7 +137,7 @@ class OpenGroupAPISpec: QuickSpec {
                             db,
                             server: "testserver",
                             hasPerformedInitialPoll: false,
-                            timeSinceLastPoll: (OpenGroupAPI.Poller.maxInactivityPeriod + 1),
+                            timeSinceLastPoll: (CommunityPoller.maxInactivityPeriod + 1),
                             using: dependencies
                         )
                     }
@@ -401,8 +389,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/capabilities"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("GET"))
+                    expect(preparedRequest?.path).to(equal("/capabilities"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
                 }
             }
             
@@ -418,8 +406,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/rooms"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("GET"))
+                    expect(preparedRequest?.path).to(equal("/rooms"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
                 }
             }
             
@@ -442,14 +430,14 @@ class OpenGroupAPISpec: QuickSpec {
                     expect(preparedRequest?.batchEndpoints[test: 1].asType(OpenGroupAPI.Endpoint.self))
                         .to(equal(.room("testRoom")))
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/sequence"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/sequence"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
                 
                 // MARK: ---- processes a valid response correctly
                 it("processes a valid response correctly") {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
                         .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomResponse)
                     
                     var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomResponse)?
@@ -478,7 +466,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a room response
                     it("errors when not given a room response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
                             .thenReturn(Network.BatchResponse.mockCapabilitiesAndBanResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomResponse)?
@@ -504,7 +492,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a capabilities response
                     it("errors when not given a capabilities response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
                             .thenReturn(Network.BatchResponse.mockBanAndRoomResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomResponse)?
@@ -549,14 +537,14 @@ class OpenGroupAPISpec: QuickSpec {
                     expect(preparedRequest?.batchEndpoints[test: 1].asType(OpenGroupAPI.Endpoint.self))
                         .to(equal(.rooms))
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/sequence"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/sequence"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
                 
                 // MARK: ---- processes a valid response correctly
                 it("processes a valid response correctly") {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
                         .thenReturn(Network.BatchResponse.mockCapabilitiesAndRoomsResponse)
                     
                     var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomsResponse)?
@@ -579,13 +567,20 @@ class OpenGroupAPISpec: QuickSpec {
                 }
                 
                 // MARK: ---- and given an invalid response
-                
                 context("and given an invalid response") {
                     // MARK: ------ errors when not given a room response
                     it("errors when not given a room response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
-                            .thenReturn(Network.BatchResponse.mockCapabilitiesAndBanResponse)
+                            .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
+                            .thenReturn(
+                                MockNetwork.batchResponseData(with: [
+                                    (OpenGroupAPI.Endpoint.capabilities, OpenGroupAPI.Capabilities.mockBatchSubResponse()),
+                                    (
+                                        OpenGroupAPI.Endpoint.userBan(""),
+                                        OpenGroupAPI.DirectMessage.mockBatchSubResponse()
+                                    )
+                                ])
+                            )
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomsResponse)?
                         
@@ -609,7 +604,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ errors when not given a capabilities response
                     it("errors when not given a capabilities response") {
                         mockNetwork
-                            .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                            .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
                             .thenReturn(Network.BatchResponse.mockBanAndRoomsResponse)
                         
                         var response: (info: ResponseInfoType, data: OpenGroupAPI.CapabilitiesAndRoomsResponse)?
@@ -650,8 +645,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testServer/room/testRoom/message"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/message"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
                 
                 // MARK: ---- when unblinded
@@ -678,7 +673,7 @@ class OpenGroupAPISpec: QuickSpec {
                             )
                         }
                         
-                        let requestBody: OpenGroupAPI.SendMessageRequest? = try? preparedRequest?.request.httpBody?
+                        let requestBody: OpenGroupAPI.SendMessageRequest? = try? preparedRequest?.body?
                             .decoded(as: OpenGroupAPI.SendMessageRequest.self, using: dependencies)
                         expect(requestBody?.data).to(equal("test".data(using: .utf8)))
                         expect(requestBody?.signature).to(equal("TestStandardSignature".data(using: .utf8)))
@@ -749,7 +744,7 @@ class OpenGroupAPISpec: QuickSpec {
                     it("fails to sign if no signature is generated") {
                         mockCrypto.reset() // The 'keyPair' value doesn't equate so have to explicitly reset
                         mockCrypto
-                            .when { $0.generate(.signatureXed25519(data: anyArray(), curve25519PrivateKey: anyArray())) }
+                            .when { $0.generate(.signatureXed25519(data: .any, curve25519PrivateKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -802,7 +797,7 @@ class OpenGroupAPISpec: QuickSpec {
                             )
                         }
                         
-                        let requestBody: OpenGroupAPI.SendMessageRequest? = try? preparedRequest?.request.httpBody?
+                        let requestBody: OpenGroupAPI.SendMessageRequest? = try? preparedRequest?.body?
                             .decoded(as: OpenGroupAPI.SendMessageRequest.self, using: dependencies)
                         expect(requestBody?.data).to(equal("test".data(using: .utf8)))
                         expect(requestBody?.signature).to(equal("TestSogsSignature".data(using: .utf8)))
@@ -872,7 +867,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails to sign if no signature is generated
                     it("fails to sign if no signature is generated") {
                         mockCrypto
-                            .when { $0.generate(.signatureBlind15(message: anyArray(), serverPublicKey: any(), ed25519SecretKey: anyArray())) }
+                            .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -915,8 +910,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/message/123"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("GET"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/message/123"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
                 }
             }
             
@@ -947,8 +942,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/message/123"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("PUT"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/message/123"))
+                    expect(preparedRequest?.method.rawValue).to(equal("PUT"))
                 }
                 
                 // MARK: ---- when unblinded
@@ -974,7 +969,7 @@ class OpenGroupAPISpec: QuickSpec {
                             )
                         }
                         
-                        let requestBody: OpenGroupAPI.UpdateMessageRequest? = try? preparedRequest?.request.httpBody?
+                        let requestBody: OpenGroupAPI.UpdateMessageRequest? = try? preparedRequest?.body?
                             .decoded(as: OpenGroupAPI.UpdateMessageRequest.self, using: dependencies)
                         expect(requestBody?.data).to(equal("test".data(using: .utf8)))
                         expect(requestBody?.signature).to(equal("TestStandardSignature".data(using: .utf8)))
@@ -1043,7 +1038,7 @@ class OpenGroupAPISpec: QuickSpec {
                     it("fails to sign if no signature is generated") {
                         mockCrypto.reset() // The 'keyPair' value doesn't equate so have to explicitly reset
                         mockCrypto
-                            .when { $0.generate(.signatureXed25519(data: anyArray(), curve25519PrivateKey: anyArray())) }
+                            .when { $0.generate(.signatureXed25519(data: .any, curve25519PrivateKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1094,7 +1089,7 @@ class OpenGroupAPISpec: QuickSpec {
                             )
                         }
                         
-                        let requestBody: OpenGroupAPI.UpdateMessageRequest? = try? preparedRequest?.request.httpBody?
+                        let requestBody: OpenGroupAPI.UpdateMessageRequest? = try? preparedRequest?.body?
                             .decoded(as: OpenGroupAPI.UpdateMessageRequest.self, using: dependencies)
                         expect(requestBody?.data).to(equal("test".data(using: .utf8)))
                         expect(requestBody?.signature).to(equal("TestSogsSignature".data(using: .utf8)))
@@ -1162,7 +1157,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails to sign if no signature is generated
                     it("fails to sign if no signature is generated") {
                         mockCrypto
-                            .when { $0.generate(.signatureBlind15(message: anyArray(), serverPublicKey: any(), ed25519SecretKey: anyArray())) }
+                            .when { $0.generate(.signatureBlind15(message: .any, serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1204,8 +1199,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/message/123"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("DELETE"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/message/123"))
+                    expect(preparedRequest?.method.rawValue).to(equal("DELETE"))
                 }
             }
             
@@ -1223,8 +1218,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/all/testUserId"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("DELETE"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/all/testUserId"))
+                    expect(preparedRequest?.method.rawValue).to(equal("DELETE"))
                 }
             }
             
@@ -1242,8 +1237,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/pin/123"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/pin/123"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
             }
             
@@ -1261,8 +1256,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/unpin/123"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/unpin/123"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
             }
             
@@ -1279,13 +1274,13 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/room/testRoom/unpin/all"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/unpin/all"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
             }
             
-            // MARK: -- when generaing upload and download details
-            context("when generaing upload and download details") {
+            // MARK: -- when generaing an upload request
+            context("when generaing an upload request") {
                 beforeEach {
                     mockStorage.write { db in
                         try OpenGroup(
@@ -1305,112 +1300,144 @@ class OpenGroupAPISpec: QuickSpec {
                     }
                 }
                 
-                // MARK: ---- generates the upload destination correctly
-                it("generates the upload destination correctly") {
-                    let destination: Network.Destination? = mockStorage.read { db in
-                        try OpenGroupAPI.uploadDestination(
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<FileUploadResponse>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedUpload(
                             db,
-                            data: Data(),
-                            openGroup: OpenGroup(
-                                server: "http://oxen.io",
-                                roomToken: "testRoom",
-                                publicKey: TestConstants.publicKey,
-                                isActive: false,
-                                name: "",
-                                userCount: 0,
-                                infoUpdates: 0
-                            ),
+                            data: Data([1, 2, 3]),
+                            to: "testRoom",
+                            on: "testServer",
                             using: dependencies
                         )
                     }
-
-                    expect(destination).to(equal(
-                        Network.Destination.server(
-                            url: URL(string: "http://oxen.io/room/testRoom/file")!,
-                            method: .post,
-                            headers: [
-                                HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
-                                HTTPHeader.sogsTimestamp: "1234567890",
-                                HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
-                                HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
-                            ],
-                            x25519PublicKey: TestConstants.publicKey
-                        )
-                    ))
+                    
+                    expect(preparedRequest?.path).to(equal("/room/testRoom/file"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
+                }
+            }
+            
+            // MARK: -- when generaing a download request
+            context("when generaing a download request") {
+                beforeEach {
+                    mockStorage.write { db in
+                        try OpenGroup(
+                            server: "http://oxen.io",
+                            roomToken: "testRoom",
+                            publicKey: TestConstants.publicKey,
+                            isActive: true,
+                            name: "Test",
+                            roomDescription: nil,
+                            imageId: nil,
+                            userCount: 0,
+                            infoUpdates: 0,
+                            sequenceNumber: 0,
+                            inboxLatestMessageId: 0,
+                            outboxLatestMessageId: 0
+                        ).insert(db)
+                    }
                 }
                 
-                // MARK: ---- generates the download url correctly
-                it("generates the download url correctly") {
-                    expect(try? OpenGroupAPI.downloadUrlFor(fileId: "1", server: "testserver", roomToken: "roomToken"))
-                        .to(equal(URL(string: "testserver/room/roomToken/file/1")))
+                // MARK: ---- generates the download url string correctly
+                it("generates the download url string correctly") {
+                    expect(OpenGroupAPI.downloadUrlString(for: "1", server: "testserver", roomToken: "roomToken"))
+                        .to(equal("testserver/room/roomToken/file/1"))
                 }
                 
                 // MARK: ---- generates the download destination correctly when given an id
                 it("generates the download destination correctly when given an id") {
-                    let destination: Network.Destination? = mockStorage.read { db in
-                        try OpenGroupAPI.downloadDestination(
+                    let preparedRequest: Network.PreparedRequest<Data>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedDownload(
                             db,
                             fileId: "1",
-                            openGroup: OpenGroup(
-                                server: "http://oxen.io",
-                                roomToken: "testRoom",
-                                publicKey: TestConstants.publicKey,
-                                isActive: false,
-                                name: "",
-                                userCount: 0,
-                                infoUpdates: 0
-                            ),
+                            from: "roomToken",
+                            on: "http://oxen.io",
                             using: dependencies
                         )
                     }
                     
-                    expect(destination).to(equal(
-                        Network.Destination.server(
-                            url: URL(string: "http://oxen.io/room/testRoom/file/1")!,
-                            method: .get,
-                            headers: [
-                                HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
-                                HTTPHeader.sogsTimestamp: "1234567890",
-                                HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
-                                HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
-                            ],
-                            x25519PublicKey: TestConstants.publicKey
-                        )
-                    ))
+                    expect(preparedRequest?.path).to(equal("/room/roomToken/file/1"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
+                    expect(preparedRequest?.headers).to(equal([
+                        HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
+                        HTTPHeader.sogsTimestamp: "1234567890",
+                        HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
+                        HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
+                    ]))
                 }
                 
-                // MARK: ---- generates the download destination correctly when given a url
-                it("generates the download destination correctly when given a url") {
-                    let destination: Network.Destination? = mockStorage.read { db in
-                        try OpenGroupAPI.downloadDestination(
+                // MARK: ---- generates the download request correctly when given a URL
+                it("generates the download request correctly when given a URL") {
+                    let preparedRequest: Network.PreparedRequest<Data>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedDownload(
                             db,
-                            url: URL(string: "http://oxen.io/room/testRoom/file/1")!,
-                            openGroup: OpenGroup(
-                                server: "http://oxen.io",
-                                roomToken: "testRoom",
-                                publicKey: TestConstants.publicKey,
-                                isActive: false,
-                                name: "",
-                                userCount: 0,
-                                infoUpdates: 0
-                            ),
+                            url: URL(string: "http://oxen.io/room/roomToken/file/1")!,
+                            from: "roomToken",
+                            on: "http://oxen.io",
                             using: dependencies
                         )
                     }
                     
-                    expect(destination).to(equal(
-                        Network.Destination.server(
-                            url: URL(string: "http://oxen.io/room/testRoom/file/1")!,
-                            method: .get,
-                            headers: [
-                                HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
-                                HTTPHeader.sogsTimestamp: "1234567890",
-                                HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
-                                HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
-                            ],
-                            x25519PublicKey: TestConstants.publicKey
+                    expect(preparedRequest?.path).to(equal("/room/roomToken/file/1"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
+                    expect(preparedRequest?.headers).to(equal([
+                        HTTPHeader.sogsNonce: "pK6YRtQApl4NhECGizF0Cg==",
+                        HTTPHeader.sogsTimestamp: "1234567890",
+                        HTTPHeader.sogsSignature: "VGVzdFNvZ3NTaWduYXR1cmU=",
+                        HTTPHeader.sogsPubKey: "1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"
+                    ]))
+                }
+            }
+            
+            // MARK: -- when preparing an inbox request
+            context("when preparing an inbox request") {
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<[OpenGroupAPI.DirectMessage]?>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedInbox(
+                            db,
+                            on: "testserver",
+                            using: dependencies
                         )
-                    ))
+                    }
+                    
+                    expect(preparedRequest?.path).to(equal("/inbox"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
+                }
+            }
+            
+            // MARK: -- when preparing an inbox since request
+            context("when preparing an inbox since request") {
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<[OpenGroupAPI.DirectMessage]?>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedInboxSince(
+                            db,
+                            id: 1,
+                            on: "testserver",
+                            using: dependencies
+                        )
+                    }
+                    
+                    expect(preparedRequest?.path).to(equal("/inbox/since/1"))
+                    expect(preparedRequest?.method.rawValue).to(equal("GET"))
+                }
+            }
+            
+            // MARK: -- when preparing a clear inbox request
+            context("when preparing an inbox since request") {
+                // MARK: ---- generates the request correctly
+                it("generates the request correctly") {
+                    let preparedRequest: Network.PreparedRequest<OpenGroupAPI.DeleteInboxResponse>? = mockStorage.read { db in
+                        try OpenGroupAPI.preparedClearInbox(
+                            db,
+                            on: "testserver",
+                            using: dependencies
+                        )
+                    }
+                    
+                    expect(preparedRequest?.path).to(equal("/inbox"))
+                    expect(preparedRequest?.method.rawValue).to(equal("DELETE"))
                 }
             }
             
@@ -1428,8 +1455,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/inbox/testUserId"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/inbox/testUserId"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
             }
         }
@@ -1450,8 +1477,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/user/testUserId/ban"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/user/testUserId/ban"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
                 
                 // MARK: ---- does a global ban if no room tokens are provided
@@ -1467,7 +1494,7 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    let requestBody: OpenGroupAPI.UserBanRequest? = try? preparedRequest?.request.httpBody?
+                    let requestBody: OpenGroupAPI.UserBanRequest? = try? preparedRequest?.body?
                         .decoded(as: OpenGroupAPI.UserBanRequest.self, using: dependencies)
                     expect(requestBody?.global).to(beTrue())
                     expect(requestBody?.rooms).to(beNil())
@@ -1486,7 +1513,7 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    let requestBody: OpenGroupAPI.UserBanRequest? = try? preparedRequest?.request.httpBody?
+                    let requestBody: OpenGroupAPI.UserBanRequest? = try? preparedRequest?.body?
                         .decoded(as: OpenGroupAPI.UserBanRequest.self, using: dependencies)
                     expect(requestBody?.global).to(beNil())
                     expect(requestBody?.rooms).to(equal(["testRoom"]))
@@ -1507,8 +1534,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/user/testUserId/unban"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/user/testUserId/unban"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
                 
                 // MARK: ---- does a global unban if no room tokens are provided
@@ -1523,7 +1550,7 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    let requestBody: OpenGroupAPI.UserUnbanRequest? = try? preparedRequest?.request.httpBody?
+                    let requestBody: OpenGroupAPI.UserUnbanRequest? = try? preparedRequest?.body?
                         .decoded(as: OpenGroupAPI.UserUnbanRequest.self, using: dependencies)
                     expect(requestBody?.global).to(beTrue())
                     expect(requestBody?.rooms).to(beNil())
@@ -1541,7 +1568,7 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    let requestBody: OpenGroupAPI.UserUnbanRequest? = try? preparedRequest?.request.httpBody?
+                    let requestBody: OpenGroupAPI.UserUnbanRequest? = try? preparedRequest?.body?
                         .decoded(as: OpenGroupAPI.UserUnbanRequest.self, using: dependencies)
                     expect(requestBody?.global).to(beNil())
                     expect(requestBody?.rooms).to(equal(["testRoom"]))
@@ -1565,8 +1592,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/user/testUserId/moderator"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/user/testUserId/moderator"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                 }
                 
                 // MARK: ---- does a global update if no room tokens are provided
@@ -1584,7 +1611,7 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    let requestBody: OpenGroupAPI.UserModeratorRequest? = try? preparedRequest?.request.httpBody?
+                    let requestBody: OpenGroupAPI.UserModeratorRequest? = try? preparedRequest?.body?
                         .decoded(as: OpenGroupAPI.UserModeratorRequest.self, using: dependencies)
                     expect(requestBody?.global).to(beTrue())
                     expect(requestBody?.rooms).to(beNil())
@@ -1605,7 +1632,7 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    let requestBody: OpenGroupAPI.UserModeratorRequest? = try? preparedRequest?.request.httpBody?
+                    let requestBody: OpenGroupAPI.UserModeratorRequest? = try? preparedRequest?.body?
                         .decoded(as: OpenGroupAPI.UserModeratorRequest.self, using: dependencies)
                     expect(requestBody?.global).to(beNil())
                     expect(requestBody?.rooms).to(equal(["testRoom"]))
@@ -1652,8 +1679,8 @@ class OpenGroupAPISpec: QuickSpec {
                         )
                     }
                     
-                    expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/sequence"))
-                    expect(preparedRequest?.request.httpMethod).to(equal("POST"))
+                    expect(preparedRequest?.path).to(equal("/sequence"))
+                    expect(preparedRequest?.method.rawValue).to(equal("POST"))
                     expect(preparedRequest?.batchEndpoints.count).to(equal(2))
                     expect(preparedRequest?.batchEndpoints[test: 0].asType(OpenGroupAPI.Endpoint.self))
                         .to(equal(.userBan("testUserId")))
@@ -1761,26 +1788,26 @@ class OpenGroupAPISpec: QuickSpec {
                             )
                         }
                         
-                        expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/rooms"))
-                        expect(preparedRequest?.request.httpMethod).to(equal("GET"))
-                        expect((preparedRequest?.target as? (any ServerRequestTarget))?.x25519PublicKey)
+                        expect(preparedRequest?.path).to(equal("/rooms"))
+                        expect(preparedRequest?.method.rawValue).to(equal("GET"))
+                        expect(preparedRequest?.destination.testX25519Pubkey)
                             .to(equal("88672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
-                        expect(preparedRequest?.request.allHTTPHeaderFields).to(haveCount(4))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsPubKey])
+                        expect(preparedRequest?.destination.testHeaders).to(haveCount(4))
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsPubKey])
                             .to(equal("00bac6e71efd7dfa4a83c98ed24f254ab2c267f9ccdb172a5280a0444ad24e89cc"))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsTimestamp])
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsTimestamp])
                             .to(equal("1234567890"))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsNonce])
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsNonce])
                             .to(equal("pK6YRtQApl4NhECGizF0Cg=="))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsSignature])
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsSignature])
                             .to(equal("TestSignature".bytes.toBase64()))
                     }
                     
                     // MARK: ------ fails when the signature is not generated
                     it("fails when the signature is not generated") {
                         mockCrypto
-                            .when { $0.generate(.signature(message: anyArray(), ed25519SecretKey: anyArray())) }
-                            .thenReturn(nil)
+                            .when { $0.generate(.signature(message: .any, ed25519SecretKey: .any)) }
+                            .thenThrow(CryptoError.failedToGenerateOutput)
                         
                         var preparationError: Error?
                         let preparedRequest: Network.PreparedRequest<[OpenGroupAPI.Room]>? = mockStorage.read { db in
@@ -1822,29 +1849,25 @@ class OpenGroupAPISpec: QuickSpec {
                             )
                         }
                         
-                        expect(preparedRequest?.request.url?.absoluteString).to(equal("testserver/rooms"))
-                        expect(preparedRequest?.request.httpMethod).to(equal("GET"))
-                        expect((preparedRequest?.target as? (any ServerRequestTarget))?.x25519PublicKey)
+                        expect(preparedRequest?.path).to(equal("/rooms"))
+                        expect(preparedRequest?.method.rawValue).to(equal("GET"))
+                        expect(preparedRequest?.destination.testX25519Pubkey)
                             .to(equal("88672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
-                        expect(preparedRequest?.request.allHTTPHeaderFields).to(haveCount(4))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsPubKey])
+                        expect(preparedRequest?.destination.testHeaders).to(haveCount(4))
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsPubKey])
                             .to(equal("1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsTimestamp])
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsTimestamp])
                             .to(equal("1234567890"))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsNonce])
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsNonce])
                             .to(equal("pK6YRtQApl4NhECGizF0Cg=="))
-                        expect(preparedRequest?.request.allHTTPHeaderFields?[HTTPHeader.sogsSignature])
+                        expect(preparedRequest?.destination.testHeaders?[HTTPHeader.sogsSignature])
                             .to(equal("TestSogsSignature".bytes.toBase64()))
                     }
                     
                     // MARK: ------ fails when the blindedKeyPair is not generated
                     it("fails when the blindedKeyPair is not generated") {
                         mockCrypto
-                            .when { crypto in
-                                crypto.generate(
-                                    .blinded15KeyPair(serverPublicKey: any(), ed25519SecretKey: anyArray())
-                                )
-                            }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1869,11 +1892,7 @@ class OpenGroupAPISpec: QuickSpec {
                     // MARK: ------ fails when the sogsSignature is not generated
                     it("fails when the sogsSignature is not generated") {
                         mockCrypto
-                            .when { crypto in
-                                crypto.generate(
-                                    .blinded15KeyPair(serverPublicKey: any(), ed25519SecretKey: anyArray())
-                                )
-                            }
+                            .when { $0.generate(.blinded15KeyPair(serverPublicKey: .any, ed25519SecretKey: .any)) }
                             .thenReturn(nil)
                         
                         var preparationError: Error?
@@ -1901,7 +1920,7 @@ class OpenGroupAPISpec: QuickSpec {
             context("when sending") {
                 beforeEach {
                     mockNetwork
-                        .when { $0.send(.onionRequest(any(), to: any(), with: any()), using: dependencies) }
+                        .when { $0.send(.any, to: .any, requestTimeout: .any, requestAndPathBuildTimeout: .any) }
                         .thenReturn(MockNetwork.response(type: [OpenGroupAPI.Room].self))
                 }
                 
@@ -1971,4 +1990,23 @@ extension Network.BatchResponse {
             (OpenGroupAPI.Endpoint.rooms, [OpenGroupAPI.Room].mockBatchSubResponse())
         ]
     )
+}
+
+private extension Network.Destination {
+    var testX25519Pubkey: String? {
+        switch self {
+            case .cached: return nil
+            case .snode(_, let swarmPublicKey): return swarmPublicKey
+            case .randomSnode(let swarmPublicKey, _), .randomSnodeLatestNetworkTimeTarget(let swarmPublicKey, _, _):
+                return swarmPublicKey
+            case .server(let info), .serverDownload(let info), .serverUpload(let info, _): return info.x25519PublicKey
+        }
+    }
+    
+    var testHeaders: [HTTPHeader: String]? {
+        switch self {
+            case .cached, .snode, .randomSnode, .randomSnodeLatestNetworkTimeTarget: return nil
+            case .server(let info), .serverDownload(let info), .serverUpload(let info, _): return info.headers
+        }
+    }
 }

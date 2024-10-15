@@ -14,8 +14,9 @@ enum _013_SessionUtilChanges: Migration {
     static let identifier: String = "SessionUtilChanges"
     static let needsConfigSync: Bool = true
     static let minExpectedRunDuration: TimeInterval = 0.4
+    static var requirements: [MigrationRequirement] = [.sessionIdCached]
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [
-        GroupMember.self, ClosedGroupKeyPair.self, SessionThread.self
+        Identity.self, GroupMember.self, ClosedGroupKeyPair.self, SessionThread.self
     ]
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [
         SessionThread.self, Profile.self, GroupMember.self, ClosedGroupKeyPair.self, ConfigDump.self
@@ -79,7 +80,7 @@ enum _013_SessionUtilChanges: Migration {
             .fetchAll(db)
         
         // Insert into the new table, drop the old table and rename the new table to be the old one
-        try nonDuplicateGroupMembers.forEach { try $0.save(db) }
+        try nonDuplicateGroupMembers.forEach { try $0.upsert(db) }
         try db.drop(table: GroupMember.self)
         try db.rename(table: TmpGroupMember.databaseTableName, to: GroupMember.databaseTableName)
         
@@ -192,7 +193,7 @@ enum _013_SessionUtilChanges: Migration {
             )
         
         // If we don't have an ed25519 key then no need to create cached dump data
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         
         /// Remove any hidden threads to avoid syncing them (they are basically shadow threads created by starting a conversation
         /// but not sending a message so can just be cleared out)
@@ -210,7 +211,7 @@ enum _013_SessionUtilChanges: Migration {
         let threadIdsToDelete: [String] = try SessionThread
             .filter(
                 SessionThread.Columns.shouldBeVisible == false &&
-                SessionThread.Columns.id != userPublicKey
+                SessionThread.Columns.id != userSessionId.hexString
             )
             .select(.id)
             .asRequest(of: String.self)
@@ -242,12 +243,19 @@ enum _013_SessionUtilChanges: Migration {
         /// **Note:** Since migrations are run when running tests creating a random SessionThread will result in unexpected thread
         /// counts so don't do this when running tests (this logic is the same as in `MainAppContext.isRunningTests`
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-            if (try SessionThread.exists(db, id: userPublicKey)) == false {
-                try SessionThread
-                    .fetchOrCreate(db, id: userPublicKey, variant: .contact, shouldBeVisible: false)
+            if (try SessionThread.exists(db, id: userSessionId.hexString)) == false {
+                try SessionThread.fetchOrCreate(
+                    db,
+                    id: userSessionId.hexString,
+                    variant: .contact,
+                    creationDateTimestamp: TimeInterval(dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000),
+                    shouldBeVisible: false,
+                    calledFromConfig: nil,
+                    using: dependencies
+                )
             }
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

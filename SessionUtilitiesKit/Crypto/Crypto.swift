@@ -7,9 +7,10 @@ import Foundation
 // MARK: - Singleton
 
 public extension Singleton {
-    // FIXME: This will be reworked to be part of dependencies in the Groups Rebuild branch
-    fileprivate static var _crypto: Atomic<CryptoType> = Atomic(Crypto())
-    static var crypto: CryptoType { _crypto.wrappedValue }
+    static let crypto: SingletonConfig<CryptoType> = Dependencies.create(
+        identifier: "crypto",
+        createInstance: { dependencies in Crypto(using: dependencies) }
+    )
 }
 
 // MARK: - CryptoType
@@ -35,9 +36,15 @@ public struct Crypto: CryptoType {
     public struct Generator<T> {
         public let id: String
         public let args: [Any?]
-        fileprivate let generate: () throws -> T
+        fileprivate let generate: (Dependencies) throws -> T
         
         public init(id: String, args: [Any?] = [], generate: @escaping () throws -> T) {
+            self.id = id
+            self.args = args
+            self.generate = { _ in try generate() }
+        }
+        
+        public init(id: String, args: [Any?] = [], generate: @escaping (Dependencies) throws -> T) {
             self.id = id
             self.args = args
             self.generate = generate
@@ -47,16 +54,36 @@ public struct Crypto: CryptoType {
     public struct Verification {
         public let id: String
         public let args: [Any?]
-        let verify: () -> Bool
+        let verify: (Dependencies) -> Bool
         
         public init(id: String, args: [Any?] = [], verify: @escaping () -> Bool) {
+            self.id = id
+            self.args = args
+            self.verify = { _ in verify() }
+        }
+        
+        public init(id: String, args: [Any?] = [], verify: @escaping (Dependencies) -> Bool) {
             self.id = id
             self.args = args
             self.verify = verify
         }
     }
     
-    public init() {}
-    public func tryGenerate<R>(_ generator: Crypto.Generator<R>) throws -> R { return try generator.generate() }
-    public func verify(_ verification: Crypto.Verification) -> Bool { return verification.verify() }
+    // MARK: - Initialization
+    
+    public let dependencies: Dependencies
+    
+    public init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+    
+    // MARK: - Functions
+    
+    public func tryGenerate<R>(_ generator: Crypto.Generator<R>) throws -> R {
+        return try generator.generate(dependencies)
+    }
+    
+    public func verify(_ verification: Crypto.Verification) -> Bool {
+        return verification.verify(dependencies)
+    }
 }

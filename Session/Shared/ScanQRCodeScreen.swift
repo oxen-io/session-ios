@@ -6,6 +6,8 @@ import AVFoundation
 import SessionUtilitiesKit
 
 struct ScanQRCodeScreen: View {
+    private let dependencies: Dependencies
+    
     @Binding var result: String
     @Binding var error: String?
     @State var hasCameraAccess: Bool = (AVCaptureDevice.authorizationStatus(for: .video) == .authorized)
@@ -15,8 +17,10 @@ struct ScanQRCodeScreen: View {
     init(
         _ result: Binding<String>,
         error: Binding<String?>,
-        continueAction: (((() -> ())?, (() -> ())?) -> Void)?
+        continueAction: (((() -> ())?, (() -> ())?) -> Void)?,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self._result = result
         self._error = error
         self.continueAction = continueAction
@@ -70,7 +74,7 @@ struct ScanQRCodeScreen: View {
     }
     
     private func requestCameraAccess() {
-        Permissions.requestCameraPermissionIfNeeded {
+        Permissions.requestCameraPermissionIfNeeded(using: dependencies) {
             hasCameraAccess.toggle()
         }
     }

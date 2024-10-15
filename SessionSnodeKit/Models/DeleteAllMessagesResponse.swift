@@ -78,7 +78,7 @@ extension DeleteAllMessagesResponse: ValidatableResponse {
                 .appending(contentsOf: "\(validationData)".data(using: .ascii)?.bytes)
                 .appending(contentsOf: next.value.deleted.joined().bytes)
             
-            result[next.key] = dependencies.crypto.verify(
+            result[next.key] = dependencies[singleton: .crypto].verify(
                 .signature(
                     message: verificationBytes,
                     publicKey: Data(hex: next.key).bytes,

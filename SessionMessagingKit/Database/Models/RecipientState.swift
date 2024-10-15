@@ -21,7 +21,7 @@ public struct RecipientState: Codable, Equatable, FetchableRecord, PersistableRe
         case mostRecentFailureText
     }
     
-    public enum State: Int, Codable, Hashable, DatabaseValueConvertible {
+    public enum State: Int, Codable, Hashable, DatabaseValueConvertible, CaseIterable {
         /// These cases **MUST** remain in this order (even though having `failed` as `0` would be more logical) as the order
         /// is optimised for the desired "interactionState" grouping behaviour we want which makes the query to retrieve the interaction
         /// state run ~16 times than the alternate approach which required a sub-query (check git history to see the old approach at the

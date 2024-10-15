@@ -6,6 +6,14 @@ import LocalAuthentication
 import SessionMessagingKit
 import SessionUtilitiesKit
 
+// MARK: - Log.Category
+
+public extension Log.Category {
+    static let screenLock: Log.Category = .create("ScreenLock", defaultLevel: .info)
+}
+
+// MARK: - ScreenLock
+
 public class ScreenLock {
     public enum ScreenLockError: Error {
         case general(description: String)
@@ -59,19 +67,19 @@ public class ScreenLock {
             
             switch outcome {
                 case .failure(let error):
-                    Log.error("[ScreenLock] Local authentication failed with error: \(error)")
+                    Log.error(.screenLock, "Local authentication failed with error: \(error)")
                     failure(ScreenLockError.general(description: error))
                 
                 case .unexpectedFailure(let error):
-                    Log.error("[ScreenLock] Local authentication failed with unexpected error: \(error)")
+                    Log.error(.screenLock, "Local authentication failed with unexpected error: \(error)")
                     unexpectedFailure(ScreenLockError.general(description: error))
                 
                 case .success:
-                    Log.verbose("[ScreenLock] Local authentication succeeded.")
+                    Log.verbose(.screenLock, "Local authentication succeeded.")
                     success()
                 
                 case .cancel:
-                    Log.verbose("[ScreenLock] Local authentication cancelled.")
+                    Log.verbose(.screenLock, "Local authentication cancelled.")
                     cancel()
             }
         }
@@ -106,13 +114,13 @@ public class ScreenLock {
         let canEvaluatePolicy = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError)
         
         if !canEvaluatePolicy || authError != nil {
-            Log.error("[ScreenLock] could not determine if local authentication is supported: \(String(describing: authError))")
+            Log.error(.screenLock, "Could not determine if local authentication is supported: \(String(describing: authError))")
 
             let outcome = self.outcomeForLAError(errorParam: authError,
                                                  defaultErrorDescription: defaultErrorDescription)
             switch outcome {
                 case .success:
-                    Log.error("[ScreenLock] Local authentication unexpected success")
+                    Log.error(.screenLock, "Local authentication unexpected success")
                     completion(.failure(error: defaultErrorDescription))
                     
                 case .cancel, .failure, .unexpectedFailure:
@@ -124,7 +132,7 @@ public class ScreenLock {
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: localizedReason) { success, evaluateError in
 
             if success {
-                Log.info("[ScreenLock] Local authentication succeeded.")
+                Log.info(.screenLock, "Local authentication succeeded.")
                 completion(.success)
                 return
             }
@@ -136,7 +144,7 @@ public class ScreenLock {
             
             switch outcome {
                 case .success:
-                    Log.error("[ScreenLock] Local authentication unexpected success")
+                    Log.error(.screenLock, "Local authentication unexpected success")
                     completion(.failure(error: defaultErrorDescription))
                     
                 case .cancel, .failure, .unexpectedFailure:
@@ -155,15 +163,15 @@ public class ScreenLock {
 
             switch laError.code {
                 case .biometryNotAvailable:
-                    Log.error("[ScreenLock] Local authentication error: biometryNotAvailable.")
+                    Log.error(.screenLock, "Local authentication error: biometryNotAvailable.")
                     return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .biometryNotEnrolled:
-                    Log.error("[ScreenLock] Local authentication error: biometryNotEnrolled.")
+                    Log.error(.screenLock, "Local authentication error: biometryNotEnrolled.")
                     return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .biometryLockout:
-                    Log.error("[ScreenLock] Local authentication error: biometryLockout.")
+                    Log.error(.screenLock, "Local authentication error: biometryLockout.")
                     return .failure(error: "authenticateFailedTooManyAttempts".localized())
                     
                 default:
@@ -173,35 +181,35 @@ public class ScreenLock {
 
             switch laError.code {
                 case .authenticationFailed:
-                    Log.error("[ScreenLock] Local authentication error: authenticationFailed.")
+                    Log.error(.screenLock, "Local authentication error: authenticationFailed.")
                     return .failure(error: "authenticateFailed".localized())
                     
                 case .userCancel, .userFallback, .systemCancel, .appCancel:
-                    Log.info("[ScreenLock] Local authentication cancelled.")
+                    Log.info(.screenLock, "Local authentication cancelled.")
                     return .cancel
                     
                 case .passcodeNotSet:
-                    Log.error("[ScreenLock] Local authentication error: passcodeNotSet.")
+                    Log.error(.screenLock, "Local authentication error: passcodeNotSet.")
                     return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .touchIDNotAvailable:
-                    Log.error("[ScreenLock] Local authentication error: touchIDNotAvailable.")
+                    Log.error(.screenLock, "Local authentication error: touchIDNotAvailable.")
                     return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .touchIDNotEnrolled:
-                    Log.error("[ScreenLock] Local authentication error: touchIDNotEnrolled.")
+                    Log.error(.screenLock, "Local authentication error: touchIDNotEnrolled.")
                     return .failure(error: "lockAppEnablePasscode".localized())
                     
                 case .touchIDLockout:
-                    Log.error("[ScreenLock] Local authentication error: touchIDLockout.")
+                    Log.error(.screenLock, "Local authentication error: touchIDLockout.")
                     return .failure(error: "authenticateFailedTooManyAttempts".localized())
                     
                 case .invalidContext:
-                    Log.error("[ScreenLock] Context not valid.")
+                    Log.error(.screenLock, "Context not valid.")
                     return .unexpectedFailure(error: defaultErrorDescription)
                     
                 case .notInteractive:
-                    Log.error("[ScreenLock] Context not interactive.")
+                    Log.error(.screenLock, "Context not interactive.")
                     return .unexpectedFailure(error: defaultErrorDescription)
                 
                 @unknown default:

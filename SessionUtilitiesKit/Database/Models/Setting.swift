@@ -25,42 +25,30 @@ extension Setting {
     // MARK: - Numeric Setting
     
     fileprivate init?<T: Numeric>(key: String, value: T?) {
-        guard let value: T = value else { return nil }
-        
-        var targetValue: T = value
+        guard var value: T = value else { return nil }
         
         self.key = key
-        self.value = Data(bytes: &targetValue, count: MemoryLayout.size(ofValue: targetValue))
+        self.value = withUnsafeBytes(of: &value) { Data($0) }
     }
     
     fileprivate func value<T: Numeric>(as type: T.Type) -> T? {
-        // Note: The 'assumingMemoryBound' is essentially going to try to convert
-        // the memory into the provided type so can result in invalid data being
-        // returned if the type is incorrect. But it does seem safer than the 'load'
-        // method which crashed under certain circumstances (an `Int` value of 0)
         return value.withUnsafeBytes {
-            $0.baseAddress?.assumingMemoryBound(to: T.self).pointee
+            $0.loadUnaligned(as: T.self)
         }
     }
     
     // MARK: - Bool Setting
     
     fileprivate init?(key: String, value: Bool?) {
-        guard let value: Bool = value else { return nil }
-        
-        var targetValue: Bool = value
+        guard var value: Bool = value else { return nil }
         
         self.key = key
-        self.value = Data(bytes: &targetValue, count: MemoryLayout.size(ofValue: targetValue))
+        self.value = withUnsafeBytes(of: &value) { Data($0) }
     }
     
     public func unsafeValue(as type: Bool.Type) -> Bool? {
-        // Note: The 'assumingMemoryBound' is essentially going to try to convert
-        // the memory into the provided type so can result in invalid data being
-        // returned if the type is incorrect. But it does seem safer than the 'load'
-        // method which crashed under certain circumstances (an `Int` value of 0)
         return value.withUnsafeBytes {
-            $0.baseAddress?.assumingMemoryBound(to: Bool.self).pointee
+            $0.loadUnaligned(as: Bool.self)
         }
     }
     
@@ -150,31 +138,7 @@ public protocol EnumStringSetting: RawRepresentable where RawValue == String {}
 
 // MARK: - GRDB Interactions
 
-public extension Storage {
-    subscript(key: Setting.BoolKey) -> Bool {
-        // Default to false if it doesn't exist
-        return (read { db in db[key] } ?? false)
-    }
-    
-    subscript(key: Setting.DoubleKey) -> Double? { return read { db in db[key] } }
-    subscript(key: Setting.IntKey) -> Int? { return read { db in db[key] } }
-    subscript(key: Setting.StringKey) -> String? { return read { db in db[key] } }
-    subscript(key: Setting.DateKey) -> Date? { return read { db in db[key] } }
-    
-    subscript<T: EnumIntSetting>(key: Setting.EnumKey) -> T? { return read { db in db[key] } }
-    subscript<T: EnumStringSetting>(key: Setting.EnumKey) -> T? { return read { db in db[key] } }
-}
-
 public extension Database {
-    @discardableResult func unsafeSet<T: Numeric>(key: String, value: T?) -> Setting? {
-        guard let value: T = value else {
-            _ = try? Setting.filter(id: key).deleteAll(self)
-            return nil
-        }
-        
-        return try? Setting(key: key, value: value)?.saved(self)
-    }
-    
     private subscript(key: String) -> Setting? {
         get { try? Setting.filter(id: key).fetchOne(self) }
         set {
@@ -183,7 +147,7 @@ public extension Database {
                 return
             }
             
-            try? newValue.save(self)
+            try? newValue.upsert(self)
         }
     }
     

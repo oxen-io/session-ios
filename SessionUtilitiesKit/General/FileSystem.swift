@@ -3,10 +3,6 @@
 import Foundation
 
 public enum FileSystem {
-    /// **Note:** The max file size is 10,000,000 bytes (rather than 10MiB which would be `(10 * 1024 * 1024)`), 10,000,000
-    /// exactly will be fine but a single byte more will result in an error
-    public static let maxFileSize = 10_000_000
-    
     /// The Objective-C `OWSFileSystem` needs to be able to generate a temporary directory but we don't want to spend the time
     /// to add Objective-C support to `Dependencies` since the goal is to refactor everything to Swift so this value should only be
     /// assigned by the `AppContext` class when it gets initialised
@@ -19,12 +15,12 @@ public enum FileSystem {
     public static func ensureDirectoryExists(
         at path: String,
         fileProtectionType: FileProtectionType = .completeUntilFirstUserAuthentication,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws {
         var isDirectory: ObjCBool = false
         
-        if !FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) {
-            try FileManager.default.createDirectory(
+        if !dependencies[singleton: .fileManager].fileExists(atPath: path, isDirectory: &isDirectory) {
+            try dependencies[singleton: .fileManager].createDirectory(
                 atPath: path,
                 withIntermediateDirectories: true,
                 attributes: nil
@@ -37,11 +33,11 @@ public enum FileSystem {
     public static func protectFileOrFolder(
         at path: String,
         fileProtectionType: FileProtectionType = .completeUntilFirstUserAuthentication,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws {
-        guard FileManager.default.fileExists(atPath: path) else { return }
+        guard dependencies[singleton: .fileManager].fileExists(atPath: path) else { return }
         
-        try FileManager.default.setAttributes(
+        try dependencies[singleton: .fileManager].setAttributes(
             [.protectionKey: fileProtectionType],
             ofItemAtPath: path
         )
@@ -52,15 +48,15 @@ public enum FileSystem {
         try resourcesUrl.setResourceValues(resourceAttrs)
     }
     
-    public static func fileSize(of path: String, using dependencies: Dependencies = Dependencies()) -> UInt64? {
-        guard let attributes: [FileAttributeKey: Any] = try? FileManager.default.attributesOfItem(atPath: path) else {
+    public static func fileSize(of path: String, using dependencies: Dependencies) -> UInt64? {
+        guard let attributes: [FileAttributeKey: Any] = try? dependencies[singleton: .fileManager].attributesOfItem(atPath: path) else {
             return nil
         }
         
         return (attributes[.size] as? UInt64)
     }
     
-    public static func temporaryFilePath(fileExtension: String?) -> String {
+    public static func temporaryFilePath(fileExtension: String?, using dependencies: Dependencies) -> String {
         let temporaryDirectory: String = {
             if let temporaryDirectory: String = self.temporaryDirectory.wrappedValue {
                 return temporaryDirectory
@@ -71,7 +67,7 @@ public enum FileSystem {
             let tempDir: String = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent(dirName)
                 .path
-            try? FileSystem.ensureDirectoryExists(at: tempDir, fileProtectionType: .complete)
+            try? FileSystem.ensureDirectoryExists(at: tempDir, fileProtectionType: .complete, using: dependencies)
             
             return tempDir
         }()
@@ -87,11 +83,15 @@ public enum FileSystem {
             .path
     }
     
-    public static func write(data: Data, toTemporaryFileWithExtension fileExtension: String?) throws -> String? {
-        let tempFilePath: String = temporaryFilePath(fileExtension: fileExtension)
+    public static func write(
+        data: Data,
+        toTemporaryFileWithExtension fileExtension: String?,
+        using dependencies: Dependencies
+    ) throws -> String? {
+        let tempFilePath: String = temporaryFilePath(fileExtension: fileExtension, using: dependencies)
         
         try data.write(to: URL(fileURLWithPath: tempFilePath), options: .atomic)
-        try protectFileOrFolder(at: tempFilePath)
+        try protectFileOrFolder(at: tempFilePath, using: dependencies)
         
         return tempFilePath
     }

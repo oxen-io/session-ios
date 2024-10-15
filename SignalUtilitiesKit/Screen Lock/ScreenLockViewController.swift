@@ -95,7 +95,7 @@ open class ScreenLockViewController: UIViewController {
 
         self.logoView.isHidden = !shouldShowBlockWindow
 
-        let signature: String = String(format: "%d", shouldHaveScreenLock)
+        let signature: String = String(format: "%d", shouldHaveScreenLock) // stringlint:disable
         
         // Skip redundant work to avoid interfering with ongoing animations
         guard signature != self.screenBlockingSignature else { return }

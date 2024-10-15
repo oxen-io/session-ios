@@ -1,3 +1,5 @@
+// Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+
 import UIKit
 
 public enum Values {
@@ -75,5 +77,27 @@ public enum Values {
 
     public static func scaleFromIPhone5(_ iPhone5Value: CGFloat) -> CGFloat {
         round(iPhone5Value * screenShortDimension / iPhone5ScreenWidth)
+    }
+}
+
+/// These extensions are duplicate here from `SessionUtilitiesKit.CGFloat+Utilities` to avoid creating a
+/// dependency on `SessionUtilitiesKit`
+private extension CGFloat {
+    func clamp(_ minValue: CGFloat, _ maxValue: CGFloat) -> CGFloat {
+        return Swift.max(minValue, Swift.min(maxValue, self))
+    }
+    
+    func clamp01() -> CGFloat {
+        return clamp(0, 1)
+    }
+    
+    func lerp(_ minValue: CGFloat, _ maxValue: CGFloat) -> CGFloat {
+        return (minValue * (1 - self)) + (maxValue * self)
+    }
+    
+    func inverseLerp(_ minValue: CGFloat, _ maxValue: CGFloat, shouldClamp: Bool = false) -> CGFloat {
+        let result: CGFloat = ((self - minValue) / (maxValue - minValue))
+        
+        return (shouldClamp ? result.clamp01() : result)
     }
 }

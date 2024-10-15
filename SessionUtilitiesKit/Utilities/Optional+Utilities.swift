@@ -21,6 +21,13 @@ extension Optional {
         return (self ?? value)
     }
     
+    public func mapOrThrow<U>(error: Error, _ transform: (Wrapped) throws -> U) throws -> U {
+        switch self {
+            case .none: throw error
+            case .some(let value): return try transform(value)
+        }
+    }
+    
     public mutating func setting(to value: Wrapped) -> Wrapped {
         self = value
         return value

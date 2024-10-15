@@ -1,9 +1,8 @@
 // Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
-
+//
 // stringlint:disable
 
 import UIKit
-import SessionUtilitiesKit
 
 public extension NSAttributedString {
     /// These are the tags we current support formatting for
@@ -180,21 +179,6 @@ private extension Collection where Element == NSAttributedString.HTMLTag {
     }
 }
 
-public extension LocalizationHelper {
-    func localizedFormatted(in view: FontAccessible) -> NSAttributedString {
-        return localizedFormatted(baseFont: (view.fontValue ?? .systemFont(ofSize: 14)))
-    }
-    
-    func localizedFormatted(baseFont: UIFont) -> NSAttributedString {
-        return NSAttributedString(stringWithHTMLTags: localized(), font: baseFont)
-    }
-    
-    func localizedDeformatted() -> String {
-        return NSAttributedString(stringWithHTMLTags: localized(), font: .systemFont(ofSize: 14)).string
-    }
-
-}
-
 public protocol FontAccessible {
     var fontValue: UIFont? { get }
 }
@@ -217,10 +201,6 @@ extension UITextField: DirectFontAccessible {}
 extension UITextView: DirectFontAccessible {}
 
 public extension String {
-    func localizedFormatted(in view: FontAccessible) -> NSAttributedString {
-        return LocalizationHelper(template: self).localizedFormatted(in: view)
-    }
-    
     func formatted(in view: FontAccessible) -> NSAttributedString {
         return NSAttributedString(stringWithHTMLTags: self, font: (view.fontValue ?? .systemFont(ofSize: 14)))
     }
@@ -231,5 +211,11 @@ public extension String {
     
     func deformatted() -> String {
         return NSAttributedString(stringWithHTMLTags: self, font: .systemFont(ofSize: 14)).string
+    }
+}
+
+private extension Optional {
+    func defaulting(to value: Wrapped) -> Wrapped {
+        return (self ?? value)
     }
 }

@@ -25,6 +25,6 @@ enum _009_OpenGroupPermission: Migration {
         _ = try OpenGroup
             .updateAll(db, OpenGroup.Columns.infoUpdates.set(to: 0))
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

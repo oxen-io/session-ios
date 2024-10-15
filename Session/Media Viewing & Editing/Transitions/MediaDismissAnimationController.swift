@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 class MediaDismissAnimationController: NSObject {
     private let mediaItem: Media
@@ -14,8 +15,8 @@ class MediaDismissAnimationController: NSObject {
     var fromMediaFrame: CGRect?
     var pendingCompletion: (() -> ())?
 
-    init(galleryItem: MediaGalleryViewModel.Item, interactionController: MediaInteractiveDismiss? = nil) {
-        self.mediaItem = .gallery(galleryItem)
+    init(galleryItem: MediaGalleryViewModel.Item, interactionController: MediaInteractiveDismiss? = nil, using dependencies: Dependencies) {
+        self.mediaItem = .gallery(galleryItem, dependencies)
         self.interactionController = interactionController
     }
 

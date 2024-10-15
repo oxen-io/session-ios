@@ -9,8 +9,6 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 class PhotoCollectionPickerViewModel: SessionTableViewModel, ObservableTableSource {
-    typealias TableItem = String
-    
     public let dependencies: Dependencies
     public let state: TableDataState<Section, TableItem> = TableDataState()
     public let observableState: ObservableTableSourceState<Section, TableItem> = ObservableTableSourceState()
@@ -23,8 +21,8 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel, ObservableTableSour
 
     init(
         library: PhotoLibrary,
-        onCollectionSelected: @escaping (PhotoCollection) -> Void,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies,
+        onCollectionSelected: @escaping (PhotoCollection) -> Void
     ) {
         self.dependencies = dependencies
         self.library = library
@@ -36,6 +34,25 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel, ObservableTableSour
     
     public enum Section: SessionTableSection {
         case content
+    }
+    
+    public struct TableItem: Hashable, Differentiable {
+        public typealias DifferenceIdentifier = String
+        
+        private let collection: PhotoCollection
+        public var differenceIdentifier: String { collection.id }
+        
+        init(collection: PhotoCollection) {
+            self.collection = collection
+        }
+        
+        public func isContentEqual(to source: TableItem) -> Bool {
+            return (collection.id == source.collection.id)
+        }
+        
+        public func hash(into hasher: inout Hasher) {
+            collection.id.hash(into: &hasher)
+        }
     }
 
     // MARK: - Content
@@ -59,8 +76,8 @@ class PhotoCollectionPickerViewModel: SessionTableViewModel, ObservableTableSour
                         let lastAssetItem: PhotoPickerAssetItem? = contents.lastAssetItem(photoMediaSize: photoMediaSize)
                         
                         return SessionCell.Info(
-                            id: collection.id,
-                            leftAccessory: .iconAsync(size: .extraLarge, shouldFill: true) { imageView in
+                            id: TableItem(collection: collection),
+                            leadingAccessory: .iconAsync(size: .extraLarge, shouldFill: true) { imageView in
                                 // Note: We need to capture 'lastAssetItem' otherwise it'll be released and we won't
                                 // be able to load the thumbnail
                                 lastAssetItem?.asyncThumbnail { [weak imageView] image in

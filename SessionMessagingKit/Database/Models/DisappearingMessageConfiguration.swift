@@ -2,6 +2,7 @@
 
 import Foundation
 import GRDB
+import SessionUIKit
 import SessionUtil
 import SessionUtilitiesKit
 import SessionSnodeKit
@@ -162,10 +163,8 @@ public extension DisappearingMessagesConfiguration {
             guard let senderName: String = senderName else {
                 guard isEnabled, durationSeconds > 0 else {
                     switch threadVariant {
-                        case .legacyGroup, .group:
-                            return "disappearingMessagesTurnedOffYouGroup".localized()
-                        default:
-                            return "disappearingMessagesTurnedOffYou".localized()
+                        case .legacyGroup, .group: return "disappearingMessagesTurnedOffYouGroup".localized()
+                        default: return "disappearingMessagesTurnedOffYou".localized()
                     }
                 }
                 
@@ -202,7 +201,8 @@ public extension DisappearingMessagesConfiguration {
     
     func messageInfoString(
         threadVariant: SessionThread.Variant?,
-        senderName: String?
+        senderName: String?,
+        using dependencies: Dependencies
     ) -> String? {
         let messageInfo: MessageInfo = DisappearingMessagesConfiguration.MessageInfo(
             threadVariant: threadVariant,
@@ -212,7 +212,9 @@ public extension DisappearingMessagesConfiguration {
             type: type
         )
         
-        guard let messageInfoData: Data = try? JSONEncoder().encode(messageInfo) else { return nil }
+        guard let messageInfoData: Data = try? JSONEncoder(using: dependencies).encode(messageInfo) else {
+            return nil
+        }
         
         return String(data: messageInfoData, encoding: .utf8)
     }
@@ -230,7 +232,7 @@ public extension DisappearingMessagesConfiguration {
     func clearUnrelatedControlMessages(
         _ db: Database,
         threadVariant: SessionThread.Variant,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws {
         guard threadVariant == .contact else {
             try Interaction
@@ -241,34 +243,34 @@ public extension DisappearingMessagesConfiguration {
             return
         }
         
-        let userPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
-        guard self.isEnabled else {
-            try Interaction
-                .filter(Interaction.Columns.threadId == self.threadId)
-                .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
-                .filter(Interaction.Columns.authorId == userPublicKey)
-                .filter(Interaction.Columns.expiresInSeconds != 0)
-                .deleteAll(db)
-            return
-        }
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         
-        switch self.type {
-            case .disappearAfterRead:
+        switch (self.isEnabled, self.type) {
+            case (false, _):
                 try Interaction
                     .filter(Interaction.Columns.threadId == self.threadId)
                     .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
-                    .filter(Interaction.Columns.authorId == userPublicKey)
+                    .filter(Interaction.Columns.authorId == userSessionId.hexString)
+                    .filter(Interaction.Columns.expiresInSeconds != 0)
+                    .deleteAll(db)
+                
+            case (true, .disappearAfterRead):
+                try Interaction
+                    .filter(Interaction.Columns.threadId == self.threadId)
+                    .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
+                    .filter(Interaction.Columns.authorId == userSessionId.hexString)
                     .filter(!(Interaction.Columns.expiresInSeconds == self.durationSeconds && Interaction.Columns.expiresStartedAtMs != Interaction.Columns.timestampMs))
                     .deleteAll(db)
-            case .disappearAfterSend:
+            
+            case (true, .disappearAfterSend):
                 try Interaction
                     .filter(Interaction.Columns.threadId == self.threadId)
                     .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
-                    .filter(Interaction.Columns.authorId == userPublicKey)
+                    .filter(Interaction.Columns.authorId == userSessionId.hexString)
                     .filter(!(Interaction.Columns.expiresInSeconds == self.durationSeconds && Interaction.Columns.expiresStartedAtMs == Interaction.Columns.timestampMs))
                     .deleteAll(db)
-            default:
-                break
+                
+            default: break
         }
     }
     
@@ -279,7 +281,7 @@ public extension DisappearingMessagesConfiguration {
         timestampMs: Int64,
         serverHash: String?,
         serverExpirationTimestamp: TimeInterval?,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) throws -> Int64? {
         switch threadVariant {
             case .contact:
@@ -288,33 +290,34 @@ public extension DisappearingMessagesConfiguration {
                     .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
                     .filter(Interaction.Columns.authorId == authorId)
                     .deleteAll(db)
-            case .legacyGroup:
+            case .legacyGroup, .group:
                 _ = try Interaction
                     .filter(Interaction.Columns.threadId == threadId)
                     .filter(Interaction.Columns.variant == Interaction.Variant.infoDisappearingMessagesUpdate)
                     .deleteAll(db)
-            default:
-                break
+            case .community: break
         }
         
-        let currentUserPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         let wasRead: Bool = (
-            authorId == currentUserPublicKey ||
-            LibSession.timestampAlreadyRead(
-                threadId: threadId,
-                threadVariant: threadVariant,
-                timestampMs: timestampMs,
-                userPublicKey: getUserHexEncodedPublicKey(db),
-                openGroup: nil,
-                using: dependencies
-            )
+            authorId == userSessionId.hexString ||
+            dependencies.mutate(cache: .libSession) { cache in
+                cache.timestampAlreadyRead(
+                    threadId: threadId,
+                    threadVariant: threadVariant,
+                    timestampMs: timestampMs,
+                    userSessionId: userSessionId,
+                    openGroup: nil
+                )
+            }
         )
         let messageExpirationInfo: Message.MessageExpirationInfo = Message.getMessageExpirationInfo(
             threadVariant: threadVariant,
             wasRead: wasRead,
             serverExpirationTimestamp: serverExpirationTimestamp,
             expiresInSeconds: self.durationSeconds,
-            expiresStartedAtMs: (self.type == .disappearAfterSend) ? Double(timestampMs) : nil
+            expiresStartedAtMs: (self.type == .disappearAfterSend) ? Double(timestampMs) : nil,
+            using: dependencies
         )
         let interaction = try Interaction(
             serverHash: serverHash,
@@ -324,12 +327,17 @@ public extension DisappearingMessagesConfiguration {
             variant: .infoDisappearingMessagesUpdate,
             body: self.messageInfoString(
                 threadVariant: threadVariant,
-                senderName: (authorId != getUserHexEncodedPublicKey(db) ? Profile.displayName(db, id: authorId) : nil)
+                senderName: (authorId != userSessionId.hexString ?
+                    Profile.displayName(db, id: authorId, using: dependencies) :
+                    nil
+                ),
+                using: dependencies
             ),
             timestampMs: timestampMs,
             wasRead: wasRead,
             expiresInSeconds: (threadVariant == .legacyGroup ? nil : messageExpirationInfo.expiresInSeconds), // Do not expire this control message in legacy groups
-            expiresStartedAtMs: (threadVariant == .legacyGroup ? nil : messageExpirationInfo.expiresStartedAtMs)
+            expiresStartedAtMs: (threadVariant == .legacyGroup ? nil : messageExpirationInfo.expiresStartedAtMs),
+            using: dependencies
         ).inserted(db)
         
         if messageExpirationInfo.shouldUpdateExpiry {
@@ -339,7 +347,8 @@ public extension DisappearingMessagesConfiguration {
                 threadVariant: threadVariant,
                 serverHash: serverHash,
                 expiresInSeconds: messageExpirationInfo.expiresInSeconds,
-                expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs
+                expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs,
+                using: dependencies
             )
         }
         
@@ -350,10 +359,16 @@ public extension DisappearingMessagesConfiguration {
 // MARK: - UI Constraints
 
 extension DisappearingMessagesConfiguration {
-    public static func validDurationsSeconds(_ type: DisappearingMessageType) -> [TimeInterval] {
+    public static func validDurationsSeconds(
+        _ type: DisappearingMessageType,
+        using dependencies: Dependencies
+    ) -> [TimeInterval] {
         switch type {
             case .disappearAfterRead:
-                var result =  [
+                return [
+                    (dependencies[feature: .debugDisappearingMessageDurations] ? 10 : nil),
+                    (dependencies[feature: .debugDisappearingMessageDurations] ? 30 : nil),
+                    (dependencies[feature: .debugDisappearingMessageDurations] ? 60 : nil),
                     (5 * 60),
                     (1 * 60 * 60),
                     (12 * 60 * 60),
@@ -361,43 +376,21 @@ extension DisappearingMessagesConfiguration {
                     (7 * 24 * 60 * 60),
                     (2 * 7 * 24 * 60 * 60)
                 ]
-                .map { TimeInterval($0)  }
-                #if targetEnvironment(simulator)
-                    result.insert(
-                        TimeInterval(60),
-                        at: 0
-                    )
-                    result.insert(
-                        TimeInterval(30),
-                        at: 0
-                    )
-                    result.insert(
-                        TimeInterval(10),
-                        at: 0
-                    )
-                #endif
-                return result
+                .compactMap { duration in duration.map { TimeInterval($0) } }
+
             case .disappearAfterSend:
-                var result =  [
+                return [
+                    (dependencies[feature: .debugDisappearingMessageDurations] ? 10 : nil),
+                    (dependencies[feature: .debugDisappearingMessageDurations] ? 30 : nil),
+                    (dependencies[feature: .debugDisappearingMessageDurations] ? 60 : nil),
                     (12 * 60 * 60),
                     (24 * 60 * 60),
                     (7 * 24 * 60 * 60),
                     (2 * 7 * 24 * 60 * 60)
                 ]
-                .map { TimeInterval($0)  }
-                #if targetEnvironment(simulator)
-                    result.insert(
-                        TimeInterval(30),
-                        at: 0
-                    )
-                    result.insert(
-                        TimeInterval(10),
-                        at: 0
-                    )
-                #endif
-                return result
-            default:
-                return []
-            }
+                .compactMap { duration in duration.map { TimeInterval($0) } }
+                
+            default: return []
+        }
     }
 }

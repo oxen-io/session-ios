@@ -8,7 +8,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-NSString *const IsScreenBlockActiveDidChangeNotification = @"IsScreenBlockActiveDidChangeNotification";
+NSString *const IsScreenBlockActiveDidChangeNotification = @"IsScreenBlockActiveDidChangeNotification"; // stringlint:disable
 
 // Behind everything, especially the root window.
 const UIWindowLevel UIWindowLevel_Background = -1.f;
@@ -68,6 +68,9 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
 // UIWindowLevel_ScreenBlocking() if active.
 @property (nonatomic) UIWindow *screenBlockingWindow;
 
+// Behind everything, especially the root window (specified in AppDelegate).
+@property (nonatomic) UIWindowLevel backgroundWindowLevel;
+
 @end
 
 #pragma mark -
@@ -90,10 +93,11 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
     return self;
 }
 
-- (void)setupWithRootWindow:(UIWindow *)rootWindow screenBlockingWindow:(UIWindow *)screenBlockingWindow
+- (void)setupWithRootWindow:(UIWindow *)rootWindow screenBlockingWindow:(UIWindow *)screenBlockingWindow backgroundWindowLevel:(UIWindowLevel)backgroundWindowLevel
 {
     self.rootWindow = rootWindow;
     self.screenBlockingWindow = screenBlockingWindow;
+    self.backgroundWindowLevel = backgroundWindowLevel;
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(didChangeStatusBarFrame:)
@@ -181,7 +185,7 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
     // Never hide the blocking window (that can lead to bad frames).
     // Instead, manipulate its window level to move it in front of
     // or behind the root window.
-    self.screenBlockingWindow.windowLevel = UIWindowLevel_Background;
+    self.screenBlockingWindow.windowLevel = self.backgroundWindowLevel;
 }
 
 #pragma mark - Fixit
@@ -230,7 +234,7 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
     // we re-enable autorotation.
 
     // NSString *encodedSelectorString1 = @"isInterfaceAutorotationDisabled".encodedForSelector;
-    NSString *encodedSelectorString1 = @"egVaAAZ2BHdydHZSBwYBBAEGcgZ6AQBVegVyc312dQ==";
+    NSString *encodedSelectorString1 = @"egVaAAZ2BHdydHZSBwYBBAEGcgZ6AQBVegVyc312dQ=="; // stringlint:disable
     NSString *_Nullable selectorString1 = encodedSelectorString1.decodedForSelector;
     if (selectorString1 == nil) {
         return;
@@ -250,7 +254,7 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
         // after verifying the methods/classes exist.
 
         // NSString *encodedKlassString = @"UIScrollToDismissSupport".encodedForSelector;
-        NSString *encodedKlassString = @"ZlpkdAQBfX1lAVV6BX56BQVkBwICAQQG";
+        NSString *encodedKlassString = @"ZlpkdAQBfX1lAVV6BX56BQVkBwICAQQG"; // stringlint:disable
         NSString *_Nullable klassString = encodedKlassString.decodedForSelector;
         if (klassString == nil) {
             return;
@@ -261,7 +265,7 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
         }
 
         // NSString *encodedSelector2String = @"supportForScreen:".encodedForSelector;
-        NSString *encodedSelector2String = @"BQcCAgEEBlcBBGR0BHZ2AEs=";
+        NSString *encodedSelector2String = @"BQcCAgEEBlcBBGR0BHZ2AEs="; // stringlint:disable
         NSString *_Nullable selector2String = encodedSelector2String.decodedForSelector;
         if (selector2String == nil) {
             return;
@@ -275,7 +279,7 @@ const UIWindowLevel UIWindowLevel_ScreenBlocking(void)
         id dismissSupport = func2(klass, selector2, UIScreen.mainScreen);
 
         // NSString *encodedSelector3String = @"finishScrollViewTransition".encodedForSelector;
-        NSString *encodedSelector3String = @"d3oAegV5ZHQEAX19Z3p2CWUEcgAFegZ6AQA=";
+        NSString *encodedSelector3String = @"d3oAegV5ZHQEAX19Z3p2CWUEcgAFegZ6AQA="; // stringlint:disable
         NSString *_Nullable selector3String = encodedSelector3String.decodedForSelector;
         if (selector3String == nil) {
             return;

@@ -194,10 +194,10 @@ import SessionUtilitiesKit
         imageLayer.contents = srcImage.cgImage
         imageView.layer.addSublayer(imageLayer)
 
-        let maskingView = OWSBezierPathView()
+        let maskingView = BezierPathView()
         contentView.addSubview(maskingView)
 
-        maskingView.configureShapeLayerBlock = { [weak self] layer, bounds in
+        maskingView.configureShapeLayer = { [weak self] layer, bounds in
             guard let strongSelf = self else {
                 return
             }

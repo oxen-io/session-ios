@@ -5,7 +5,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 
 class AddMoreRailItem: GalleryRailItem {
-    func buildRailItemView() -> UIView {
+    func buildRailItemView(using dependencies: Dependencies) -> UIView {
         let view = UIView()
         view.themeBackgroundColor = .backgroundSecondary
 
@@ -36,7 +36,7 @@ class SignalAttachmentItem: Equatable {
     // This might be nil if the attachment is not a valid image.
     var imageEditorModel: ImageEditorModel?
 
-    init(attachment: SignalAttachment) {
+    init(attachment: SignalAttachment, using dependencies: Dependencies) {
         self.attachment = attachment
 
         // Try and make a ImageEditorModel.
@@ -46,7 +46,7 @@ class SignalAttachmentItem: Equatable {
             dataUrl.isFileURL {
             let path = dataUrl.path
             do {
-                imageEditorModel = try ImageEditorModel(srcImagePath: path)
+                imageEditorModel = try ImageEditorModel(srcImagePath: path, using: dependencies)
             } catch {
                 // Usually not an error; this usually indicates invalid input.
                 Log.warn("[SignalAttachmentItem] Could not create image editor: \(error)")

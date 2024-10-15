@@ -17,8 +17,8 @@ public final class UnsendRequest: ControlMessage {
     
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies) else { return false }
         
         return timestamp != nil && author != nil
     }
@@ -54,7 +54,7 @@ public final class UnsendRequest: ControlMessage {
     
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> UnsendRequest? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String, using dependencies: Dependencies) -> UnsendRequest? {
         guard let unsendRequestProto = proto.unsendRequest else { return nil }
         let timestamp = unsendRequestProto.timestamp
         let author = unsendRequestProto.author

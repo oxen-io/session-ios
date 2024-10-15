@@ -18,7 +18,8 @@ extension Message {
         wasRead: Bool,
         serverExpirationTimestamp: TimeInterval?,
         expiresInSeconds: TimeInterval?,
-        expiresStartedAtMs: Double?
+        expiresStartedAtMs: Double?,
+        using dependencies: Dependencies
     ) -> MessageExpirationInfo {
         var shouldUpdateExpiry: Bool = false
         let expiresStartedAtMs: Double? = {
@@ -39,7 +40,7 @@ extension Message {
                 return nil
             }
             
-            let nowMs: Double = Double(SnodeAPI.currentOffsetTimestampMs())
+            let nowMs: Double = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
             let serverExpirationTimestampMs: Double = serverExpirationTimestamp * 1000
             let expiresInMs: Double = expiresInSeconds * 1000
             
@@ -66,7 +67,8 @@ extension Message {
         threadVariant: SessionThread.Variant,
         variant: Interaction.Variant,
         serverHash: String?,
-        expireInSeconds: TimeInterval?
+        expireInSeconds: TimeInterval?,
+        using dependencies: Dependencies
     ) {
         guard
             threadVariant != .community,
@@ -76,9 +78,7 @@ extension Message {
             expireInSeconds > 0
         else { return }
         
-        let startedAtTimestampMs: Double = Double(SnodeAPI.currentOffsetTimestampMs())
-        
-        JobRunner.add(
+        dependencies[singleton: .jobRunner].add(
             db,
             job: Job(
                 variant: .getExpiration,
@@ -86,9 +86,10 @@ extension Message {
                 threadId: threadId,
                 details: GetExpirationJob.Details(
                     expirationInfo: [serverHash: expireInSeconds],
-                    startedAtTimestampMs: startedAtTimestampMs
+                    startedAtTimestampMs: dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
                 )
-            )
+            ),
+            canStartJob: true
         )
     }
     
@@ -98,7 +99,8 @@ extension Message {
         threadVariant: SessionThread.Variant,
         serverHash: String?,
         expiresInSeconds: TimeInterval?,
-        expiresStartedAtMs: Double?
+        expiresStartedAtMs: Double?,
+        using dependencies: Dependencies
     ) {
         guard
             threadVariant != .community,
@@ -108,7 +110,8 @@ extension Message {
         else { return }
         
         let expirationTimestampMs: Int64 = Int64(expiresStartedAtMs + expiresInSeconds * 1000)
-        JobRunner.add(
+        
+        dependencies[singleton: .jobRunner].add(
             db,
             job: Job(
                 variant: .expirationUpdate,
@@ -118,7 +121,8 @@ extension Message {
                     serverHashes: [serverHash],
                     expirationTimestampMs: expirationTimestampMs
                 )
-            )
+            ),
+            canStartJob: true
         )
     }
 }

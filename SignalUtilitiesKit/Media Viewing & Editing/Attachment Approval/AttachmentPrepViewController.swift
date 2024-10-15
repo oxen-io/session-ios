@@ -62,7 +62,7 @@ public class AttachmentPrepViewController: OWSViewController {
     }()
     
     private lazy var mediaMessageView: MediaMessageView = {
-        let view: MediaMessageView = MediaMessageView(attachment: attachment, mode: .attachmentApproval)
+        let view: MediaMessageView = MediaMessageView(attachment: attachment, mode: .attachmentApproval, using: dependencies)
         view.translatesAutoresizingMaskIntoConstraints = false
         view.isHidden = (imageEditorView != nil)
         

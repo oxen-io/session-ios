@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionUtilitiesKit
 
 extension SnodeAPI {
     public class UpdateExpiryAllRequest: SnodeAuthenticatedRequestBody {
@@ -40,18 +41,12 @@ extension SnodeAPI {
         public init(
             expiryMs: UInt64,
             namespace: SnodeAPI.Namespace?,
-            pubkey: String,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8]
+            authMethod: AuthenticationMethod
         ) {
             self.expiryMs = expiryMs
             self.namespace = namespace
             
-            super.init(
-                pubkey: pubkey,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey
-            )
+            super.init(authMethod: authMethod)
         }
         
         // MARK: - Coding

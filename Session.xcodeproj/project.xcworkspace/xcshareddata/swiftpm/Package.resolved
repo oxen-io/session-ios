@@ -1,5 +1,5 @@
 {
-  "originHash" : "53c1182a7d64df9a13a5c0ec4420b2c8da9c4d81d97b2b79b6e8f2946978471b",
+  "originHash" : "46c1bce8a1122a70b9fab0446bdb5930cb4e518c02756562c7cb4862fd885b11",
   "pins" : [
     {
       "identity" : "cocoalumberjack",
@@ -85,7 +85,7 @@
     {
       "identity" : "session-grdb-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/oxen-io/session-grdb-swift.git",
+      "location" : "https://github.com/oxen-io/session-grdb-swift",
       "state" : {
         "revision" : "04f480b95263b7c517085100ceb249f879c021d8",
         "version" : "106.29.3"

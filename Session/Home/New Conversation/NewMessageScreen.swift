@@ -9,12 +9,14 @@ import SessionSnodeKit
 
 struct NewMessageScreen: View {
     @EnvironmentObject var host: HostWrapper
+    private let dependencies: Dependencies
     
     @State var tabIndex = 0
     @State private var accountIdOrONS: String
     @State private var errorString: String? = nil
     
-    init(accountId: String = "") {
+    init(accountId: String = "", using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.accountIdOrONS = accountId
     }
     
@@ -42,7 +44,8 @@ struct NewMessageScreen: View {
                     ScanQRCodeScreen(
                         $accountIdOrONS,
                         error: $errorString,
-                        continueAction: continueWithAccountIdFromQRCode
+                        continueAction: continueWithAccountIdFromQRCode,
+                        using: dependencies
                     )
                 }
             }
@@ -85,7 +88,7 @@ struct NewMessageScreen: View {
         ModalActivityIndicatorViewController
             .present(fromViewController: self.host.controller?.navigationController!, canCancel: false) { modalActivityIndicator in
             SnodeAPI
-                .getSessionID(for: accountIdOrONS)
+                .getSessionID(for: accountIdOrONS, using: dependencies)
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .receive(on: DispatchQueue.main)
                 .sinkUntilComplete(
@@ -117,7 +120,7 @@ struct NewMessageScreen: View {
     }
     
     private func startNewDM(with sessionId: String) {
-        SessionApp.presentConversationCreatingIfNeeded(
+        dependencies[singleton: .app].presentConversationCreatingIfNeeded(
             for: sessionId,
             variant: .contact,
             action: .compose,
@@ -202,5 +205,5 @@ struct EnterAccountIdScreen: View {
 }
 
 #Preview {
-    NewMessageScreen()
+    NewMessageScreen(using: Dependencies.createEmpty())
 }

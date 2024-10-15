@@ -6,6 +6,7 @@ import GRDB
 import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHolder, ObservableTableSource, PagedObservationSource {
@@ -15,12 +16,12 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     public let navigatableState: NavigatableState = NavigatableState()
     public let state: TableDataState<Section, TableItem> = TableDataState()
     public let observableState: ObservableTableSourceState<Section, TableItem> = ObservableTableSourceState()
-    private let selectedContactIdsSubject: CurrentValueSubject<Set<String>, Never> = CurrentValueSubject([])
+    private let selectedIdsSubject: CurrentValueSubject<Set<String>, Never> = CurrentValueSubject([])
     public private(set) var pagedDataObserver: PagedDatabaseObserver<Contact, TableItem>?
     
     // MARK: - Initialization
     
-    init(using dependencies: Dependencies = Dependencies()) {
+    init(using dependencies: Dependencies) {
         self.dependencies = dependencies
         self.pagedDataObserver = nil
         
@@ -68,7 +69,8 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                 else { return }
                 
                 self?.pendingTableDataSubject.send(data)
-            }
+            },
+            using: dependencies
         )
         
         // Run the initial query on a background thread so we don't block the push transition
@@ -98,7 +100,7 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     let emptyStateTextPublisher: AnyPublisher<String?, Never> = Just("blockBlockedNone".localized())
             .eraseToAnyPublisher()
     
-    lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = selectedContactIdsSubject
+    lazy var footerButtonInfo: AnyPublisher<SessionButton.Info?, Never> = selectedIdsSubject
         .prepend([])
         .map { selectedContactIds in
             SessionButton.Info(
@@ -127,30 +129,24 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                             
                             return (lhsValue < rhsValue)
                         }
-                        .map { [weak self] model -> SessionCell.Info<TableItem> in
+                        .map { [selectedIdsSubject] model -> SessionCell.Info<TableItem> in
                             SessionCell.Info(
                                 id: model,
-                                leftAccessory: .profile(id: model.id, profile: model.profile),
+                                leadingAccessory: .profile(id: model.id, profile: model.profile),
                                 title: (
                                     model.profile?.displayName() ??
                                     Profile.truncated(id: model.id, truncating: .middle)
                                 ),
-                                rightAccessory: .radio(
-                                    isSelected: {
-                                        self?.selectedContactIdsSubject.value.contains(model.id) == true
-                                    }
+                                trailingAccessory: .radio(
+                                    liveIsSelected: { selectedIdsSubject.value.contains(model.id) == true }
                                 ),
                                 onTap: {
-                                    var updatedSelectedIds: Set<String> = (self?.selectedContactIdsSubject.value ?? [])
-                                    
-                                    if !updatedSelectedIds.contains(model.id) {
-                                        updatedSelectedIds.insert(model.id)
+                                    if !selectedIdsSubject.value.contains(model.id) {
+                                        selectedIdsSubject.send(selectedIdsSubject.value.inserting(model.id))
                                     }
                                     else {
-                                        updatedSelectedIds.remove(model.id)
+                                        selectedIdsSubject.send(selectedIdsSubject.value.removing(model.id))
                                     }
-                                    
-                                    self?.selectedContactIdsSubject.send(updatedSelectedIds)
                                 }
                             )
                         }
@@ -164,13 +160,13 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
     }
     
     private func unblockTapped() {
-        guard !selectedContactIdsSubject.value.isEmpty else { return }
+        guard !selectedIdsSubject.value.isEmpty else { return }
         
-        let contactIds: Set<String> = selectedContactIdsSubject.value
+        let contactIds: Set<String> = selectedIdsSubject.value
         let contactNames: [String] = contactIds
             .compactMap { contactId in
                 guard
-                    let section: BlockedContactsViewModel.SectionModel = self.tableData
+                    let section: SectionModel = self.tableData
                         .first(where: { section in section.model == .contacts }),
                     let info: SessionCell.Info<TableItem> = section.elements
                         .first(where: { info in info.id.id == contactId })
@@ -183,19 +179,21 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
         let confirmationBody: NSAttributedString = {
             let name: String = contactNames.first ?? ""
             switch contactNames.count {
-            case 1:
-                return "blockUnblockName"
-                    .put(key: "name", value: name)
-                    .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
-            case 2:
-                return "blockUnblockNameTwo"
-                    .put(key: "name", value: name)
-                    .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
-            default:
-                return "blockUnblockNameMultiple"
-                    .put(key: "name", value: name)
-                    .put(key: "count", value: contactNames.count - 1)
-                    .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
+                case 1:
+                    return "blockUnblockName"
+                        .put(key: "name", value: name)
+                        .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
+                
+                case 2:
+                    return "blockUnblockNameTwo"
+                        .put(key: "name", value: name)
+                        .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
+                
+                default:
+                    return "blockUnblockNameMultiple"
+                        .put(key: "name", value: name)
+                        .put(key: "count", value: contactNames.count - 1)
+                        .localizedFormatted(baseFont: .systemFont(ofSize: Values.smallFontSize))
             }
         }()
         let confirmationModal: ConfirmationModal = ConfirmationModal(
@@ -205,15 +203,20 @@ public class BlockedContactsViewModel: SessionTableViewModel, NavigatableStateHo
                 confirmTitle: "blockUnblock".localized(),
                 confirmStyle: .danger,
                 cancelStyle: .alert_text
-            ) { [weak self] _ in
+            ) { [weak self, dependencies] _ in
                 // Unblock the contacts
-                Storage.shared.write { db in
+                dependencies[singleton: .storage].write { db in
                     _ = try Contact
                         .filter(ids: contactIds)
-                        .updateAllAndConfig(db, Contact.Columns.isBlocked.set(to: false))
+                        .updateAllAndConfig(
+                            db,
+                            Contact.Columns.isBlocked.set(to: false),
+                            calledFromConfig: nil,
+                            using: dependencies
+                        )
                 }
                 
-                self?.selectedContactIdsSubject.send([])
+                self?.selectedIdsSubject.send([])
             }
         )
         self.transitionToScreen(confirmationModal, transitionType: .present)

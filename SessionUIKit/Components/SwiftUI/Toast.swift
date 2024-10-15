@@ -22,7 +22,7 @@ public struct ToastModifier: ViewModifier {
   
     @ViewBuilder func mainToastView() -> some View {
         if let message: String = message {
-            ToastView(message)
+            ToastView_SwiftUI(message)
         }
     }
   
@@ -47,7 +47,7 @@ public struct ToastModifier: ViewModifier {
     }
 }
 
-public struct ToastView: View {
+public struct ToastView_SwiftUI: View {
     var message: String
     
     static let width: CGFloat = 320
@@ -88,6 +88,6 @@ public struct ToastView: View {
 
 struct Toast_Previews: PreviewProvider {
     static var previews: some View {
-        ToastView("Test message.")
+        ToastView_SwiftUI("Test message.")
     }
 }

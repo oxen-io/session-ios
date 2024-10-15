@@ -11,7 +11,7 @@ struct TurnServerInfo {
     let username: String
     let urls: [String]
 
-    init?(attributes: JSON, random: Int? = nil) {
+    init?(attributes: [String: Any], random: Int? = nil) {
         guard
             let passwordAttribute = attributes["password"] as? String,
             let usernameAttribute = attributes["username"] as? String,

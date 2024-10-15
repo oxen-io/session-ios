@@ -22,7 +22,7 @@ struct OpenGroupInvitationView_SwiftUI: View {
     ) {
         self.name = name
         self.url = {
-            if let range = url.range(of: "?public_key=") {
+            if let range = url.range(of: "?public_key=") { // stringlint:disable
                 return String(url[..<range.lowerBound])
             }
 
@@ -38,25 +38,23 @@ struct OpenGroupInvitationView_SwiftUI: View {
             spacing: Values.mediumSpacing
         ) {
             // Icon
-            let iconName = (isOutgoing ? "Globe" : "Plus")
-            if let iconImage = UIImage(named: iconName)?
-                .resized(to: CGSize(width: Self.iconSize, height: Self.iconSize))?
+            if let iconImage = UIImage(named: isOutgoing ? "Globe" : "Plus")?
                 .withRenderingMode(.alwaysTemplate)
             {
-                Image(uiImage: iconImage)
-                    .foregroundColor(themeColor: (isOutgoing ? .messageBubble_outgoingText : .textPrimary))
-                    .background(
-                        Circle()
-                            .fill(themeColor: (isOutgoing ? .messageBubble_overlay : .primary))
-                            .frame(
-                                width: Self.iconImageViewSize,
-                                height: Self.iconImageViewSize
-                            )
-                    )
+                Circle()
+                    .fill(themeColor: (isOutgoing ? .messageBubble_overlay : .primary))
                     .frame(
                         width: Self.iconImageViewSize,
                         height: Self.iconImageViewSize
                     )
+                    .overlay {
+                        Image(uiImage: iconImage)
+                            .foregroundColor(themeColor: (isOutgoing ? .messageBubble_outgoingText : .textPrimary))
+                            .frame(
+                                width: Self.iconSize,
+                                height: Self.iconSize
+                            )
+                    }
             }
             
             // Text

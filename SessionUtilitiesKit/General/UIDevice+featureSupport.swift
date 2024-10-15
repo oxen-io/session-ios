@@ -6,10 +6,6 @@ import UIKit
 
 @objc
 public extension UIDevice {
-    
-    var supportsCallKit: Bool {
-        return ProcessInfo().isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 10, minorVersion: 0, patchVersion: 0))
-    }
 
     @objc
     var hasIPhoneXNotch: Bool {
@@ -42,23 +38,10 @@ public extension UIDevice {
     }
 
     @objc
-    var isShorterThanIPhone5: Bool {
-        return UIScreen.main.bounds.height < 568
-    }
-
-    @objc
-    var isIPad: Bool {
-        let isNativeIPad = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiom.pad
-        let isCompatabilityModeIPad = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiom.phone && self.model.hasPrefix("iPad")
-
-        return isNativeIPad || isCompatabilityModeIPad
-    }
-
-    @objc
     func ows_setOrientation(_ orientation: UIInterfaceOrientation) {
         // XXX - This is not officially supported, but there's no other way to programmatically rotate
         // the interface.
-        let orientationKey = "orientation"
+        let orientationKey = "orientation"  // stringlint:disable
         self.setValue(orientation.rawValue, forKey: orientationKey)
 
         // Not strictly necessary for the orientation to appear as changed

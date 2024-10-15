@@ -1,9 +1,11 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import SessionUIKit
 import SessionUtilitiesKit
 
 final class MainAppContext: AppContext {
+    private let dependencies: Dependencies
     var _temporaryDirectory: String?
     var reportedApplicationState: UIApplication.State
     
@@ -22,17 +24,13 @@ final class MainAppContext: AppContext {
         
         return result
     }
-    var frontmostViewController: UIViewController? { UIApplication.shared.frontmostViewControllerIgnoringAlerts }
+    var frontMostViewController: UIViewController? {
+        UIApplication.shared.frontMostViewController(ignoringAlerts: true, using: dependencies)
+    }
     var backgroundTimeRemaining: TimeInterval { UIApplication.shared.backgroundTimeRemaining }
     
     var mainWindow: UIWindow?
     var wasWokenUpByPushNotification: Bool = false
-    
-    private static var _isRTL: Bool = {
-        return (UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft)
-    }()
-    
-    var isRTL: Bool { return MainAppContext._isRTL }
     
     var statusBarHeight: CGFloat { UIApplication.shared.statusBarFrame.size.height }
     var openSystemSettingsAction: UIAlertAction? {
@@ -45,10 +43,16 @@ final class MainAppContext: AppContext {
         return result
     }
     
+    static func determineDeviceRTL() -> Bool {
+        return (UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft)
+    }
+    
     // MARK: - Initialization
 
-    init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.reportedApplicationState = .inactive
+        self.createTemporaryDirectory()
         
         NotificationCenter.default.addObserver(
             self,
@@ -130,18 +134,9 @@ final class MainAppContext: AppContext {
     
     func setMainWindow(_ mainWindow: UIWindow) {
         self.mainWindow = mainWindow
-    }
-    
-    func setStatusBarHidden(_ isHidden: Bool, animated isAnimated: Bool) {
-        UIApplication.shared.setStatusBarHidden(isHidden, with: (isAnimated ? .slide : .none))
-    }
-    
-    func isAppForegroundAndActive() -> Bool {
-        return (reportedApplicationState == .active)
-    }
-    
-    func isInBackground() -> Bool {
-        return (reportedApplicationState == .background)
+        
+        // Store in SessionUIKit to avoid needing the SessionUtilitiesKit dependency
+        SNUIKit.setMainWindow(mainWindow)
     }
     
     func beginBackgroundTask(expirationHandler: @escaping () -> ()) -> UIBackgroundTaskIdentifier {
@@ -169,23 +164,24 @@ final class MainAppContext: AppContext {
         UIApplication.shared.isIdleTimerDisabled = shouldBeBlocking
     }
     
-    func setNetworkActivityIndicatorVisible(_ value: Bool) {
-        UIApplication.shared.isNetworkActivityIndicatorVisible = value
-    }
+    // MARK: - Temporary Directories
     
-    // MARK: -
+    var temporaryDirectory: String { temporaryDirectory(using: dependencies) }
+    var temporaryDirectoryAccessibleAfterFirstAuth: String {
+        temporaryDirectoryAccessibleAfterFirstAuth(using: dependencies)
+    }
     
     func clearOldTemporaryDirectories() {
         // We use the lowest priority queue for this, and wait N seconds
         // to avoid interfering with app startup.
-        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + .seconds(3)) { [weak self] in
+        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + .seconds(3)) { [weak self, dependencies] in
             guard
                 self?.isAppForegroundAndActive == true,   // Abort if app not active
                 let thresholdDate: Date = self?.appLaunchTime
             else { return }
-                    
+            
             // Ignore the "current" temp directory.
-            let currentTempDirName: String = URL(fileURLWithPath: Singleton.appContext.temporaryDirectory).lastPathComponent
+            let currentTempDirName: String = URL(fileURLWithPath: dependencies[singleton: .appContext].temporaryDirectory).lastPathComponent
             let dirPath = NSTemporaryDirectory()
             
             guard let fileNames: [String] = try? FileManager.default.contentsOfDirectory(atPath: dirPath) else { return }

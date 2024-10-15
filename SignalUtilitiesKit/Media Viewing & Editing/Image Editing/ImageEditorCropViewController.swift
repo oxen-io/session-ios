@@ -241,9 +241,10 @@ class ImageEditorCropViewController: OWSViewController {
             Log.error("[ImageEditorCropViewController] Missing cropLockButton")
             return
         }
-        cropLockButton.setImage(imageName: (isCropLocked
-            ? "image_editor_crop_lock"
-            : "image_editor_crop_unlock"))
+        cropLockButton.setImage(imageName: (isCropLocked ?
+            "image_editor_crop_lock" :  // stringlint:disable
+            "image_editor_crop_unlock"  // stringlint:disable
+        ))
     }
 
     @objc

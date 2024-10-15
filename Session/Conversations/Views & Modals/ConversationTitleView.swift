@@ -9,6 +9,7 @@ final class ConversationTitleView: UIView {
     private static let leftInset: CGFloat = 8
     private static let leftInsetWithCallButton: CGFloat = 54
     
+    private let dependencies: Dependencies
     private var oldSize: CGSize = .zero
     
     override var intrinsicContentSize: CGSize {
@@ -39,7 +40,7 @@ final class ConversationTitleView: UIView {
     }()
     
     private lazy var labelCarouselView: SessionLabelCarouselView = {
-        let result = SessionLabelCarouselView()
+        let result = SessionLabelCarouselView(using: dependencies)
         return result
     }()
     
@@ -53,7 +54,9 @@ final class ConversationTitleView: UIView {
 
     // MARK: - Initialization
     
-    init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
         super.init(frame: .zero)
         
         addSubview(stackView)
@@ -76,11 +79,13 @@ final class ConversationTitleView: UIView {
     
     public func initialSetup(
         with threadVariant: SessionThread.Variant,
-        isNoteToSelf: Bool
+        isNoteToSelf: Bool,
+        isMessageRequest: Bool
     ) {
         self.update(
             with: " ",
             isNoteToSelf: isNoteToSelf,
+            isMessageRequest: isMessageRequest,
             threadVariant: threadVariant,
             mutedUntilTimestamp: nil,
             onlyNotifyForMentions: false,
@@ -107,6 +112,7 @@ final class ConversationTitleView: UIView {
     public func update(
         with name: String,
         isNoteToSelf: Bool,
+        isMessageRequest: Bool,
         threadVariant: SessionThread.Variant,
         mutedUntilTimestamp: TimeInterval?,
         onlyNotifyForMentions: Bool,
@@ -118,6 +124,7 @@ final class ConversationTitleView: UIView {
                 self?.update(
                     with: name,
                     isNoteToSelf: isNoteToSelf,
+                    isMessageRequest: isMessageRequest,
                     threadVariant: threadVariant,
                     mutedUntilTimestamp: mutedUntilTimestamp,
                     onlyNotifyForMentions: onlyNotifyForMentions,
@@ -129,10 +136,12 @@ final class ConversationTitleView: UIView {
         }
         
         let shouldHaveSubtitle: Bool = (
-            Date().timeIntervalSince1970 <= (mutedUntilTimestamp ?? 0) ||
-            onlyNotifyForMentions ||
-            userCount != nil ||
-            disappearingMessagesConfig?.isEnabled == true
+            !isMessageRequest && (
+                Date().timeIntervalSince1970 <= (mutedUntilTimestamp ?? 0) ||
+                onlyNotifyForMentions ||
+                userCount != nil ||
+                disappearingMessagesConfig?.isEnabled == true
+            )
         )
         
         self.titleLabel.text = name
@@ -143,6 +152,22 @@ final class ConversationTitleView: UIView {
                 Values.veryLargeFontSize
             )
         )
+        self.labelCarouselView.isHidden = !shouldHaveSubtitle
+        
+        // Contact threads also have the call button to compensate for
+        let shouldShowCallButton: Bool = (
+            SessionCall.isEnabled &&
+            !isNoteToSelf &&
+            threadVariant == .contact
+        )
+        self.stackViewLeadingConstraint.constant = (shouldShowCallButton ?
+            ConversationTitleView.leftInsetWithCallButton :
+            ConversationTitleView.leftInset
+        )
+        self.stackViewTrailingConstraint.constant = 0
+        
+        // No need to add themed subtitle content if we aren't adding the subtitle carousel
+        guard shouldHaveSubtitle else { return }
         
         ThemeManager.onThemeChange(observer: self.labelCarouselView) { [weak self] theme, _ in
             guard let textPrimary: UIColor = theme.color(for: .textPrimary) else { return }
@@ -258,18 +283,6 @@ final class ConversationTitleView: UIView {
             
             self?.labelCarouselView.isHidden = (labelInfos.count == 0)
         }
-        
-        // Contact threads also have the call button to compensate for
-        let shouldShowCallButton: Bool = (
-            SessionCall.isEnabled &&
-            !isNoteToSelf &&
-            threadVariant == .contact
-        )
-        self.stackViewLeadingConstraint.constant = (shouldShowCallButton ?
-            ConversationTitleView.leftInsetWithCallButton :
-            ConversationTitleView.leftInset
-        )
-        self.stackViewTrailingConstraint.constant = 0
     }
     
     // MARK: - Interaction

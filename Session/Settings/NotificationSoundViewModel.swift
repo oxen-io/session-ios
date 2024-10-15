@@ -16,17 +16,19 @@ class NotificationSoundViewModel: SessionTableViewModel, NavigationItemSource, N
     public let state: TableDataState<Section, TableItem> = TableDataState()
     public let observableState: ObservableTableSourceState<Section, TableItem> = ObservableTableSourceState()
     
-    // FIXME: Remove `threadId` once we ditch the per-thread notification sound
-    private let threadId: String?
+    private let originalSelection: Preferences.Sound
     private var audioPlayer: OWSAudioPlayer?
-    private var storedSelection: Preferences.Sound?
-    private var currentSelection: CurrentValueSubject<Preferences.Sound?, Never> = CurrentValueSubject(nil)
+    private var currentSelection: CurrentValueSubject<Preferences.Sound, Never>
     
     // MARK: - Initialization
     
-    init(threadId: String? = nil, using dependencies: Dependencies = Dependencies()) {
+    init(using dependencies: Dependencies) {
         self.dependencies = dependencies
-        self.threadId = threadId
+        
+        let originalSelection: Preferences.Sound = dependencies[singleton: .storage, key: .defaultNotificationSound]
+            .defaulting(to: .defaultNotificationSound)
+        self.originalSelection = originalSelection
+        self.currentSelection = CurrentValueSubject(originalSelection)
     }
     
     deinit {
@@ -57,7 +59,7 @@ class NotificationSoundViewModel: SessionTableViewModel, NavigationItemSource, N
 
     lazy var rightNavItems: AnyPublisher<[SessionNavItem<NavItem>], Never> = currentSelection
         .removeDuplicates()
-        .map { [weak self] currentSelection in (self?.storedSelection != currentSelection) }
+        .map { [originalSelection] currentSelection in (originalSelection != currentSelection) }
         .map { isChanged in
             guard isChanged else { return [] }
             
@@ -79,26 +81,8 @@ class NotificationSoundViewModel: SessionTableViewModel, NavigationItemSource, N
     let title: String = "notificationsSound".localized()
     
     lazy var observation: TargetObservation = ObservationBuilder
-        .databaseObservation(self) { [threadId] db -> Preferences.Sound in
-            guard let threadId: String = threadId else {
-                return db[.defaultNotificationSound]
-                    .defaulting(to: .defaultNotificationSound)
-            }
-            
-            return try SessionThread
-                .filter(id: threadId)
-                .select(.notificationSound)
-                .asRequest(of: Preferences.Sound.self)
-                .fetchOne(db)
-                .defaulting(
-                    to: db[.defaultNotificationSound]
-                        .defaulting(to: .defaultNotificationSound)
-                )
-        }
-        .map { [weak self] storedSelection in
-            self?.storedSelection = storedSelection
-            self?.currentSelection.send(self?.currentSelection.value ?? storedSelection)
-            
+        .subject(currentSelection)
+        .map { [weak self] selectedSound in
             return [
                 SectionModel(
                     model: .content,
@@ -113,8 +97,8 @@ class NotificationSoundViewModel: SessionTableViewModel, NavigationItemSource, N
                                     
                                     return sound.displayName
                                 }(),
-                                rightAccessory: .radio(
-                                    isSelected: { (self?.currentSelection.value == sound) }
+                                trailingAccessory: .radio(
+                                    isSelected: (selectedSound == sound)
                                 ),
                                 onTap: {
                                     self?.currentSelection.send(sound)
@@ -139,22 +123,8 @@ class NotificationSoundViewModel: SessionTableViewModel, NavigationItemSource, N
     // MARK: - Functions
     
     private func saveChanges() {
-        guard let currentSelection: Preferences.Sound = self.currentSelection.value else { return }
-
-        let threadId: String? = self.threadId
-        
-        Storage.shared.writeAsync { db in
-            guard let threadId: String = threadId else {
-                db[.defaultNotificationSound] = currentSelection
-                return
-            }
-            
-            try SessionThread
-                .filter(id: threadId)
-                .updateAll(
-                    db,
-                    SessionThread.Columns.notificationSound.set(to: currentSelection)
-                )
+        dependencies[singleton: .storage].writeAsync { [currentSelection] db in
+            db[.defaultNotificationSound] = currentSelection.value
         }
     }
 }

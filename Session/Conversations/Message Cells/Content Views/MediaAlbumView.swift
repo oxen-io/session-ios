@@ -23,7 +23,8 @@ public class MediaAlbumView: UIStackView {
         mediaCache: NSCache<NSString, AnyObject>,
         items: [Attachment],
         isOutgoing: Bool,
-        maxMessageWidth: CGFloat
+        maxMessageWidth: CGFloat,
+        using dependencies: Dependencies
     ) {
         let itemsToDisplay: [Attachment] = MediaAlbumView.itemsToDisplay(forItems: items)
         
@@ -41,7 +42,8 @@ public class MediaAlbumView: UIStackView {
                         itemsToDisplay.count != items.count &&
                         (index == (itemsToDisplay.count - 1))
                     ),
-                    cornerRadius: VisibleMessageCell.largeCornerRadius
+                    cornerRadius: VisibleMessageCell.largeCornerRadius,
+                    using: dependencies
                 )
             }
 

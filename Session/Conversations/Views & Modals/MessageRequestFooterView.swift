@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 class MessageRequestFooterView: UIView {
@@ -161,10 +162,12 @@ class MessageRequestFooterView: UIView {
             threadVariant != .contact ||
             threadRequiresApproval
         )
-        self.descriptionLabel.text = (threadRequiresApproval ?
-            "messageRequestPendingDescription".localized() :
-            "messageRequestsAcceptDescription".localized()
-        )
+        switch (threadVariant, threadRequiresApproval) {
+            case (.contact, false): self.descriptionLabel.text = "messageRequestsAcceptDescription".localized()
+            case (.contact, true): self.descriptionLabel.text = "messageRequestPendingDescription".localized()
+            case (.group, _): self.descriptionLabel.text = "messageRequestGroupInviteDescription".localized()
+            default: break
+        }
         self.actionStackView.isHidden = threadRequiresApproval
         self.messageRequestDescriptionLabelBottomConstraint?.constant = (threadRequiresApproval ? -4 : -20)
     }

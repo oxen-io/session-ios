@@ -16,6 +16,6 @@ enum _004_RemoveLegacyYDB: Migration {
     static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
 
     static func migrate(_ db: Database, using dependencies: Dependencies) throws {
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

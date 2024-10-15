@@ -36,10 +36,23 @@ public extension Set {
         return updatedSet
     }
     
+    func removing(contentsOf value: Set<Element>?) -> Set<Element> {
+        guard let value: Set<Element> = value else { return self }
+        
+        var updatedSet: Set<Element> = self
+        value.forEach { updatedSet.remove($0) }
+        
+        return updatedSet
+    }
+    
     mutating func popRandomElement() -> Element? {
         guard let value: Element = randomElement() else { return nil }
         
         self.remove(value)
         return value
+    }
+    
+    func chunked(by chunkSize: Int) -> [Set<Element>] {
+        return Array(self).chunked(by: chunkSize).map { Set($0) }
     }
 }

@@ -13,12 +13,11 @@ class SOGSErrorSpec: QuickSpec {
         describe("a SOGSError") {
             // MARK: -- generates the error description correctly
             it("generates the error description correctly") {
-                expect(OpenGroupAPIError.decryptionFailed.errorDescription)
-                    .to(equal("Couldn't decrypt response."))
-                expect(OpenGroupAPIError.signingFailed.errorDescription)
-                    .to(equal("Couldn't sign message."))
-                expect(OpenGroupAPIError.noPublicKey.errorDescription)
-                    .to(equal("Couldn't find server public key."))
+                expect(OpenGroupAPIError.decryptionFailed.description).to(equal("Couldn't decrypt response."))
+                expect(OpenGroupAPIError.signingFailed.description).to(equal("Couldn't sign message."))
+                expect(OpenGroupAPIError.noPublicKey.description).to(equal("Couldn't find server public key."))
+                expect(OpenGroupAPIError.invalidEmoji.description).to(equal("The emoji is invalid."))
+                expect(OpenGroupAPIError.invalidPoll.description).to(equal("Poller in invalid state."))
             }
         }
     }

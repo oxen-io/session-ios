@@ -3,11 +3,17 @@
 import UIKit
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 final class ContextMenuVC: UIViewController {
+    public static let dismissDurationPartOne: TimeInterval = 0.15
+    public static let dismissDurationPartTwo: TimeInterval = 0.25
+    public static let dismissDuration: TimeInterval = (dismissDurationPartOne + dismissDurationPartTwo)
+    
     private static let actionViewHeight: CGFloat = 40
     private static let menuCornerRadius: CGFloat = 8
     
+    private let dependencies: Dependencies
     private let snapshot: UIView
     private let frame: CGRect
     private var targetFrame: CGRect = .zero
@@ -88,8 +94,10 @@ final class ContextMenuVC: UIViewController {
         frame: CGRect,
         cellViewModel: MessageViewModel,
         actions: [Action],
+        using dependencies: Dependencies,
         dismiss: @escaping () -> Void
     ) {
+        self.dependencies = dependencies
         self.snapshot = snapshot
         self.frame = frame
         self.cellViewModel = cellViewModel
@@ -167,7 +175,7 @@ final class ContextMenuVC: UIViewController {
             arrangedSubviews: actions
                 .filter { $0.actionType == .generic }
                 .map { action -> ActionView in
-                    ActionView(for: action, dismiss: snDismiss)
+                    ActionView(for: action, using: dependencies, dismiss: snDismiss)
                 }
         )
         menuStackView.axis = .vertical
@@ -225,11 +233,11 @@ final class ContextMenuVC: UIViewController {
         menuView.pin(.top, to: .top, of: view, withInset: targetFrame.maxY + spacing)
         
         switch cellViewModel.variant {
-            case .standardOutgoing:
+            case .standardOutgoing, .standardOutgoingDeleted, .standardOutgoingDeletedLocally:
                 menuView.pin(.right, to: .right, of: view, withInset: -(UIScreen.main.bounds.width - targetFrame.maxX))
                 emojiBar.pin(.right, to: .right, of: view, withInset: -(UIScreen.main.bounds.width - targetFrame.maxX))
             
-            case .standardIncoming, .standardIncomingDeleted:
+            case .standardIncoming, .standardIncomingDeleted, .standardIncomingDeletedLocally:
                 menuView.pin(.left, to: .left, of: view, withInset: targetFrame.minX)
                 emojiBar.pin(.left, to: .left, of: view, withInset: targetFrame.minX)
                 
@@ -386,7 +394,7 @@ final class ContextMenuVC: UIViewController {
         self.timestampLabel.frame = currentLabelFrame
         
         UIView.animate(
-            withDuration: 0.15,
+            withDuration: ContextMenuVC.dismissDurationPartOne,
             delay: 0,
             options: .curveEaseOut,
             animations: { [weak self] in
@@ -397,7 +405,7 @@ final class ContextMenuVC: UIViewController {
         )
         
         UIView.animate(
-            withDuration: 0.25,
+            withDuration: ContextMenuVC.dismissDurationPartTwo,
             animations: { [weak self] in
                 self?.blurView.effect = nil
                 self?.menuView.alpha = 0

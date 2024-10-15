@@ -15,6 +15,7 @@ protocol SessionTableViewModel: AnyObject, SectionedTableData {
     var subtitle: String? { get }
     var initialLoadMessage: String? { get }
     var cellType: SessionTableViewCellType { get }
+    var bannerInfo: AnyPublisher<InfoBanner.Info?, Never> { get }
     var emptyStateTextPublisher: AnyPublisher<String?, Never> { get }
     var state: TableDataState<Section, TableItem> { get }
     var footerView: AnyPublisher<UIView?, Never> { get }
@@ -31,6 +32,7 @@ extension SessionTableViewModel {
     var subtitle: String? { nil }
     var initialLoadMessage: String? { nil }
     var cellType: SessionTableViewCellType { .general }
+    var bannerInfo: AnyPublisher<InfoBanner.Info?, Never> { Just(nil).eraseToAnyPublisher() }
     var emptyStateTextPublisher: AnyPublisher<String?, Never> { Just(nil).eraseToAnyPublisher() }
     var tableData: [SectionModel] { state.tableData }
     var footerView: AnyPublisher<UIView?, Never> { Just(nil).eraseToAnyPublisher() }

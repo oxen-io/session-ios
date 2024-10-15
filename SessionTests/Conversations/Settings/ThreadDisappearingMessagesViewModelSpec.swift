@@ -6,6 +6,7 @@ import Quick
 import Nimble
 import SessionUIKit
 import SessionSnodeKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 @testable import Session
@@ -14,32 +15,38 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var dependencies: Dependencies! = Dependencies(
-            storage: nil,
-            scheduler: .immediate
+        @TestState var dependencies: TestDependencies! = TestDependencies { dependencies in
+            dependencies.forceSynchronous = true
+            dependencies[singleton: .scheduler] = .immediate
+        }
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
+            customWriter: try! DatabaseQueue(),
+            migrationTargets: [
+                SNUtilitiesKit.self,
+                SNSnodeKit.self,
+                SNMessagingKit.self,
+                DeprecatedUIKitMigrationTarget.self
+            ],
+            using: dependencies,
+            initialData: { db in
+                try SessionThread(
+                    id: "TestId",
+                    variant: .contact,
+                    creationDateTimestamp: 0,
+                    using: dependencies
+                ).insert(db)
+            }
         )
-        @TestState var mockStorage: Storage! = {
-            let result = SynchronousStorage(
-                customWriter: try! DatabaseQueue(),
-                migrationTargets: [
-                    SNUtilitiesKit.self,
-                    SNSnodeKit.self,
-                    SNMessagingKit.self,
-                    SNUIKit.self
-                ],
-                initialData: { db in
-                    try SessionThread(
-                        id: "TestId",
-                        variant: .contact,
-                        creationDateTimestamp: 0
-                    ).insert(db)
-                },
-                using: dependencies
-            )
-            dependencies.storage = result
-            
-            return result
-        }()
+        @TestState(singleton: .jobRunner, in: dependencies) var mockJobRunner: MockJobRunner! = MockJobRunner(
+            initialSetup: { jobRunner in
+                jobRunner
+                    .when { $0.add(.any, job: .any, dependantJob: .any, canStartJob: .any) }
+                    .thenReturn(nil)
+                jobRunner
+                    .when { $0.upsert(.any, job: .any, canStartJob: .any) }
+                    .thenReturn(nil)
+            }
+        )
         @TestState var viewModel: ThreadDisappearingMessagesSettingsViewModel! = ThreadDisappearingMessagesSettingsViewModel(
             threadId: "TestId",
             threadVariant: .contact,
@@ -87,8 +94,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 id: "off".localized(),
                                 position: .top,
                                 title: "off".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { true },
+                                trailingAccessory: .radio(
+                                    isSelected: true,
                                     accessibility: Accessibility(
                                         identifier: "Off - Radio"
                                     )
@@ -109,8 +116,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 position: .bottom,
                                 title: "disappearingMessagesDisappearAfterSend".localized(),
                                 subtitle: "disappearingMessagesDisappearAfterSendDescription".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { false },
+                                trailingAccessory: .radio(
+                                    isSelected: false,
                                     accessibility: Accessibility(
                                         identifier: "Disappear After Send - Radio"
                                     )
@@ -131,11 +138,13 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                     .defaultWith("TestId")
                     .with(
                         isEnabled: true,
-                        durationSeconds: DisappearingMessagesConfiguration.validDurationsSeconds(.disappearAfterSend).last,
+                        durationSeconds: DisappearingMessagesConfiguration
+                            .validDurationsSeconds(.disappearAfterSend, using: dependencies)
+                            .last,
                         type: .disappearAfterSend
                     )
                 mockStorage.write { db in
-                    _ = try config.saved(db)
+                    try config.upserted(db)
                 }
                 viewModel = ThreadDisappearingMessagesSettingsViewModel(
                     threadId: "TestId",
@@ -165,8 +174,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 id: "off".localized(),
                                 position: .top,
                                 title: "off".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { false },
+                                trailingAccessory: .radio(
+                                    isSelected: false,
                                     accessibility: Accessibility(
                                         identifier: "Off - Radio"
                                     )
@@ -187,8 +196,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 position: .bottom,
                                 title: "disappearingMessagesDisappearAfterSend".localized(),
                                 subtitle: "disappearingMessagesDisappearAfterSendDescription".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { true },
+                                trailingAccessory: .radio(
+                                    isSelected: true,
                                     accessibility: Accessibility(
                                         identifier: "Disappear After Send - Radio"
                                     )
@@ -201,7 +210,9 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                         )
                     )
                 
-                let title: String = (DisappearingMessagesConfiguration.validDurationsSeconds(.disappearAfterSend).last?
+                let title: String = (DisappearingMessagesConfiguration
+                    .validDurationsSeconds(.disappearAfterSend, using: dependencies)
+                    .last?
                     .formatted(format: .long))
                     .defaulting(to: "")
                 expect(viewModel.tableData.last?.elements.last)
@@ -211,8 +222,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 id: title,
                                 position: .bottom,
                                 title: title,
-                                rightAccessory: .radio(
-                                    isSelected: { true },
+                                trailingAccessory: .radio(
+                                    isSelected: true,
                                     accessibility: Accessibility(
                                         identifier: "2 weeks - Radio"
                                     )
@@ -249,11 +260,13 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                     .defaultWith("TestId")
                     .with(
                         isEnabled: true,
-                        durationSeconds: DisappearingMessagesConfiguration.validDurationsSeconds(.disappearAfterSend).last,
+                        durationSeconds: DisappearingMessagesConfiguration
+                            .validDurationsSeconds(.disappearAfterSend, using: dependencies)
+                            .last,
                         type: .disappearAfterSend
                     )
                 mockStorage.write { db in
-                    _ = try config.saved(db)
+                    try config.upserted(db)
                 }
                 viewModel = ThreadDisappearingMessagesSettingsViewModel(
                     threadId: "TestId",
@@ -285,8 +298,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 position: .bottom,
                                 title: "disappearingMessagesDisappearAfterSend".localized(),
                                 subtitle: "disappearingMessagesDisappearAfterSendDescription".localized(),
-                                rightAccessory: .radio(
-                                    isSelected: { true },
+                                trailingAccessory: .radio(
+                                    isSelected: true,
                                     accessibility: Accessibility(
                                         identifier: "Disappear After Send - Radio"
                                     )
@@ -299,7 +312,9 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                         )
                     )
                 
-                let title: String = (DisappearingMessagesConfiguration.validDurationsSeconds(.disappearAfterSend).last?
+                let title: String = (DisappearingMessagesConfiguration
+                    .validDurationsSeconds(.disappearAfterSend, using: dependencies)
+                    .last?
                     .formatted(format: .long))
                     .defaulting(to: "")
                 expect(viewModel.tableData.last?.elements.last)
@@ -309,8 +324,8 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                                 id: title,
                                 position: .bottom,
                                 title: title,
-                                rightAccessory: .radio(
-                                    isSelected: { true },
+                                trailingAccessory: .radio(
+                                    isSelected: true,
                                     accessibility: Accessibility(
                                         identifier: "2 weeks - Radio"
                                     )
@@ -373,7 +388,7 @@ class ThreadDisappearingMessagesSettingsViewModelSpec: QuickSpec {
                             )
                         )
                 }
-
+                
                 // MARK: ---- and saving
                 context("and saving") {
                     // MARK: ------ dismisses the screen

@@ -9,9 +9,13 @@ struct InviteAFriendScreen: View {
     @EnvironmentObject var host: HostWrapper
     
     @State private var copied: Bool = false
-    private let accountId: String = getUserHexEncodedPublicKey()
+    private let accountId: String
     
     static private let cornerRadius: CGFloat = 13
+    
+    init(accountId: String) {
+        self.accountId = accountId
+    }
     
     var body: some View {
         ZStack(alignment: .center) {
@@ -145,5 +149,5 @@ struct InviteAFriendScreen: View {
 }
 
 #Preview {
-    InviteAFriendScreen()
+    InviteAFriendScreen(accountId: "050000000000000000000000000000000000000000000000000000000000000000")
 }

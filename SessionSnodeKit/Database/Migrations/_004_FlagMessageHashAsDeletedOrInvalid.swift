@@ -22,6 +22,6 @@ enum _004_FlagMessageHashAsDeletedOrInvalid: Migration {
                 .indexed()                                 // Faster querying
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

@@ -3,6 +3,14 @@
 import Foundation
 import GRDB
 
+// MARK: - Log.Category
+
+public extension Log.Category {
+    static let migration: Log.Category = .create("Migration", defaultLevel: .info)
+}
+
+// MARK: - Migration
+
 public protocol Migration {
     static var target: TargetMigrations.Identifier { get }
     static var identifier: String { get }
@@ -33,13 +41,13 @@ public extension Migration {
         using dependencies: Dependencies
     ) -> ((_ db: Database) throws -> ()) {
         return { (db: Database) in
-            Log.info("[Migration Info] Starting \(targetIdentifier.key(with: self))")
+            Log.info(.migration, "Starting \(targetIdentifier.key(with: self))")
             storage?.willStartMigration(db, self)
             storage?.internalCurrentlyRunningMigration.mutate { $0 = (targetIdentifier, self) }
             defer { storage?.internalCurrentlyRunningMigration.mutate { $0 = nil } }
             
             try migrate(db, using: dependencies)
-            Log.info("[Migration Info] Completed \(targetIdentifier.key(with: self))")
+            Log.info(.migration, "Completed \(targetIdentifier.key(with: self))")
         }
     }
 }

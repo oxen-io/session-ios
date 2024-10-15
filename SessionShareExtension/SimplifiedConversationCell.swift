@@ -4,6 +4,7 @@ import UIKit
 import SessionUIKit
 import SessionMessagingKit
 import SignalUtilitiesKit
+import SessionUtilitiesKit
 
 final class SimplifiedConversationCell: UITableViewCell {
     // MARK: - Initialization
@@ -84,14 +85,15 @@ final class SimplifiedConversationCell: UITableViewCell {
     
     // MARK: - Updating
     
-    public func update(with cellViewModel: SessionThreadViewModel) {
+    public func update(with cellViewModel: SessionThreadViewModel, using dependencies: Dependencies) {
         accentLineView.alpha = (cellViewModel.threadIsBlocked == true ? 1 : 0)
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
             threadVariant: cellViewModel.threadVariant,
-            customImageData: cellViewModel.openGroupProfilePictureData,
+            displayPictureFilename: cellViewModel.displayPictureFilename,
             profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile
+            additionalProfile: cellViewModel.additionalProfile,
+            using: dependencies
         )
         displayNameLabel.text = cellViewModel.displayName
     }
