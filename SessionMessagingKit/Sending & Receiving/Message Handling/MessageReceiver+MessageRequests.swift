@@ -104,9 +104,8 @@ extension MessageReceiver {
             _ = try SessionThread
                 .deleteOrLeave(
                     db,
+                    type: .deleteContactConversationAndContact, // Blinded contact isn't synced anyway
                     threadId: blindedIdLookup.blindedId,
-                    threadVariant: .contact,
-                    groupLeaveType: .forced,
                     calledFromConfigHandling: false
                 )
         }

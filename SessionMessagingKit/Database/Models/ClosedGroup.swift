@@ -111,12 +111,6 @@ public extension ClosedGroup {
 // MARK: - Convenience
 
 public extension ClosedGroup {
-    enum LeaveType {
-        case standard
-        case silent
-        case forced
-    }
-    
     static func removeKeysAndUnsubscribe(
         _ db: Database? = nil,
         threadId: String,

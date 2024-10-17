@@ -177,14 +177,12 @@ internal extension LibSession {
         if !communityIdsToRemove.isEmpty {
             LibSession.kickFromConversationUIIfNeeded(removedThreadIds: Array(communityIdsToRemove))
             
-            try SessionThread
-                .deleteOrLeave(
-                    db,
-                    threadIds: Array(communityIdsToRemove),
-                    threadVariant: .community,
-                    groupLeaveType: .forced,
-                    calledFromConfigHandling: true
-                )
+            try SessionThread.deleteOrLeave(
+                db,
+                type: .deleteCommunityAndContent,
+                threadIds: Array(communityIdsToRemove),
+                calledFromConfigHandling: true
+            )
         }
         
         // MARK: -- Handle Legacy Group Changes
@@ -370,9 +368,8 @@ internal extension LibSession {
             try SessionThread
                 .deleteOrLeave(
                     db,
+                    type: .deleteGroupAndContent,
                     threadIds: Array(legacyGroupIdsToRemove),
-                    threadVariant: .legacyGroup,
-                    groupLeaveType: .forced,
                     calledFromConfigHandling: true
                 )
         }

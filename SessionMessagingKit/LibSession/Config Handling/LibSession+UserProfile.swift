@@ -105,14 +105,12 @@ internal extension LibSession {
             // `deleteOrLeave` behaviour (for 'Note to Self' this will leave the conversation
             // but remove the associated interactions)
             if !LibSession.shouldBeVisible(priority: targetPriority) {
-                try SessionThread
-                    .deleteOrLeave(
-                        db,
-                        threadId: userPublicKey,
-                        threadVariant: .contact,
-                        groupLeaveType: .silent,
-                        calledFromConfigHandling: true
-                    )
+                try SessionThread.deleteOrLeave(
+                    db,
+                    type: .hideContactConversationAndDeleteContent,
+                    threadId: userPublicKey,
+                    calledFromConfigHandling: true
+                )
             }
         }
         

@@ -216,22 +216,20 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                                     // Remove the one-to-one requests
                                     try SessionThread.deleteOrLeave(
                                         db,
+                                        type: .hideContactConversationAndDeleteContent,
                                         threadIds: threadInfo
                                             .filter { _, variant in variant == .contact }
                                             .map { id, _ in id },
-                                        threadVariant: .contact,
-                                        groupLeaveType: .silent,
                                         calledFromConfigHandling: false
                                     )
                                     
                                     // Remove the group requests
                                     try SessionThread.deleteOrLeave(
                                         db,
+                                        type: .deleteGroupAndContent,
                                         threadIds: threadInfo
                                             .filter { _, variant in variant == .legacyGroup || variant == .group }
                                             .map { id, _ in id },
-                                        threadVariant: .group,
-                                        groupLeaveType: .silent,
                                         calledFromConfigHandling: false
                                     )
                                 }

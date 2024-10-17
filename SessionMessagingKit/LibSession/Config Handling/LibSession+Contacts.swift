@@ -248,9 +248,8 @@ internal extension LibSession {
             try SessionThread
                 .deleteOrLeave(
                     db,
+                    type: .deleteContactConversationAndContact,
                     threadIds: combinedIds,
-                    threadVariant: .contact,
-                    groupLeaveType: .forced,
                     calledFromConfigHandling: true
                 )
             
