@@ -17,7 +17,10 @@ public extension Message {
             openGroupId: String,
             sender: String,
             timestamp: TimeInterval,
-            messageServerId: Int64
+            messageServerId: Int64,
+            whisper: Bool,
+            whisperMods: Bool,
+            whisperTo: String?
         )
         case openGroupInbox(
             timestamp: TimeInterval,

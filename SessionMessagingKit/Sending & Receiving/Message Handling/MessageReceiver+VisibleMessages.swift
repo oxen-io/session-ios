@@ -174,15 +174,12 @@ extension MessageReceiver {
                 linkPreviewUrl: (message.linkPreview?.url ?? message.openGroupInvitation?.url),
                 // Keep track of the open group server message ID ↔ message ID relationship
                 openGroupServerMessageId: message.openGroupServerMessageId.map { Int64($0) },
-                openGroupWhisperMods: (message.recipient?.contains(".mods") == true),
-                openGroupWhisperTo: {
-                    guard
-                        let recipientParts: [String] = message.recipient?.components(separatedBy: "."),
-                        recipientParts.count >= 3  // 'server.roomToken.whisperTo.whisperMods'
-                    else { return nil }
-                    
-                    return recipientParts[2]
-                }()
+                openGroupWhisper: message.openGroupWhisper,
+                openGroupWhisperMods: message.openGroupWhisperMods,
+                openGroupWhisperTo: message.openGroupWhisperTo,
+                // If we received an outgoing message then we can assume the interaction has already
+                // been sent, otherwise we should just use whatever the default state is
+                state: (variant == .standardOutgoing ? .sent : nil)
             ).inserted(db)
             // stringlint:ignore_stop
         }
@@ -393,6 +390,7 @@ extension MessageReceiver {
             .filter(Interaction.Columns.timestampMs == reaction.timestamp)
             .filter(Interaction.Columns.authorId == reaction.publicKey)
             .filter(Interaction.Columns.variant != Interaction.Variant.standardIncomingDeleted)
+            .filter(Interaction.Columns.state != Interaction.State.deleted)
             .asRequest(of: Int64.self)
             .fetchOne(db)
         
@@ -463,43 +461,17 @@ extension MessageReceiver {
     ) throws {
         guard variant == .standardOutgoing else { return }
         
-        // Immediately update any existing outgoing message 'RecipientState' records to be 'sent'
-        _ = try? RecipientState
-            .filter(RecipientState.Columns.interactionId == interactionId)
-            .filter(RecipientState.Columns.state != RecipientState.State.sent)
-            .updateAll(db, RecipientState.Columns.state.set(to: RecipientState.State.sent))
+        // Immediately update any existing outgoing message 'State' records to be 'sent' (can
+        // also remove the failure text as it's redundant if the message is in the sent state)
+        _ = try? Interaction
+            .filter(id: interactionId)
+            .filter(Interaction.Columns.state != Interaction.State.sent)
+            .updateAll(
+                db,
+                Interaction.Columns.state.set(to: Interaction.State.sent),
+                Interaction.Columns.mostRecentFailureText.set(to: nil)
+            )
         
-        // Create any addiitonal 'RecipientState' records as needed
-        switch thread.variant {
-            case .contact:
-                if let syncTarget: String = syncTarget {
-                    try RecipientState(
-                        interactionId: interactionId,
-                        recipientId: syncTarget,
-                        state: .sent
-                    ).save(db)
-                }
-                
-            case .legacyGroup, .group:
-                try GroupMember
-                    .filter(GroupMember.Columns.groupId == thread.id)
-                    .fetchAll(db)
-                    .forEach { member in
-                        try RecipientState(
-                            interactionId: interactionId,
-                            recipientId: member.profileId,
-                            state: .sent
-                        ).save(db)
-                    }
-                
-            case .community:
-                try RecipientState(
-                    interactionId: interactionId,
-                    recipientId: thread.id, // For open groups this will always be the thread id
-                    state: .sent
-                ).save(db)
-        }
-    
         // For outgoing messages mark all older interactions as read (the user should have seen
         // them if they send a message - also avoids a situation where the user has "phantom"
         // unread messages that they need to scroll back to before they become marked as read)
@@ -519,9 +491,9 @@ extension MessageReceiver {
             .fetchOne(db)
         
         if let pendingReadReceipt: PendingReadReceipt = maybePendingReadReceipt {
-            try Interaction.markAsRead(
+            try Interaction.markAsRecipientRead(
                 db,
-                recipientId: thread.id,
+                threadId: thread.id,
                 timestampMsValues: [pendingReadReceipt.interactionTimestampMs],
                 readTimestampMs: pendingReadReceipt.readTimestampMs
             )

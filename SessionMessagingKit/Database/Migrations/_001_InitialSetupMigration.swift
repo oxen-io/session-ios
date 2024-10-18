@@ -15,7 +15,7 @@ enum _001_InitialSetupMigration: Migration {
     static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = [
         Contact.self, Profile.self, SessionThread.self, DisappearingMessagesConfiguration.self,
         ClosedGroup.self, ClosedGroupKeyPair.self, OpenGroup.self, Capability.self, BlindedIdLookup.self,
-        GroupMember.self, Interaction.self, RecipientState.self, Attachment.self,
+        GroupMember.self, Interaction.self, LegacyRecipientState.self, Attachment.self,
         InteractionAttachment.self, Quote.self, LinkPreview.self, ControlMessageProcessRecord.self,
         ThreadTypingIndicator.self
     ]
@@ -277,7 +277,7 @@ enum _001_InitialSetupMigration: Migration {
             t.column(Interaction.Columns.body.name)
         }
         
-        try db.create(table: RecipientState.self) { t in
+        try db.create(table: LegacyRecipientState.self) { t in
             t.column(.interactionId, .integer)
                 .notNull()
                 .indexed()                                            // Quicker querying
@@ -390,5 +390,35 @@ enum _001_InitialSetupMigration: Migration {
         }
         
         Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+    }
+}
+
+internal extension _001_InitialSetupMigration {
+    struct LegacyRecipientState: Codable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible {
+        public static var databaseTableName: String { "recipientState" }
+        
+        public typealias Columns = CodingKeys
+        public enum CodingKeys: String, CodingKey, ColumnExpression {
+            case interactionId
+            case recipientId
+            case state
+            case readTimestampMs
+            case mostRecentFailureText
+        }
+        
+        public enum State: Int, Codable, DatabaseValueConvertible {
+            case sending
+            case failed
+            case skipped
+            case sent
+            case failedToSync
+            case syncing
+        }
+        
+        public let interactionId: Int64
+        public let recipientId: String
+        public let state: State
+        public let readTimestampMs: Int64?
+        public let mostRecentFailureText: String?
     }
 }

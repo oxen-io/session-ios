@@ -85,7 +85,8 @@ public class HomeViewModel: NavigatableStateHolder {
                     table: Interaction.self,
                     columns: [
                         .body,
-                        .wasRead
+                        .wasRead,
+                        .state
                     ],
                     joinToPagedType: {
                         let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
@@ -172,19 +173,6 @@ public class HomeViewModel: NavigatableStateHolder {
                         let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
                         
                         return SQL("JOIN \(OpenGroup.self) ON \(openGroup[.threadId]) = \(thread[.id])")
-                    }()
-                ),
-                PagedData.ObservedChanges(
-                    table: RecipientState.self,
-                    columns: [.state],
-                    joinToPagedType: {
-                        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-                        let recipientState: TypedTableAlias<RecipientState> = TypedTableAlias()
-                        
-                        return """
-                            JOIN \(Interaction.self) ON \(interaction[.threadId]) = \(thread[.id])
-                            JOIN \(RecipientState.self) ON \(recipientState[.interactionId]) = \(interaction[.id])
-                        """
                     }()
                 ),
                 PagedData.ObservedChanges(

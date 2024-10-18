@@ -23,6 +23,9 @@ public enum MessageReceiver {
         let sentTimestamp: UInt64
         let serverHash: String?
         let openGroupServerMessageId: UInt64?
+        let openGroupWhisper: Bool
+        let openGroupWhisperMods: Bool
+        let openGroupWhisperTo: String?
         let threadVariant: SessionThread.Variant
         let threadIdGenerator: (Message) throws -> String
         
@@ -37,12 +40,15 @@ public enum MessageReceiver {
                     data: data
                 )
                 
-            case (_, .community(let openGroupId, let messageSender, let timestamp, let messageServerId)):
+            case (_, .community(let openGroupId, let messageSender, let timestamp, let messageServerId, let messageWhisper, let messageWhisperMods, let messageWhisperTo)):
                 plaintext = data.removePadding()   // Remove the padding
                 sender = messageSender
                 sentTimestamp = UInt64(floor(timestamp * 1000)) // Convert to ms for database consistency
                 serverHash = nil
                 openGroupServerMessageId = UInt64(messageServerId)
+                openGroupWhisper = messageWhisper
+                openGroupWhisperMods = messageWhisperMods
+                openGroupWhisperTo = messageWhisperTo
                 threadVariant = .community
                 threadIdGenerator = { message in
                     // Guard against control messages in open groups
@@ -67,6 +73,9 @@ public enum MessageReceiver {
                 sentTimestamp = UInt64(floor(timestamp * 1000)) // Convert to ms for database consistency
                 serverHash = nil
                 openGroupServerMessageId = UInt64(messageServerId)
+                openGroupWhisper = false
+                openGroupWhisperMods = false
+                openGroupWhisperTo = nil
                 threadVariant = .contact
                 threadIdGenerator = { _ in sender }
                 
@@ -92,6 +101,9 @@ public enum MessageReceiver {
                         sentTimestamp = envelope.timestamp
                         serverHash = swarmServerHash
                         openGroupServerMessageId = nil
+                        openGroupWhisper = false
+                        openGroupWhisperMods = false
+                        openGroupWhisperTo = nil
                         threadVariant = .contact
                         threadIdGenerator = { message in
                             switch message {
@@ -156,6 +168,9 @@ public enum MessageReceiver {
                         }
                         
                         openGroupServerMessageId = nil
+                        openGroupWhisper = false
+                        openGroupWhisperMods = false
+                        openGroupWhisperTo = nil
                         threadVariant = .legacyGroup
                         threadIdGenerator = { _ in publicKey }
                         
@@ -176,11 +191,13 @@ public enum MessageReceiver {
            .successOrThrow())
         let message: Message = try (customMessage ?? Message.createMessageFrom(proto, sender: sender))
         message.sender = sender
-        message.recipient = userSessionId
         message.serverHash = serverHash
         message.sentTimestamp = sentTimestamp
         message.receivedTimestamp = UInt64(SnodeAPI.currentOffsetTimestampMs())
         message.openGroupServerMessageId = openGroupServerMessageId
+        message.openGroupWhisper = openGroupWhisper
+        message.openGroupWhisperMods = openGroupWhisperMods
+        message.openGroupWhisperTo = openGroupWhisperTo
         
         // Ignore disappearing message settings in communities (in case of modified clients)
         if threadVariant != .community {

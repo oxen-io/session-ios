@@ -241,7 +241,7 @@ public extension VisibleMessage {
         let visibleMessage: VisibleMessage = VisibleMessage(
             sender: interaction.authorId,
             sentTimestamp: UInt64(interaction.timestampMs),
-            recipient: (try? interaction.recipientStates.fetchOne(db))?.recipientId,
+            recipient: interaction.threadId,
             syncTarget: nil,
             text: interaction.body,
             attachmentIds: ((try? interaction.attachments.fetchAll(db)) ?? [])

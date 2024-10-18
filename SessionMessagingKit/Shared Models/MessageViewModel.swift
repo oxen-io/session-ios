@@ -41,7 +41,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
         case expiresInSeconds
 
         case state
-        case hasAtLeastOneReadReceipt
+        case hasBeenReadByRecipient
         case mostRecentFailureText
         case isSenderOpenGroupModerator
         case isTypingIndicator
@@ -123,8 +123,8 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     public let expiresStartedAtMs: Double?
     public let expiresInSeconds: TimeInterval?
     
-    public let state: RecipientState.State
-    public let hasAtLeastOneReadReceipt: Bool
+    public let state: Interaction.State
+    public let hasBeenReadByRecipient: Bool
     public let mostRecentFailureText: String?
     public let isSenderOpenGroupModerator: Bool
     public let isTypingIndicator: Bool?
@@ -203,7 +203,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
     // MARK: - Mutation
     
     public func with(
-        state: RecipientState.State? = nil,     // Optimistic outgoing messages
+        state: Interaction.State? = nil,     // Optimistic outgoing messages
         mostRecentFailureText: String? = nil,   // Optimistic outgoing messages
         attachments: [Attachment]? = nil,
         reactionInfo: [ReactionInfo]? = nil
@@ -230,7 +230,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             expiresStartedAtMs: self.expiresStartedAtMs,
             expiresInSeconds: self.expiresInSeconds,
             state: (state ?? self.state),
-            hasAtLeastOneReadReceipt: self.hasAtLeastOneReadReceipt,
+            hasBeenReadByRecipient: self.hasBeenReadByRecipient,
             mostRecentFailureText: (mostRecentFailureText ?? self.mostRecentFailureText),
             isSenderOpenGroupModerator: self.isSenderOpenGroupModerator,
             isTypingIndicator: self.isTypingIndicator,
@@ -425,7 +425,7 @@ public struct MessageViewModel: FetchableRecordWithRowId, Decodable, Equatable, 
             expiresStartedAtMs: self.expiresStartedAtMs,
             expiresInSeconds: self.expiresInSeconds,
             state: self.state,
-            hasAtLeastOneReadReceipt: self.hasAtLeastOneReadReceipt,
+            hasBeenReadByRecipient: self.hasBeenReadByRecipient,
             mostRecentFailureText: self.mostRecentFailureText,
             isSenderOpenGroupModerator: self.isSenderOpenGroupModerator,
             isTypingIndicator: self.isTypingIndicator,
@@ -652,7 +652,7 @@ public extension MessageViewModel {
         self.expiresInSeconds = nil
         
         self.state = .sent
-        self.hasAtLeastOneReadReceipt = false
+        self.hasBeenReadByRecipient = false
         self.mostRecentFailureText = nil
         self.isSenderOpenGroupModerator = false
         self.isTypingIndicator = isTypingIndicator
@@ -702,7 +702,7 @@ public extension MessageViewModel {
         body: String?,
         expiresStartedAtMs: Double?,
         expiresInSeconds: TimeInterval?,
-        state: RecipientState.State = .sending,
+        state: Interaction.State = .sending,
         isSenderOpenGroupModerator: Bool,
         currentUserProfile: Profile,
         quote: Quote?,
@@ -736,7 +736,7 @@ public extension MessageViewModel {
         self.expiresInSeconds = expiresInSeconds
         
         self.state = state
-        self.hasAtLeastOneReadReceipt = false
+        self.hasBeenReadByRecipient = false
         self.mostRecentFailureText = nil
         self.isSenderOpenGroupModerator = isSenderOpenGroupModerator
         self.isTypingIndicator = false
@@ -843,7 +843,6 @@ public extension MessageViewModel {
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
             let openGroup: TypedTableAlias<OpenGroup> = TypedTableAlias()
             let groupMember: TypedTableAlias<GroupMember> = TypedTableAlias()
-            let recipientState: TypedTableAlias<RecipientState> = TypedTableAlias()
             let contact: TypedTableAlias<Contact> = TypedTableAlias()
             let disappearingMessagesConfig: TypedTableAlias<DisappearingMessagesConfiguration> = TypedTableAlias()
             let profile: TypedTableAlias<Profile> = TypedTableAlias()
@@ -857,7 +856,6 @@ public extension MessageViewModel {
             let quoteAttachment: TypedTableAlias<Attachment> = TypedTableAlias(name: ViewModel.CodingKeys.quoteAttachment.stringValue)
             let linkPreview: TypedTableAlias<LinkPreview> = TypedTableAlias()
             let linkPreviewAttachment: TypedTableAlias<Attachment> = TypedTableAlias(ViewModel.self, column: .linkPreviewAttachment)
-            let readReceipt: TypedTableAlias<RecipientState> = TypedTableAlias(name: "readReceipt")
             
             let numColumnsBeforeLinkedRecords: Int = 23
             let finalGroupSQL: SQL = (groupSQL ?? "")
@@ -884,11 +882,9 @@ public extension MessageViewModel {
                     \(interaction[.body]),
                     \(interaction[.expiresStartedAtMs]),
                     \(interaction[.expiresInSeconds]),
-            
-                    -- Default to 'sending' assuming non-processed interaction when null
-                    IFNULL(MIN(\(recipientState[.state])), \(SQL("\(RecipientState.State.sending)"))) AS \(ViewModel.Columns.state),
-                    (\(readReceipt[.readTimestampMs]) IS NOT NULL) AS \(ViewModel.Columns.hasAtLeastOneReadReceipt),
-                    \(recipientState[.mostRecentFailureText]) AS \(ViewModel.Columns.mostRecentFailureText),
+                    \(interaction[.state]),
+                    (\(interaction[.recipientReadTimestampMs]) IS NOT NULL) AS \(ViewModel.Columns.hasBeenReadByRecipient),
+                    \(interaction[.mostRecentFailureText]),
                     
                     EXISTS (
                         SELECT 1
@@ -968,15 +964,7 @@ public extension MessageViewModel {
                     \(Interaction.linkPreviewFilterLiteral())
                 )
                 LEFT JOIN \(linkPreviewAttachment) ON \(linkPreviewAttachment[.id]) = \(linkPreview[.attachmentId])
-                LEFT JOIN \(RecipientState.self) ON (
-                    -- Ignore 'skipped' states
-                    \(SQL("\(recipientState[.state]) != \(RecipientState.State.skipped)")) AND
-                    \(recipientState[.interactionId]) = \(interaction[.id])
-                )
-                LEFT JOIN \(readReceipt) ON (
-                    \(readReceipt[.readTimestampMs]) IS NOT NULL AND
-                    \(readReceipt[.interactionId]) = \(interaction[.id])
-                )
+                
                 WHERE \(interaction[.rowId]) IN \(rowIds)
                 \(finalGroupSQL)
                 ORDER BY \(orderSQL)
