@@ -823,7 +823,6 @@ extension LibSession {
             let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
             let keyPair: TypedTableAlias<ClosedGroupKeyPair> = TypedTableAlias()
             
-            let prefixLiteral: SQL = SQL(stringLiteral: "\(SessionId.Prefix.standard.rawValue)%")
             let keyPairThreadIdColumnLiteral: SQL = SQL(stringLiteral: ClosedGroupKeyPair.Columns.threadId.name)
             let receivedTimestampColumnLiteral: SQL = SQL(stringLiteral: ClosedGroupKeyPair.Columns.receivedTimestamp.name)
             let threadIdColumnLiteral: SQL = SQL(stringLiteral: DisappearingMessagesConfiguration.Columns.threadId.name)
@@ -858,7 +857,10 @@ extension LibSession {
                 ) AS \(LegacyGroupInfo.lastKeyPairKey) ON \(LegacyGroupInfo.lastKeyPairKey).\(keyPairThreadIdColumnLiteral) = \(closedGroup[.threadId])
                 LEFT JOIN \(DisappearingMessagesConfiguration.self) AS \(LegacyGroupInfo.disappearingConfigKey) ON \(LegacyGroupInfo.disappearingConfigKey).\(threadIdColumnLiteral) = \(closedGroup[.threadId])
                 
-                WHERE \(SQL("\(closedGroup[.threadId]) LIKE '\(prefixLiteral)'"))
+                WHERE (
+                    \(closedGroup[.threadId]) > \(SessionId.Prefix.standard.rawValue) AND
+                    \(closedGroup[.threadId]) < \(SessionId.Prefix.standard.endOfRangeString)
+                )
             """
             
             let legacyGroupInfoNoMembers: [LegacyGroupInfo] = try request

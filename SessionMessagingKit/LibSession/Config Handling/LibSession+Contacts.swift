@@ -201,8 +201,11 @@ internal extension LibSession {
         let threadIdsToRemove: [String] = try SessionThread
             .filter(!syncedContactIds.contains(SessionThread.Columns.id))
             .filter(SessionThread.Columns.variant == SessionThread.Variant.contact)
-            .filter(!SessionThread.Columns.id.like("\(SessionId.Prefix.blinded15.rawValue)%"))
-            .filter(!SessionThread.Columns.id.like("\(SessionId.Prefix.blinded25.rawValue)%"))
+            .filter(
+                /// Only want to include include standard contact conversations (not blinded conversations)
+                ClosedGroup.Columns.threadId > SessionId.Prefix.standard.rawValue &&
+                ClosedGroup.Columns.threadId < SessionId.Prefix.standard.endOfRangeString
+            )
             .select(.id)
             .asRequest(of: String.self)
             .fetchAll(db)

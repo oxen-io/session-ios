@@ -246,7 +246,10 @@ extension MessageReceiver {
                 currentUserPublicKey: currentUserPublicKey,
                 legacyGroupIds: try ClosedGroup
                     .select(.threadId)
-                    .filter(!ClosedGroup.Columns.threadId.like("\(SessionId.Prefix.group.rawValue)%"))
+                    .filter(
+                        ClosedGroup.Columns.threadId > SessionId.Prefix.standard.rawValue &&
+                        ClosedGroup.Columns.threadId < SessionId.Prefix.standard.endOfRangeString
+                    )
                     .joining(
                         required: ClosedGroup.members
                             .filter(GroupMember.Columns.profileId == currentUserPublicKey)
