@@ -1,9 +1,10 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
 import GRDB
 import SessionUtilitiesKit
 import SessionSnodeKit
+import SessionUIKit
 
 public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, MutablePersistableRecord, TableRecord, ColumnExpressible {
     public static var databaseTableName: String { "interaction" }
@@ -38,7 +39,6 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
 
         return "(\(interaction[.timestampMs]) BETWEEN (\(linkPreview[.timestamp]) - \(halfResolution)) * 1000 AND (\(linkPreview[.timestamp]) + \(halfResolution)) * 1000)"
     }
-    public static let recipientStates = hasMany(RecipientState.self, using: RecipientState.interactionForeignKey)
     
     public typealias Columns = CodingKeys
     public enum CodingKeys: String, CodingKey, ColumnExpression, CaseIterable {
@@ -64,9 +64,15 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         case openGroupServerMessageId
         case openGroupWhisperMods
         case openGroupWhisperTo
+        case openGroupWhisper
+        
+        // Message state properties
+        case state
+        case recipientReadTimestampMs
+        case mostRecentFailureText
     }
     
-    public enum Variant: Int, Codable, Hashable, DatabaseValueConvertible {
+    public enum Variant: Int, Codable, Hashable, DatabaseValueConvertible, CaseIterable {
         case standardIncoming
         case standardOutgoing
         case standardIncomingDeleted
@@ -86,65 +92,21 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         case infoMessageRequestAccepted = 4000
         
         case infoCall = 5000
+    }
+    
+    public enum State: Int, Codable, Hashable, DatabaseValueConvertible {
+        case sending
         
-        // MARK: - Convenience
+        // Spacing out the values to allow for additional statuses in the future
+        case sent = 100
         
-        public static let variantsToIncrementUnreadCount: [Variant] = [
-            .standardIncoming, .infoCall
-        ]
+        case failed = 200
         
-        public var isInfoMessage: Bool {
-            switch self {
-                case .infoClosedGroupCreated, .infoClosedGroupUpdated,
-                    .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving,
-                    .infoDisappearingMessagesUpdate, .infoScreenshotNotification, .infoMediaSavedNotification,
-                    .infoMessageRequestAccepted, .infoCall:
-                    return true
-                    
-                case .standardIncoming, .standardOutgoing, .standardIncomingDeleted:
-                    return false
-            }
-        }
+        case syncing = 300
+        case failedToSync
         
-        public var isGroupControlMessage: Bool {
-            switch self {
-                case .infoClosedGroupCreated, .infoClosedGroupUpdated,
-                    .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving:
-                    return true
-                default:
-                    return false
-            }
-        }
-        
-        public var isGroupLeavingStatus: Bool {
-            switch self {
-                case .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving:
-                    return true
-                default:
-                    return false
-            }
-        }
-        
-        /// This flag controls whether the `wasRead` flag is automatically set to true based on the message variant (as a result it they will
-        /// or won't affect the unread count)
-        fileprivate var canBeUnread: Bool {
-            switch self {
-                case .standardIncoming: return true
-                case .infoCall: return true
-
-                case .infoDisappearingMessagesUpdate, .infoScreenshotNotification, .infoMediaSavedNotification:
-                    /// These won't be counted as unread messages but need to be able to be in an unread state so that they can disappear
-                    /// after being read (if we don't do this their expiration timer will start immediately when received)
-                    return true
-                
-                case .standardOutgoing, .standardIncomingDeleted: return false
-                
-                case .infoClosedGroupCreated, .infoClosedGroupUpdated,
-                    .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving,
-                    .infoMessageRequestAccepted:
-                    return false
-            }
-        }
+        case deleted = 400
+        case localOnly
     }
     
     /// The `id` value is auto incremented by the database, if the `Interaction` hasn't been inserted into
@@ -208,12 +170,12 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
     public let hasMention: Bool
     
     /// The number of seconds until this message should expire
-    public private(set) var expiresInSeconds: TimeInterval?
+    public let expiresInSeconds: TimeInterval?
     
     /// The timestamp in milliseconds since 1970 at which this messages expiration timer started counting
     /// down (this is stored in order to allow the `expiresInSeconds` value to be updated before a
     /// message has expired)
-    public private(set) var expiresStartedAtMs: Double?
+    public let expiresStartedAtMs: Double?
     
     /// This value is the url for the link preview for this interaction
     ///
@@ -230,6 +192,23 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
     
     /// This value is the id of the user within an Open Group who is the target of this whisper interaction
     public let openGroupWhisperTo: String?
+    
+    /// This flag indicates whether this interaction is a whisper
+    public let openGroupWhisper: Bool
+    
+    // Message state properties
+    
+    /// The state of the interaction in relation to the network (eg. whether it's being sent, syncing, deleted, etc.)
+    public let state: State
+    
+    /// The timestamp in milliseconds since 1970 at which this message was read by the recipient
+    ///
+    /// **Note:** This value will only be set in one-to-one conversations if both participants have
+    /// read receipts enabled
+    public let recipientReadTimestampMs: Int64?
+    
+    /// The reason why the most recent attempt to send this message failed
+    public private(set) var mostRecentFailureText: String?
     
     // MARK: - Relationships
          
@@ -269,10 +248,6 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
             )
     }
     
-    public var recipientStates: QueryInterfaceRequest<RecipientState> {
-        request(for: Interaction.recipientStates)
-    }
-    
     // MARK: - Initialization
     
     internal init(
@@ -291,8 +266,12 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         expiresStartedAtMs: Double?,
         linkPreviewUrl: String?,
         openGroupServerMessageId: Int64?,
+        openGroupWhisper: Bool,
         openGroupWhisperMods: Bool,
-        openGroupWhisperTo: String?
+        openGroupWhisperTo: String?,
+        state: State,
+        recipientReadTimestampMs: Int64?,
+        mostRecentFailureText: String?
     ) {
         self.id = id
         self.serverHash = serverHash
@@ -309,8 +288,12 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         self.expiresStartedAtMs = expiresStartedAtMs
         self.linkPreviewUrl = linkPreviewUrl
         self.openGroupServerMessageId = openGroupServerMessageId
+        self.openGroupWhisper = openGroupWhisper
         self.openGroupWhisperMods = openGroupWhisperMods
         self.openGroupWhisperTo = openGroupWhisperTo
+        self.state = (variant.isLocalOnly ? .localOnly : state)
+        self.recipientReadTimestampMs = recipientReadTimestampMs
+        self.mostRecentFailureText = mostRecentFailureText
     }
     
     public init(
@@ -328,8 +311,10 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         expiresStartedAtMs: Double? = nil,
         linkPreviewUrl: String? = nil,
         openGroupServerMessageId: Int64? = nil,
+        openGroupWhisper: Bool = false,
         openGroupWhisperMods: Bool = false,
-        openGroupWhisperTo: String? = nil
+        openGroupWhisperTo: String? = nil,
+        state: Interaction.State? = nil
     ) {
         self.serverHash = serverHash
         self.messageUuid = messageUuid
@@ -352,8 +337,18 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         self.expiresStartedAtMs = (threadVariant != .community ? expiresStartedAtMs : nil)
         self.linkPreviewUrl = linkPreviewUrl
         self.openGroupServerMessageId = openGroupServerMessageId
+        self.openGroupWhisper = openGroupWhisper
         self.openGroupWhisperMods = openGroupWhisperMods
         self.openGroupWhisperTo = openGroupWhisperTo
+        
+        switch (variant.isLocalOnly, state) {
+            case (true, _): self.state = .localOnly
+            case (_, .some(let targetState)): self.state = targetState
+            case (_, .none): self.state = variant.defaultState
+        }
+        
+        self.recipientReadTimestampMs = nil
+        self.mostRecentFailureText = nil
     }
     
     // MARK: - Custom Database Interaction
@@ -362,73 +357,13 @@ public struct Interaction: Codable, Identifiable, Equatable, FetchableRecord, Mu
         // Automatically mark interactions which can't be unread as read so the unread count
         // isn't impacted
         self.wasRead = (self.wasRead || !self.variant.canBeUnread)
+        
+        // Automatically remove the 'mostRecentFailureText' if the state is changing to sent
+        self.mostRecentFailureText = (self.state == .sent ? nil : self.mostRecentFailureText)
     }
     
     public func aroundInsert(_ db: Database, insert: () throws -> InsertionSuccess) throws {
-        let success: InsertionSuccess = try insert()
-        
-        guard
-            let threadVariant: SessionThread.Variant = try? SessionThread
-                .filter(id: threadId)
-                .select(.variant)
-                .asRequest(of: SessionThread.Variant.self)
-                .fetchOne(db)
-        else {
-            SNLog("Inserted an interaction but couldn't find it's associated thead")
-            return
-        }
-        
-        switch variant {
-            case .standardOutgoing:
-                // New outgoing messages should immediately determine their recipient list
-                // from current thread state
-                switch threadVariant {
-                    case .contact:
-                        try RecipientState(
-                            interactionId: success.rowID,
-                            recipientId: threadId,  // Will be the contact id
-                            state: .sending
-                        ).insert(db)
-                        
-                    case .legacyGroup, .group:
-                        let closedGroupMemberIds: Set<String> = (try? GroupMember
-                            .select(.profileId)
-                            .filter(GroupMember.Columns.groupId == threadId)
-                            .asRequest(of: String.self)
-                            .fetchSet(db))
-                            .defaulting(to: [])
-                        
-                        guard !closedGroupMemberIds.isEmpty else {
-                            SNLog("Inserted an interaction but couldn't find it's associated thread members")
-                            return
-                        }
-                        
-                        // Exclude the current user when creating recipient states (as they will never
-                        // receive the message resulting in the message getting flagged as failed)
-                        let userPublicKey: String = getUserHexEncodedPublicKey(db)
-                        try closedGroupMemberIds
-                            .filter { memberId -> Bool in memberId != userPublicKey }
-                            .forEach { memberId in
-                                try RecipientState(
-                                    interactionId: success.rowID,
-                                    recipientId: memberId,
-                                    state: .sending
-                                ).insert(db)
-                            }
-                        
-                    case .community:
-                        // Since we use the 'RecipientState' type to manage the message state
-                        // we need to ensure we have a state for all threads; so for open groups
-                        // we just use the open group id as the 'recipientId' value
-                        try RecipientState(
-                            interactionId: success.rowID,
-                            recipientId: threadId,  // Will be the open group id
-                            state: .sending
-                        ).insert(db)
-                }
-                
-            default: break
-        }
+        _ = try insert()
         
         // Start the disappearing messages timer if needed
         if self.expiresStartedAtMs != nil {
@@ -456,7 +391,10 @@ public extension Interaction {
         hasMention: Bool? = nil,
         expiresInSeconds: TimeInterval? = nil,
         expiresStartedAtMs: Double? = nil,
-        openGroupServerMessageId: Int64? = nil
+        openGroupServerMessageId: Int64? = nil,
+        state: State? = nil,
+        recipientReadTimestampMs: Int64? = nil,
+        mostRecentFailureText: String? = nil
     ) -> Interaction {
         return Interaction(
             id: self.id,
@@ -474,8 +412,12 @@ public extension Interaction {
             expiresStartedAtMs: (expiresStartedAtMs ?? self.expiresStartedAtMs),
             linkPreviewUrl: self.linkPreviewUrl,
             openGroupServerMessageId: (openGroupServerMessageId ?? self.openGroupServerMessageId),
+            openGroupWhisper: self.openGroupWhisper,
             openGroupWhisperMods: self.openGroupWhisperMods,
-            openGroupWhisperTo: self.openGroupWhisperTo
+            openGroupWhisperTo: self.openGroupWhisperTo,
+            state: (state ?? self.state),
+            recipientReadTimestampMs: (recipientReadTimestampMs ?? self.recipientReadTimestampMs),
+            mostRecentFailureText: (mostRecentFailureText ?? self.mostRecentFailureText)
         )
     }
     
@@ -641,23 +583,20 @@ public extension Interaction {
     /// This method flags sent messages as read for the specified recipients
     ///
     /// **Note:** This method won't update the 'wasRead' flag (it will be updated via the above method)
-    @discardableResult static func markAsRead(
+    @discardableResult static func markAsRecipientRead(
         _ db: Database,
-        recipientId: String,
+        threadId: String,
         timestampMsValues: [Int64],
         readTimestampMs: Int64
     ) throws -> Set<Int64> {
         guard db[.areReadReceiptsEnabled] == true else { return [] }
         
-        // Update the read state
-        let rowIds: [Int64] = try RecipientState
+        // Get the row ids for the interactions which should be updated
+        let rowIds: [Int64] = try Interaction
             .select(Column.rowID)
-            .filter(RecipientState.Columns.recipientId == recipientId)
-            .joining(
-                required: RecipientState.interaction
-                    .filter(timestampMsValues.contains(Columns.timestampMs))
-                    .filter(Columns.variant == Variant.standardOutgoing)
-            )
+            .filter(Interaction.Columns.threadId == threadId)
+            .filter(timestampMsValues.contains(Columns.timestampMs))
+            .filter(Variant.variantsWhichSupportReadReceipts.contains(Columns.variant))
             .asRequest(of: Int64.self)
             .fetchAll(db)
         
@@ -665,34 +604,33 @@ public extension Interaction {
         // and for pending read receipts
         guard !rowIds.isEmpty else { return timestampMsValues.asSet() }
         
-        // Update the 'readTimestampMs' if it doesn't match (need to do this to prevent
+        // Update the 'recipientReadTimestampMs' if it doesn't match (need to do this to prevent
         // the UI update from being triggered for a redundant update)
-        try RecipientState
+        try Interaction
             .filter(rowIds.contains(Column.rowID))
-            .filter(RecipientState.Columns.readTimestampMs == nil)
+            .filter(Interaction.Columns.recipientReadTimestampMs == nil)
             .updateAll(
                 db,
-                RecipientState.Columns.readTimestampMs.set(to: readTimestampMs)
+                Interaction.Columns.recipientReadTimestampMs.set(to: readTimestampMs)
             )
         
-        // If the message still appeared to be sending then mark it as sent
-        try RecipientState
+        // If the message still appeared to be sending then mark it as sent (can also remove the
+        // failure text as it's redundant if the message is in the sent state)
+        try Interaction
             .filter(rowIds.contains(Column.rowID))
-            .filter(RecipientState.Columns.state == RecipientState.State.sending)
+            .filter(Interaction.Columns.state == Interaction.State.sending)
             .updateAll(
                 db,
-                RecipientState.Columns.state.set(to: RecipientState.State.sent)
+                Interaction.Columns.state.set(to: Interaction.State.sent),
+                Interaction.Columns.mostRecentFailureText.set(to: nil)
             )
         
         // Retrieve the set of timestamps which were updated
         let timestampsUpdated: Set<Int64> = try Interaction
             .select(Columns.timestampMs)
+            .filter(rowIds.contains(Column.rowID))
             .filter(timestampMsValues.contains(Columns.timestampMs))
-            .filter(Columns.variant == Variant.standardOutgoing)
-            .joining(
-                required: Interaction.recipientStates
-                    .filter(rowIds.contains(Column.rowID))
-            )
+            .filter(Variant.variantsWhichSupportReadReceipts.contains(Columns.variant))
             .asRequest(of: Int64.self)
             .fetchSet(db)
         
@@ -836,8 +774,6 @@ public extension Interaction {
         return (expiresInSeconds ?? 0 > 0)
     }
     
-    var openGroupWhisper: Bool { return (openGroupWhisperMods || (openGroupWhisperTo != nil)) }
-    
     var notificationIdentifiers: [String] {
         [
             notificationIdentifier(shouldGroupMessagesForThread: true),
@@ -874,14 +810,18 @@ public extension Interaction {
             body: nil,
             timestampMs: timestampMs,
             receivedAtTimestampMs: receivedAtTimestampMs,
-            wasRead: (wasRead || !Variant.standardIncomingDeleted.canBeUnread),
+            wasRead: true, // Never consider deleted messages unread
             hasMention: false,
             expiresInSeconds: expiresInSeconds,
             expiresStartedAtMs: expiresStartedAtMs,
             linkPreviewUrl: nil,
             openGroupServerMessageId: openGroupServerMessageId,
+            openGroupWhisper: openGroupWhisper,
             openGroupWhisperMods: openGroupWhisperMods,
-            openGroupWhisperTo: openGroupWhisperTo
+            openGroupWhisperTo: openGroupWhisperTo,
+            state: .deleted,
+            recipientReadTimestampMs: nil,
+            mostRecentFailureText: nil
         )
     }
     
@@ -1046,43 +986,163 @@ public extension Interaction {
                 return messageInfo.previewText(threadContactDisplayName: threadContactDisplayName)
         }
     }
+}
+
+// MARK: - Interaction.Variant Convenience
+
+public extension Interaction.Variant {
+    static let variantsToIncrementUnreadCount: [Interaction.Variant] = [
+        .standardIncoming, .infoCall
+    ]
+    static let variantsWhichSupportReadReceipts: Set<Interaction.Variant> = [
+        .standardOutgoing
+    ]
+    static let variantsWhichAreLocalOnly: Set<Interaction.Variant> = Set(Interaction.Variant.allCases
+        .filter { $0.isInfoMessage || $0.isDeletedMessage })
     
-    func state(_ db: Database) throws -> RecipientState.State {
-        let states: [RecipientState.State] = try RecipientState.State
-            .fetchAll(
-                db,
-                recipientStates.select(.state)
-            )
-        
-        return Interaction.state(for: states)
+    var isLocalOnly: Bool { Interaction.Variant.variantsWhichAreLocalOnly.contains(self) }
+    
+    var isInfoMessage: Bool {
+        switch self {
+            case .infoClosedGroupCreated, .infoClosedGroupUpdated,
+                .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving,
+                .infoDisappearingMessagesUpdate, .infoScreenshotNotification, .infoMediaSavedNotification,
+                .infoMessageRequestAccepted, .infoCall:
+                return true
+                
+            case .standardIncoming, .standardOutgoing, .standardIncomingDeleted:
+                return false
+        }
     }
     
-    static func state(for states: [RecipientState.State]) -> RecipientState.State {
-        // If there are no states then assume this is a new interaction which hasn't been
-        // saved yet so has no states
-        guard !states.isEmpty else { return .sending }
-        
-        var hasFailed: Bool = false
-        
-        for state in states {
-            switch state {
-                // If there are any "sending" recipients, consider this message "sending"
-                case .sending: return .sending
-                    
-                case .failed:
-                    hasFailed = true
-                    break
-                    
-                default: break
-            }
+    var isDeletedMessage: Bool {
+        switch self {
+            case .standardIncomingDeleted: return true
+            
+            default: return false
         }
-        
-        // If there are any "failed" recipients, consider this message "failed"
-        guard !hasFailed else { return .failed }
-        
-        // Otherwise, consider the message "sent"
-        //
-        // Note: This includes messages with no recipients
-        return .sent
+    }
+    
+    var isGroupControlMessage: Bool {
+        switch self {
+            case .infoClosedGroupCreated, .infoClosedGroupUpdated,
+                .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving:
+                return true
+            default:
+                return false
+        }
+    }
+    
+    var isGroupLeavingStatus: Bool {
+        switch self {
+            case .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving:
+                return true
+            default:
+                return false
+        }
+    }
+    
+    fileprivate var defaultState: Interaction.State {
+        switch self {
+            case .standardIncoming: return .sent
+            case .standardOutgoing: return .sending
+                
+            case .standardIncomingDeleted: return .deleted
+            case .infoClosedGroupCreated, .infoClosedGroupUpdated, .infoClosedGroupCurrentUserLeft,
+                .infoClosedGroupCurrentUserErrorLeaving, .infoClosedGroupCurrentUserLeaving,
+                .infoDisappearingMessagesUpdate, .infoScreenshotNotification, .infoMediaSavedNotification,
+                .infoMessageRequestAccepted, .infoCall:
+                return .localOnly
+        }
+    }
+    
+    /// This flag controls whether the `wasRead` flag is automatically set to true based on the message variant (as a result it they will
+    /// or won't affect the unread count)
+    fileprivate var canBeUnread: Bool {
+        switch self {
+            case .standardIncoming: return true
+            case .infoCall: return true
+
+            case .infoDisappearingMessagesUpdate, .infoScreenshotNotification, .infoMediaSavedNotification:
+                /// These won't be counted as unread messages but need to be able to be in an unread state so that they can disappear
+                /// after being read (if we don't do this their expiration timer will start immediately when received)
+                return true
+            
+            case .standardOutgoing, .standardIncomingDeleted: return false
+            
+            case .infoClosedGroupCreated, .infoClosedGroupUpdated,
+                .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving,
+                .infoMessageRequestAccepted:
+                return false
+        }
+    }
+}
+
+// MARK: - Interaction.State Convenience
+
+public extension Interaction.State {
+    func statusIconInfo(
+        variant: Interaction.Variant,
+        hasBeenReadByRecipient: Bool,
+        hasAttachments: Bool
+    ) -> (image: UIImage?, text: String?, themeTintColor: ThemeValue) {
+        guard variant == .standardOutgoing else {
+            return (nil, nil, .messageBubble_deliveryStatus)
+        }
+
+        switch (self, hasBeenReadByRecipient, hasAttachments) {
+            case (.deleted, _, _), (.localOnly, _, _):
+                return (nil, nil, .messageBubble_deliveryStatus)
+            
+            case (.sending, _, true):
+                return (
+                    UIImage(systemName: "ellipsis.circle"),
+                    "uploading".localized(),
+                    .messageBubble_deliveryStatus
+                )
+                
+            case (.sending, _, _):
+                return (
+                    UIImage(systemName: "ellipsis.circle"),
+                    "sending".localized(),
+                    .messageBubble_deliveryStatus
+                )
+
+            case (.sent, false, _):
+                return (
+                    UIImage(systemName: "checkmark.circle"),
+                    "disappearingMessagesSent".localized(),
+                    .messageBubble_deliveryStatus
+                )
+
+            case (.sent, true, _):
+                return (
+                    UIImage(systemName: "eye.fill"),
+                    "read".localized(),
+                    .messageBubble_deliveryStatus
+                )
+                
+            case (.failed, _, _):
+                return (
+                    UIImage(systemName: "exclamationmark.triangle"),
+                    "messageStatusFailedToSend".localized(),
+                    .danger
+                )
+                
+            case (.failedToSync, _, _):
+                return (
+                    UIImage(systemName: "exclamationmark.triangle"),
+                    "messageStatusFailedToSync".localized(),
+                    .warning
+                )
+                
+            case (.syncing, _, _):
+                return (
+                    UIImage(systemName: "ellipsis.circle"),
+                    "messageStatusSyncing".localized(),
+                    .warning
+                )
+
+        }
     }
 }

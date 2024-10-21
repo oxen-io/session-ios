@@ -23,12 +23,12 @@ public enum FailedMessageSendsJob: JobExecutor {
         // Update all 'sending' message states to 'failed'
         dependencies.storage
             .writePublisher(using: dependencies) { db in
-                let sendChangeCount: Int = try RecipientState
-                    .filter(RecipientState.Columns.state == RecipientState.State.sending)
-                    .updateAll(db, RecipientState.Columns.state.set(to: RecipientState.State.failed))
-                let syncChangeCount: Int = try RecipientState
-                    .filter(RecipientState.Columns.state == RecipientState.State.syncing)
-                    .updateAll(db, RecipientState.Columns.state.set(to: RecipientState.State.failedToSync))
+                let sendChangeCount: Int = try Interaction
+                    .filter(Interaction.Columns.state == Interaction.State.sending)
+                    .updateAll(db, Interaction.Columns.state.set(to: Interaction.State.failed))
+                let syncChangeCount: Int = try Interaction
+                    .filter(Interaction.Columns.state == Interaction.State.syncing)
+                    .updateAll(db, Interaction.Columns.state.set(to: Interaction.State.failedToSync))
                 attachmentChangeCount = try Attachment
                     .filter(Attachment.Columns.state == Attachment.State.uploading)
                     .updateAll(db, Attachment.Columns.state.set(to: Attachment.State.failedUpload))

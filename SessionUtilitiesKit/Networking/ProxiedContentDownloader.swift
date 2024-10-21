@@ -463,7 +463,7 @@ open class ProxiedContentDownloader: NSObject, URLSessionTaskDelegate, URLSessio
     // evacuated from the cache; if a cache consumer (e.g. view) is
     // still using the asset, the asset won't be deleted on disk until
     // it is no longer in use.
-    private var assetMap = LRUCache<NSURL, ProxiedContentAsset>(maxSize: 100)
+    private var assetMap = LRUCache<NSURL, ProxiedContentAsset>(maxCacheSize: 100)
     // TODO: We could use a proper queue, e.g. implemented with a linked
     // list.
     private var assetRequestQueue = [ProxiedContentAssetRequest]()

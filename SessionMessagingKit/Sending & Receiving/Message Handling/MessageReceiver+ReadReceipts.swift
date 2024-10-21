@@ -13,9 +13,9 @@ extension MessageReceiver {
         guard let timestampMsValues: [Int64] = message.timestamps?.map({ Int64($0) }) else { return }
         guard let readTimestampMs: Int64 = message.receivedTimestamp.map({ Int64($0) }) else { return }
         
-        let pendingTimestampMs: Set<Int64> = try Interaction.markAsRead(
+        let pendingTimestampMs: Set<Int64> = try Interaction.markAsRecipientRead(
             db,
-            recipientId: sender,
+            threadId: sender,
             timestampMsValues: timestampMsValues,
             readTimestampMs: readTimestampMs
         )

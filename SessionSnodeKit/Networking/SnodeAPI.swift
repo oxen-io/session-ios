@@ -463,6 +463,7 @@ public final class SnodeAPI {
                         )
                     ),
                     responseType: SendMessagesResponse.self,
+                    requestAndPathBuildTimeout: Network.defaultTimeout,
                     using: dependencies
                 )
             }
@@ -485,6 +486,7 @@ public final class SnodeAPI {
                     )
                 ),
                 responseType: SendMessagesResponse.self,
+                requestAndPathBuildTimeout: Network.defaultTimeout,
                 using: dependencies
             )
         }()
@@ -519,9 +521,11 @@ public final class SnodeAPI {
                             body: LegacySendMessagesRequest(
                                 message: message,
                                 namespace: namespace
-                            )
+                            ),
+                            retryCount: 0   // The SendMessageJob already has a retry mechanism
                         ),
                         responseType: SendMessagesResponse.self,
+                        requestAndPathBuildTimeout: Network.defaultTimeout,
                         using: dependencies
                     )
                 }
@@ -541,9 +545,11 @@ public final class SnodeAPI {
                             timestampMs: UInt64(SnodeAPI.currentOffsetTimestampMs()),
                             ed25519PublicKey: userED25519KeyPair.publicKey,
                             ed25519SecretKey: userED25519KeyPair.secretKey
-                        )
+                        ),
+                        retryCount: 0   // The SendMessageJob already has a retry mechanism
                     ),
                     responseType: SendMessagesResponse.self,
+                    requestAndPathBuildTimeout: Network.defaultTimeout,
                     using: dependencies
                 )
             }()
@@ -646,6 +652,7 @@ public final class SnodeAPI {
                     ),
                     responseType: Network.BatchResponse.self,
                     requireAllBatchResponses: false,
+                    requestAndPathBuildTimeout: Network.defaultTimeout,
                     using: dependencies
                 )
                 .send(using: dependencies)

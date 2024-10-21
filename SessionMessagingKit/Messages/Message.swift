@@ -10,9 +10,12 @@ public class Message: Codable {
     public var id: String?
     public var sentTimestamp: UInt64?
     public var receivedTimestamp: UInt64?
-    public var recipient: String?
     public var sender: String?
     public var openGroupServerMessageId: UInt64?
+    public var openGroupWhisper: Bool
+    public var openGroupWhisperMods: Bool
+    public var openGroupWhisperTo: String?
+    
     public var serverHash: String?
     public var ttl: UInt64 { 14 * 24 * 60 * 60 * 1000 }
     public var isSelfSendValid: Bool { false }
@@ -29,7 +32,7 @@ public class Message: Codable {
     public var isValid: Bool {
         if let sentTimestamp = sentTimestamp { guard sentTimestamp > 0 else { return false } }
         if let receivedTimestamp = receivedTimestamp { guard receivedTimestamp > 0 else { return false } }
-        return sender != nil && recipient != nil
+        return sender != nil
     }
     
     // MARK: - Initialization
@@ -38,9 +41,11 @@ public class Message: Codable {
         id: String? = nil,
         sentTimestamp: UInt64? = nil,
         receivedTimestamp: UInt64? = nil,
-        recipient: String? = nil,
         sender: String? = nil,
         openGroupServerMessageId: UInt64? = nil,
+        openGroupWhisper: Bool = false,
+        openGroupWhisperMods: Bool = false,
+        openGroupWhisperTo: String? = nil,
         serverHash: String? = nil,
         expiresInSeconds: TimeInterval? = nil,
         expiresStartedAtMs: Double? = nil
@@ -48,9 +53,11 @@ public class Message: Codable {
         self.id = id
         self.sentTimestamp = sentTimestamp
         self.receivedTimestamp = receivedTimestamp
-        self.recipient = recipient
         self.sender = sender
         self.openGroupServerMessageId = openGroupServerMessageId
+        self.openGroupWhisper = openGroupWhisper
+        self.openGroupWhisperMods = openGroupWhisperMods
+        self.openGroupWhisperTo = openGroupWhisperTo
         self.serverHash = serverHash
         self.expiresInSeconds = expiresInSeconds
         self.expiresStartedAtMs = expiresStartedAtMs
@@ -408,7 +415,10 @@ public extension Message {
                 openGroupId: openGroupId,
                 sender: sender,
                 timestamp: timestamp,
-                messageServerId: message.id
+                messageServerId: message.id,
+                whisper: message.whisper,
+                whisperMods: message.whisperMods,
+                whisperTo: message.whisperTo
             ),
             using: dependencies
         )

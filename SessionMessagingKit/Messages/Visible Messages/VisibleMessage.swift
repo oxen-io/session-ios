@@ -56,7 +56,6 @@ public final class VisibleMessage: Message {
     public init(
         sender: String? = nil,
         sentTimestamp: UInt64? = nil,
-        recipient: String? = nil,
         syncTarget: String? = nil,
         text: String?,
         attachmentIds: [String] = [],
@@ -79,7 +78,6 @@ public final class VisibleMessage: Message {
         
         super.init(
             sentTimestamp: sentTimestamp,
-            recipient: recipient,
             sender: sender
         )
     }
@@ -241,7 +239,6 @@ public extension VisibleMessage {
         let visibleMessage: VisibleMessage = VisibleMessage(
             sender: interaction.authorId,
             sentTimestamp: UInt64(interaction.timestampMs),
-            recipient: (try? interaction.recipientStates.fetchOne(db))?.recipientId,
             syncTarget: nil,
             text: interaction.body,
             attachmentIds: ((try? interaction.attachments.fetchAll(db)) ?? [])

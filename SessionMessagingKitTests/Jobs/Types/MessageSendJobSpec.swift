@@ -149,8 +149,12 @@ class MessageSendJobSpec: QuickSpec {
                         expiresStartedAtMs: nil,
                         linkPreviewUrl: nil,
                         openGroupServerMessageId: nil,
+                        openGroupWhisper: false,
                         openGroupWhisperMods: false,
-                        openGroupWhisperTo: nil
+                        openGroupWhisperTo: nil,
+                        state: .sending,
+                        recipientReadTimestampMs: nil,
+                        mostRecentFailureText: nil
                     )
                     job = Job(
                         variant: .messageSend,

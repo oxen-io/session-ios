@@ -346,16 +346,6 @@ public class ConversationViewModel: OWSAudioPlayerDelegate, NavigatableStateHold
                     }()
                 ),
                 PagedData.ObservedChanges(
-                    table: RecipientState.self,
-                    columns: [.state, .readTimestampMs, .mostRecentFailureText],
-                    joinToPagedType: {
-                        let interaction: TypedTableAlias<Interaction> = TypedTableAlias()
-                        let recipientState: TypedTableAlias<RecipientState> = TypedTableAlias()
-                        
-                        return SQL("LEFT JOIN \(RecipientState.self) ON \(recipientState[.interactionId]) = \(interaction[.id])")
-                    }()
-                ),
-                PagedData.ObservedChanges(
                     table: DisappearingMessagesConfiguration.self,
                     columns: [ .isEnabled, .type, .durationSeconds ],
                     joinToPagedType: {
