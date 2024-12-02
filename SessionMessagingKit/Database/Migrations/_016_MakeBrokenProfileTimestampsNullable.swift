@@ -76,6 +76,6 @@ enum _016_MakeBrokenProfileTimestampsNullable: Migration {
         try db.drop(table: Profile.self)
         try db.rename(table: TmpProfile.databaseTableName, to: Profile.databaseTableName)
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

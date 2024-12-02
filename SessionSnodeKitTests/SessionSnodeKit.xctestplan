@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "1486FB69-012F-4B53-8558-C6C87144E0EE",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testExecutionOrdering" : "random"
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FDB5DAF92A981C42002C8721",
+        "name" : "SessionSnodeKitTests"
+      }
+    }
+  ],
+  "version" : 1
+}

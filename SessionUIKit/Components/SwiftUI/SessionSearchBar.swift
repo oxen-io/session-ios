@@ -1,7 +1,6 @@
 // Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
 
 import SwiftUI
-import SessionUtilitiesKit
 
 public struct SessionSearchBar: View {
     @Binding var searchText: String
@@ -32,7 +31,7 @@ public struct SessionSearchBar: View {
                 
                 ZStack(alignment: .leading) {
                     if searchText.isEmpty {
-                        Text("search".localized())
+                        Text("search".localizedSNUIKit())
                             .font(.system(size: Values.smallFontSize))
                             .foregroundColor(themeColor: .textSecondary)
                     }
@@ -59,7 +58,7 @@ public struct SessionSearchBar: View {
             Button {
                 cancelAction()
             } label: {
-                Text("cancel".localized())
+                Text("cancel".localizedSNUIKit())
                     .font(.system(size: Values.smallFontSize))
                     .foregroundColor(themeColor: .textSecondary)
                     .padding(.leading, Values.mediumSpacing)

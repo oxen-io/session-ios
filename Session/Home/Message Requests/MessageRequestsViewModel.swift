@@ -5,6 +5,7 @@ import Combine
 import GRDB
 import DifferenceKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
@@ -23,7 +24,7 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
     
     // MARK: - Initialization
     
-    init(using dependencies: Dependencies = Dependencies()) {
+    init(using dependencies: Dependencies) {
         self.dependencies = dependencies
         self.pagedDataObserver = nil
         
@@ -31,8 +32,9 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
         // also want to skip the initial query and trigger it async so that the push animation
         // doesn't stutter (it should load basically immediately but without this there is a
         // distinct stutter)
-        let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         let thread: TypedTableAlias<SessionThread> = TypedTableAlias()
+        
         self.pagedDataObserver = PagedDatabaseObserver(
             pagedTable: SessionThread.self,
             pageSize: MessageRequestsViewModel.pageSize,
@@ -80,11 +82,11 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
             /// **Note:** This `optimisedJoinSQL` value includes the required minimum joins needed for the query but differs
             /// from the JOINs that are actually used for performance reasons as the basic logic can be simpler for where it's used
             joinSQL: SessionThreadViewModel.optimisedJoinSQL,
-            filterSQL: SessionThreadViewModel.messageRequestsFilterSQL(userPublicKey: userPublicKey),
+            filterSQL: SessionThreadViewModel.messageRequestsFilterSQL(userSessionId: userSessionId),
             groupSQL: SessionThreadViewModel.groupSQL,
             orderSQL: SessionThreadViewModel.messageRequetsOrderSQL,
             dataQuery: SessionThreadViewModel.baseQuery(
-                userPublicKey: userPublicKey,
+                userSessionId: userSessionId,
                 groupSQL: SessionThreadViewModel.groupSQL,
                 orderSQL: SessionThreadViewModel.messageRequetsOrderSQL
             ),
@@ -94,7 +96,8 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                 }
                 
                 self?.pendingTableDataSubject.send(data)
-            }
+            },
+            using: dependencies
         )
         
         // Run the initial query on a background thread so we don't block the push transition
@@ -140,17 +143,32 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                     section: .threads,
                     elements: data
                         .sorted { lhs, rhs -> Bool in lhs.lastInteractionDate > rhs.lastInteractionDate }
-                        .map { viewModel -> SessionCell.Info<SessionThreadViewModel> in
+                        .map { [dependencies] viewModel -> SessionCell.Info<SessionThreadViewModel> in
                             SessionCell.Info(
-                                id: viewModel.populatingCurrentUserBlindedKeys(
-                                    currentUserBlinded15PublicKeyForThisThread: groupedOldData[viewModel.threadId]?
+                                id: viewModel.populatingCurrentUserBlindedIds(
+                                    currentUserBlinded15SessionIdForThisThread: groupedOldData[viewModel.threadId]?
                                         .first?
                                         .id
-                                        .currentUserBlinded15PublicKey,
-                                    currentUserBlinded25PublicKeyForThisThread: groupedOldData[viewModel.threadId]?
+                                        .currentUserBlinded15SessionId,
+                                    currentUserBlinded25SessionIdForThisThread: groupedOldData[viewModel.threadId]?
                                         .first?
                                         .id
-                                        .currentUserBlinded25PublicKey
+                                        .currentUserBlinded25SessionId,
+                                    wasKickedFromGroup: (
+                                        viewModel.threadVariant == .group &&
+                                        LibSession.wasKickedFromGroup(
+                                            groupSessionId: SessionId(.group, hex: viewModel.threadId),
+                                            using: dependencies
+                                        )
+                                    ),
+                                    groupIsDestroyed: (
+                                        viewModel.threadVariant == .group &&
+                                        LibSession.groupIsDestroyed(
+                                            groupSessionId: SessionId(.group, hex: viewModel.threadId),
+                                            using: dependencies
+                                        )
+                                    ),
+                                    using: dependencies
                                 ),
                                 accessibility: Accessibility(
                                     identifier: "Message request"
@@ -200,7 +218,7 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                             cancelStyle: .alert_text,
                             onConfirm: { _ in
                                 // Clear the requests
-                                dependencies.storage.write { db in
+                                dependencies[singleton: .storage].write { db in
                                     // Remove the one-to-one requests
                                     try SessionThread.deleteOrLeave(
                                         db,
@@ -208,17 +226,21 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                                         threadIds: threadInfo
                                             .filter { _, variant in variant == .contact }
                                             .map { id, _ in id },
-                                        calledFromConfigHandling: false
+                                        threadVariant: .contact,
+                                        calledFromConfig: nil,
+                                        using: dependencies
                                     )
                                     
-                                    // Remove the group requests
+                                    // Remove the group invites
                                     try SessionThread.deleteOrLeave(
                                         db,
                                         type: .deleteGroupAndContent,
                                         threadIds: threadInfo
                                             .filter { _, variant in variant == .legacyGroup || variant == .group }
                                             .map { id, _ in id },
-                                        calledFromConfigHandling: false
+                                        threadVariant: .group,
+                                        calledFromConfig: nil,
+                                        using: dependencies
                                     )
                                 }
                             }
@@ -248,16 +270,14 @@ class MessageRequestsViewModel: SessionTableViewModel, NavigatableStateHolder, O
                 
                 return UIContextualAction.configuration(
                     for: UIContextualAction.generateSwipeActions(
-                        [
-                            (threadViewModel.threadVariant != .contact ? nil : .block),
-                            .delete
-                        ].compactMap { $0 },
+                        [.block, .delete],
                         for: .trailing,
                         indexPath: indexPath,
                         tableView: tableView,
                         threadViewModel: threadViewModel,
                         viewController: viewController,
-                        navigatableStateHolder: nil
+                        navigatableStateHolder: nil,
+                        using: dependencies
                     )
                 )
                 

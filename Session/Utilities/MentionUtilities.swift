@@ -4,6 +4,7 @@ import Foundation
 import GRDB
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 public enum MentionUtilities {
     public enum MentionLocation {
@@ -18,22 +19,24 @@ public enum MentionUtilities {
     public static func highlightMentionsNoAttributes(
         in string: String,
         threadVariant: SessionThread.Variant,
-        currentUserPublicKey: String,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?
+        currentUserSessionId: String,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?,
+        using dependencies: Dependencies
     ) -> String {
         /// **Note:** We are returning the string here so the 'textColor' and 'primaryColor' values are irrelevant
         return highlightMentions(
             in: string,
             threadVariant: threadVariant,
-            currentUserPublicKey: currentUserPublicKey,
-            currentUserBlinded15PublicKey: currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: currentUserBlinded25PublicKey,
+            currentUserSessionId: currentUserSessionId,
+            currentUserBlinded15SessionId: currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: currentUserBlinded25SessionId,
             location: .styleFree,
             textColor: .black,
             theme: .classicDark,
             primaryColor: Theme.PrimaryColor.green,
-            attributes: [:]
+            attributes: [:],
+            using: dependencies
         )
         .string
         .deformatted()
@@ -42,14 +45,15 @@ public enum MentionUtilities {
     public static func highlightMentions(
         in string: String,
         threadVariant: SessionThread.Variant,
-        currentUserPublicKey: String?,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?,
+        currentUserSessionId: String?,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?,
         location: MentionLocation,
         textColor: UIColor,
         theme: Theme,
         primaryColor: Theme.PrimaryColor,
-        attributes: [NSAttributedString.Key: Any]
+        attributes: [NSAttributedString.Key: Any],
+        using dependencies: Dependencies
     ) -> NSAttributedString {
         guard
             let regex: NSRegularExpression = try? NSRegularExpression(pattern: "@[0-9a-fA-F]{66}", options: [])
@@ -60,10 +64,10 @@ public enum MentionUtilities {
         var string = string
         var lastMatchEnd: Int = 0
         var mentions: [(range: NSRange, isCurrentUser: Bool)] = []
-        let currentUserPublicKeys: Set<String> = [
-            currentUserPublicKey,
-            currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey
+        let currentUserSessionIds: Set<String> = [
+            currentUserSessionId,
+            currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId
         ]
         .compactMap { $0 }
         .asSet()
@@ -75,12 +79,13 @@ public enum MentionUtilities {
         ) {
             guard let range: Range = Range(match.range, in: string) else { break }
             
-            let publicKey: String = String(string[range].dropFirst()) // Drop the @
-            let isCurrentUser: Bool = currentUserPublicKeys.contains(publicKey)
+            let sessionId: String = String(string[range].dropFirst()) // Drop the @
+            let isCurrentUser: Bool = currentUserSessionIds.contains(sessionId)
             
             guard let targetString: String = {
                 guard !isCurrentUser else { return "you".localized() }
-                guard let displayName: String = Profile.displayNameNoFallback(id: publicKey, threadVariant: threadVariant) else {
+                // FIXME: This does a database query and is happening when populating UI - should try to refactor it somehow (ideally resolve a set of mentioned profiles as part of the database query)
+                guard let displayName: String = Profile.displayNameNoFallback(id: sessionId, threadVariant: threadVariant, using: dependencies) else {
                     lastMatchEnd = (match.range.location + match.range.length)
                     return nil
                 }

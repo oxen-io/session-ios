@@ -5,6 +5,8 @@ import GRDB
 import SessionUtil
 import SessionUtilitiesKit
 
+// MARK: - LibSession
+
 internal extension LibSession {
     static let columnsRelatedToUserProfile: [Profile.Columns] = [
         Profile.Columns.name,
@@ -15,33 +17,44 @@ internal extension LibSession {
     static let syncedSettings: [String] = [
         Setting.BoolKey.checkForCommunityMessageRequests.rawValue
     ]
-    
-    // MARK: - Incoming Changes
-    
-    static func handleUserProfileUpdate(
-        _ db: Database,
-        in conf: UnsafeMutablePointer<config_object>?,
-        mergeNeedsDump: Bool,
-        latestConfigSentTimestampMs: Int64,
-        using dependencies: Dependencies = Dependencies()
-    ) throws {
-        typealias ProfileData = (profileName: String, profilePictureUrl: String?, profilePictureKey: Data?)
+}
+
+// MARK: - LibSessionCacheType
+
+public extension LibSessionCacheType {
+    var userProfileDisplayName: String {
+        guard
+            case .object(let conf) = config(for: .userProfile, sessionId: userSessionId),
+            let profileNamePtr: UnsafePointer<CChar> = user_profile_get_name(conf)
+        else { return "" }
         
-        guard mergeNeedsDump else { return }
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        return String(cString: profileNamePtr)
+    }
+}
+
+// MARK: - Incoming Changes
+
+internal extension LibSessionCacheType {
+    func handleUserProfileUpdate(
+        _ db: Database,
+        in config: LibSession.Config?,
+        serverTimestampMs: Int64
+    ) throws {
+        guard configNeedsDump(config) else { return }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         // A profile must have a name so if this is null then it's invalid and can be ignored
         guard let profileNamePtr: UnsafePointer<CChar> = user_profile_get_name(conf) else { return }
         
-        let userPublicKey: String = getUserHexEncodedPublicKey(db)
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         let profileName: String = String(cString: profileNamePtr)
         let profilePic: user_profile_pic = user_profile_get_pic(conf)
         let profilePictureUrl: String? = profilePic.get(\.url, nullIfEmpty: true)
         
         // Handle user profile changes
-        try ProfileManager.updateProfileIfNeeded(
+        try Profile.updateIfNeeded(
             db,
-            publicKey: userPublicKey,
+            publicKey: userSessionId.hexString,
             displayNameUpdate: .currentUserUpdate(profileName),
             displayPictureUpdate: {
                 guard let profilePictureUrl: String = profilePictureUrl else { return .currentUserRemove }
@@ -52,21 +65,21 @@ internal extension LibSession {
                     fileName: nil
                 )
             }(),
-            sentTimestamp: (TimeInterval(latestConfigSentTimestampMs) / 1000),
-            calledFromConfigHandling: true,
+            sentTimestamp: TimeInterval(Double(serverTimestampMs) / 1000),
+            calledFromConfig: .userProfile,
             using: dependencies
         )
         
         // Update the 'Note to Self' visibility and priority
-        let threadInfo: PriorityVisibilityInfo? = try? SessionThread
-            .filter(id: userPublicKey)
+        let threadInfo: LibSession.PriorityVisibilityInfo? = try? SessionThread
+            .filter(id: userSessionId.hexString)
             .select(.id, .variant, .pinnedPriority, .shouldBeVisible)
-            .asRequest(of: PriorityVisibilityInfo.self)
+            .asRequest(of: LibSession.PriorityVisibilityInfo.self)
             .fetchOne(db)
         let targetPriority: Int32 = user_profile_get_nts_priority(conf)
         
         // Create the 'Note to Self' thread if it doesn't exist
-        if let threadInfo: PriorityVisibilityInfo = threadInfo {
+        if let threadInfo: LibSession.PriorityVisibilityInfo = threadInfo {
             let threadChanges: [ConfigColumnAssignment] = [
                 ((threadInfo.shouldBeVisible == LibSession.shouldBeVisible(priority: targetPriority)) ? nil :
                     SessionThread.Columns.shouldBeVisible.set(to: LibSession.shouldBeVisible(priority: targetPriority))
@@ -78,10 +91,12 @@ internal extension LibSession {
             
             if !threadChanges.isEmpty {
                 try SessionThread
-                    .filter(id: userPublicKey)
-                    .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                    .filter(id: userSessionId.hexString)
+                    .updateAllAndConfig(
                         db,
-                        threadChanges
+                        threadChanges,
+                        calledFromConfig: .userProfile,
+                        using: dependencies
                     )
             }
         }
@@ -89,16 +104,21 @@ internal extension LibSession {
             try SessionThread
                 .fetchOrCreate(
                     db,
-                    id: userPublicKey,
+                    id: userSessionId.hexString,
                     variant: .contact,
-                    shouldBeVisible: LibSession.shouldBeVisible(priority: targetPriority)
+                    creationDateTimestamp: (dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000),
+                    shouldBeVisible: LibSession.shouldBeVisible(priority: targetPriority),
+                    calledFromConfig: .userProfile,
+                    using: dependencies
                 )
             
             try SessionThread
-                .filter(id: userPublicKey)
-                .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                .filter(id: userSessionId.hexString)
+                .updateAllAndConfig(
                     db,
-                    SessionThread.Columns.pinnedPriority.set(to: targetPriority)
+                    SessionThread.Columns.pinnedPriority.set(to: targetPriority),
+                    calledFromConfig: .userProfile,
+                    using: dependencies
                 )
             
             // If the 'Note to Self' conversation is hidden then we should trigger the proper
@@ -108,8 +128,10 @@ internal extension LibSession {
                 try SessionThread.deleteOrLeave(
                     db,
                     type: .hideContactConversationAndDeleteContent,
-                    threadId: userPublicKey,
-                    calledFromConfigHandling: true
+                    threadId: userSessionId.hexString,
+                    threadVariant: .contact,
+                    calledFromConfig: .userProfile,
+                    using: dependencies
                 )
             }
         }
@@ -118,21 +140,22 @@ internal extension LibSession {
         let targetExpiry: Int32 = user_profile_get_nts_expiry(conf)
         let targetIsEnable: Bool = targetExpiry > 0
         let targetConfig: DisappearingMessagesConfiguration = DisappearingMessagesConfiguration(
-            threadId: userPublicKey,
+            threadId: userSessionId.hexString,
             isEnabled: targetIsEnable,
             durationSeconds: TimeInterval(targetExpiry),
             type: targetIsEnable ? .disappearAfterSend : .unknown
         )
         let localConfig: DisappearingMessagesConfiguration = try DisappearingMessagesConfiguration
-            .fetchOne(db, id: userPublicKey)
-            .defaulting(to: DisappearingMessagesConfiguration.defaultWith(userPublicKey))
+            .fetchOne(db, id: userSessionId.hexString)
+            .defaulting(to: DisappearingMessagesConfiguration.defaultWith(userSessionId.hexString))
         
         if targetConfig != localConfig {
             try targetConfig
                 .saved(db)
                 .clearUnrelatedControlMessages(
                     db,
-                    threadVariant: .contact
+                    threadVariant: .contact,
+                    using: dependencies
                 )
         }
 
@@ -149,32 +172,36 @@ internal extension LibSession {
         
         // Create a contact for the current user if needed (also force-approve the current user
         // in case the account got into a weird state or restored directly from a migration)
-        let userContact: Contact = Contact.fetchOrCreate(db, id: userPublicKey)
+        let userContact: Contact = Contact.fetchOrCreate(db, id: userSessionId.hexString, using: dependencies)
         
         if !userContact.isTrusted || !userContact.isApproved || !userContact.didApproveMe {
-            try userContact.save(db)
+            try userContact.upsert(db)
             try Contact
-                .filter(id: userPublicKey)
-                .updateAll( // Handling a config update so don't use `updateAllAndConfig`
+                .filter(id: userSessionId.hexString)
+                .updateAllAndConfig(
                     db,
                     Contact.Columns.isTrusted.set(to: true),    // Always trust the current user
                     Contact.Columns.isApproved.set(to: true),
-                    Contact.Columns.didApproveMe.set(to: true)
+                    Contact.Columns.didApproveMe.set(to: true),
+                    calledFromConfig: .userProfile,
+                    using: dependencies
                 )
         }
     }
-    
-    // MARK: - Outgoing Changes
-    
+}
+
+// MARK: - Outgoing Changes
+
+internal extension LibSession {
     static func update(
         profile: Profile,
-        in conf: UnsafeMutablePointer<config_object>?
+        in config: Config?
     ) throws {
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         // Update the name
-        var updatedName: [CChar] = try profile.name.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
-        user_profile_set_name(conf, &updatedName)
+        var cUpdatedName: [CChar] = try profile.name.cString(using: .utf8) ?? { throw LibSessionError.invalidCConversion }()
+        user_profile_set_name(conf, &cUpdatedName)
         try LibSessionError.throwIfNeeded(conf)
         
         // Either assign the updated profile pic, or sent a blank profile pic (to remove the current one)
@@ -188,9 +215,9 @@ internal extension LibSession {
     static func updateNoteToSelf(
         priority: Int32? = nil,
         disappearingMessagesConfig: DisappearingMessagesConfiguration? = nil,
-        in conf: UnsafeMutablePointer<config_object>?
+        in config: Config?
     ) throws {
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         if let priority: Int32 = priority {
             user_profile_set_nts_priority(conf, priority)
@@ -203,9 +230,9 @@ internal extension LibSession {
     
     static func updateSettings(
         checkForCommunityMessageRequests: Bool? = nil,
-        in conf: UnsafeMutablePointer<config_object>?
+        in config: Config?
     ) throws {
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
         
         if let blindedMessageRequests: Bool = checkForCommunityMessageRequests {
             user_profile_set_blinded_msgreqs(conf, (blindedMessageRequests ? 1 : 0))
@@ -216,8 +243,8 @@ internal extension LibSession {
 // MARK: - Direct Values
 
 extension LibSession {
-    static func rawBlindedMessageRequestValue(in conf: UnsafeMutablePointer<config_object>?) throws -> Int32 {
-        guard conf != nil else { throw LibSessionError.nilConfigObject }
+    static func rawBlindedMessageRequestValue(in config: Config?) throws -> Int32 {
+        guard case .object(let conf) = config else { throw LibSessionError.invalidConfigObject }
     
         return user_profile_get_blinded_msgreqs(conf)
     }

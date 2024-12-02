@@ -3,15 +3,16 @@
 import UIKit
 import DifferenceKit
 import SessionUIKit
+import SessionMessagingKit
 
 extension SessionCell {
     public struct Info<ID: Hashable & Differentiable>: Equatable, Hashable, Differentiable {
         let id: ID
         let position: Position
-        let leftAccessory: SessionCell.Accessory?
+        let leadingAccessory: SessionCell.Accessory?
         let title: TextInfo?
         let subtitle: TextInfo?
-        let rightAccessory: SessionCell.Accessory?
+        let trailingAccessory: SessionCell.Accessory?
         let styling: StyleInfo
         let isEnabled: Bool
         let accessibility: Accessibility?
@@ -21,8 +22,8 @@ extension SessionCell {
         
         var currentBoolValue: Bool {
             return (
-                (leftAccessory?.currentBoolValue ?? false) ||
-                (rightAccessory?.currentBoolValue ?? false)
+                (leadingAccessory?.currentBoolValue ?? false) ||
+                (trailingAccessory?.currentBoolValue ?? false)
             )
         }
         
@@ -31,10 +32,10 @@ extension SessionCell {
         init(
             id: ID,
             position: Position = .individual,
-            leftAccessory: SessionCell.Accessory? = nil,
+            leadingAccessory: SessionCell.Accessory? = nil,
             title: SessionCell.TextInfo? = nil,
             subtitle: SessionCell.TextInfo? = nil,
-            rightAccessory: SessionCell.Accessory? = nil,
+            trailingAccessory: SessionCell.Accessory? = nil,
             styling: StyleInfo = StyleInfo(),
             isEnabled: Bool = true,
             accessibility: Accessibility? = nil,
@@ -44,10 +45,10 @@ extension SessionCell {
         ) {
             self.id = id
             self.position = position
-            self.leftAccessory = leftAccessory
+            self.leadingAccessory = leadingAccessory
             self.title = title
             self.subtitle = subtitle
-            self.rightAccessory = rightAccessory
+            self.trailingAccessory = trailingAccessory
             self.styling = styling
             self.isEnabled = isEnabled
             self.accessibility = accessibility
@@ -63,10 +64,10 @@ extension SessionCell {
         public func hash(into hasher: inout Hasher) {
             id.hash(into: &hasher)
             position.hash(into: &hasher)
-            leftAccessory.hash(into: &hasher)
+            leadingAccessory.hash(into: &hasher)
             title.hash(into: &hasher)
             subtitle.hash(into: &hasher)
-            rightAccessory.hash(into: &hasher)
+            trailingAccessory.hash(into: &hasher)
             styling.hash(into: &hasher)
             isEnabled.hash(into: &hasher)
             accessibility.hash(into: &hasher)
@@ -77,10 +78,10 @@ extension SessionCell {
             return (
                 lhs.id == rhs.id &&
                 lhs.position == rhs.position &&
-                lhs.leftAccessory == rhs.leftAccessory &&
+                lhs.leadingAccessory == rhs.leadingAccessory &&
                 lhs.title == rhs.title &&
                 lhs.subtitle == rhs.subtitle &&
-                lhs.rightAccessory == rhs.rightAccessory &&
+                lhs.trailingAccessory == rhs.trailingAccessory &&
                 lhs.styling == rhs.styling &&
                 lhs.isEnabled == rhs.isEnabled &&
                 lhs.accessibility == rhs.accessibility
@@ -93,10 +94,10 @@ extension SessionCell {
             return Info(
                 id: id,
                 position: Position.with(index, count: count),
-                leftAccessory: leftAccessory,
+                leadingAccessory: leadingAccessory,
                 title: title,
                 subtitle: subtitle,
-                rightAccessory: rightAccessory,
+                trailingAccessory: trailingAccessory,
                 styling: styling,
                 isEnabled: isEnabled,
                 accessibility: accessibility,
@@ -125,10 +126,10 @@ public extension SessionCell.Info {
     ) {
         self.id = id
         self.position = position
-        self.leftAccessory = accessory
+        self.leadingAccessory = accessory
         self.title = nil
         self.subtitle = nil
-        self.rightAccessory = nil
+        self.trailingAccessory = nil
         self.styling = styling
         self.isEnabled = isEnabled
         self.accessibility = accessibility
@@ -137,13 +138,13 @@ public extension SessionCell.Info {
         self.onTapView = nil
     }
 
-    // leftAccessory, rightAccessory
+    // leadingAccessory, trailingAccessory
 
     init(
         id: ID,
         position: Position = .individual,
-        leftAccessory: SessionCell.Accessory,
-        rightAccessory: SessionCell.Accessory,
+        leadingAccessory: SessionCell.Accessory,
+        trailingAccessory: SessionCell.Accessory,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibility: Accessibility? = nil,
@@ -151,10 +152,10 @@ public extension SessionCell.Info {
     ) {
         self.id = id
         self.position = position
-        self.leftAccessory = leftAccessory
+        self.leadingAccessory = leadingAccessory
         self.title = nil
         self.subtitle = nil
-        self.rightAccessory = rightAccessory
+        self.trailingAccessory = trailingAccessory
         self.styling = styling
         self.isEnabled = isEnabled
         self.accessibility = accessibility
@@ -168,9 +169,9 @@ public extension SessionCell.Info {
     init(
         id: ID,
         position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
+        leadingAccessory: SessionCell.Accessory? = nil,
         title: String,
-        rightAccessory: SessionCell.Accessory? = nil,
+        trailingAccessory: SessionCell.Accessory? = nil,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibility: Accessibility? = nil,
@@ -179,10 +180,10 @@ public extension SessionCell.Info {
     ) {
         self.id = id
         self.position = position
-        self.leftAccessory = leftAccessory
+        self.leadingAccessory = leadingAccessory
         self.title = SessionCell.TextInfo(title, font: .title)
         self.subtitle = nil
-        self.rightAccessory = rightAccessory
+        self.trailingAccessory = trailingAccessory
         self.styling = styling
         self.isEnabled = isEnabled
         self.accessibility = accessibility
@@ -196,9 +197,9 @@ public extension SessionCell.Info {
     init(
         id: ID,
         position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
+        leadingAccessory: SessionCell.Accessory? = nil,
         title: SessionCell.TextInfo,
-        rightAccessory: SessionCell.Accessory? = nil,
+        trailingAccessory: SessionCell.Accessory? = nil,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibility: Accessibility? = nil,
@@ -207,10 +208,10 @@ public extension SessionCell.Info {
     ) {
         self.id = id
         self.position = position
-        self.leftAccessory = leftAccessory
+        self.leadingAccessory = leadingAccessory
         self.title = title
         self.subtitle = nil
-        self.rightAccessory = rightAccessory
+        self.trailingAccessory = trailingAccessory
         self.styling = styling
         self.isEnabled = isEnabled
         self.accessibility = accessibility
@@ -224,10 +225,10 @@ public extension SessionCell.Info {
     init(
         id: ID,
         position: Position = .individual,
-        leftAccessory: SessionCell.Accessory? = nil,
+        leadingAccessory: SessionCell.Accessory? = nil,
         title: String,
         subtitle: String?,
-        rightAccessory: SessionCell.Accessory? = nil,
+        trailingAccessory: SessionCell.Accessory? = nil,
         styling: SessionCell.StyleInfo = SessionCell.StyleInfo(),
         isEnabled: Bool = true,
         accessibility: Accessibility? = nil,
@@ -237,10 +238,10 @@ public extension SessionCell.Info {
     ) {
         self.id = id
         self.position = position
-        self.leftAccessory = leftAccessory
+        self.leadingAccessory = leadingAccessory
         self.title = SessionCell.TextInfo(title, font: .title)
         self.subtitle = SessionCell.TextInfo(subtitle, font: .subtitle)
-        self.rightAccessory = rightAccessory
+        self.trailingAccessory = trailingAccessory
         self.styling = styling
         self.isEnabled = isEnabled
         self.accessibility = accessibility

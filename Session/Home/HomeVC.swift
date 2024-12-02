@@ -8,7 +8,7 @@ import SessionMessagingKit
 import SessionUtilitiesKit
 import SignalUtilitiesKit
 
-final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataSource, UITableViewDelegate, SeedReminderViewDelegate {
+public final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataSource, UITableViewDelegate, SeedReminderViewDelegate {
     private static let loadingHeaderHeight: CGFloat = 40
     public static let newConversationButtonSize: CGFloat = 60
     
@@ -25,14 +25,15 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     
     // MARK: - LibSessionRespondingViewController
     
-    let isConversationList: Bool = true
+    public let isConversationList: Bool = true
     
     // MARK: - Intialization
     
-    init(flow: Onboarding.Flow? = nil, using dependencies: Dependencies) {
+    init(using dependencies: Dependencies) {
         self.viewModel = HomeViewModel(using: dependencies)
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
-        self.flow = flow
+        
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
+        
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -47,6 +48,8 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     // MARK: - UI
     
     private var tableViewTopConstraint: NSLayoutConstraint!
+    private var loadingConversationsLabelTopConstraint: NSLayoutConstraint!
+    private var navBarProfileView: ProfilePictureView?
     
     private lazy var seedReminderView: SeedReminderView = {
         let result = SeedReminderView()
@@ -288,17 +291,10 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     
     // MARK: - Lifecycle
     
-    override func viewDidLoad() {
+    public override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Note: This is a hack to ensure `isRTL` is initially gets run on the main thread so the value
-        // is cached (it gets called on background threads and if it hasn't cached the value then it can
-        // cause odd performance issues since it accesses UIKit)
-        if Singleton.hasAppContext { _ = Singleton.appContext.isRTL }
-        
         // Preparation
-        SessionApp.homeViewController.mutate { $0 = self }
-        
         updateNavBarButtons(userProfile: self.viewModel.state.userProfile)
         setUpNavBarSessionHeading()
         
@@ -311,21 +307,23 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         // Loading conversations label
         view.addSubview(loadingConversationsLabel)
         
-        loadingConversationsLabel.pin(.top, to: .top, of: view, withInset: Values.veryLargeSpacing)
         loadingConversationsLabel.pin(.leading, to: .leading, of: view, withInset: 50)
         loadingConversationsLabel.pin(.trailing, to: .trailing, of: view, withInset: -50)
         
         // Table view
         view.addSubview(tableView)
         tableView.pin(.leading, to: .leading, of: view)
+        tableView.pin(.trailing, to: .trailing, of: view)
+        tableView.pin(.bottom, to: .bottom, of: view)
+        
         if self.viewModel.state.showViewedSeedBanner {
+            loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .bottom, of: seedReminderView, withInset: Values.mediumSpacing)
             tableViewTopConstraint = tableView.pin(.top, to: .bottom, of: seedReminderView)
         }
         else {
+            loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .top, of: view, withInset: Values.veryLargeSpacing)
             tableViewTopConstraint = tableView.pin(.top, to: .top, of: view)
         }
-        tableView.pin(.trailing, to: .trailing, of: view)
-        tableView.pin(.bottom, to: .bottom, of: view)
         
         // Empty state view
         view.addSubview(emptyStateStackView)
@@ -353,28 +351,28 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         )
         
         // Start polling if needed (i.e. if the user just created or restored their Session ID)
-        if Identity.userExists(), let appDelegate: AppDelegate = UIApplication.shared.delegate as? AppDelegate {
+        if Identity.userExists(using: viewModel.dependencies), let appDelegate: AppDelegate = UIApplication.shared.delegate as? AppDelegate {
             appDelegate.startPollersIfNeeded()
         }
         
         // Onion request path countries cache
-        IP2Country.populateCacheIfNeededAsync()
+        viewModel.dependencies.warmCache(cache: .ip2Country)
     }
     
-    override func viewWillAppear(_ animated: Bool) {
+    public override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
         startObservingChanges()
     }
     
-    override func viewDidAppear(_ animated: Bool) {
+    public override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
         self.viewHasAppeared = true
         self.autoLoadNextPageIfNeeded()
     }
     
-    override func viewWillDisappear(_ animated: Bool) {
+    public override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
         stopObservingChanges()
@@ -405,7 +403,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
             runAndClearInitialChangeCallback = nil
         }
         
-        dataChangeObservable = Storage.shared.start(
+        dataChangeObservable = viewModel.dependencies[singleton: .storage].start(
             viewModel.observableState,
             onError: { _ in },
             onChange: { [weak self] state in
@@ -452,12 +450,15 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         // Update the 'view seed' UI
         if updatedState.showViewedSeedBanner != self.viewModel.state.showViewedSeedBanner {
             tableViewTopConstraint.isActive = false
+            loadingConversationsLabelTopConstraint.isActive = false
             seedReminderView.isHidden = !updatedState.showViewedSeedBanner
 
             if updatedState.showViewedSeedBanner {
+                loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .bottom, of: seedReminderView, withInset: Values.mediumSpacing)
                 tableViewTopConstraint = tableView.pin(.top, to: .bottom, of: seedReminderView)
             }
             else {
+                loadingConversationsLabelTopConstraint = loadingConversationsLabel.pin(.top, to: .top, of: view, withInset: Values.veryLargeSpacing)
                 tableViewTopConstraint = tableView.pin(.top, to: .top, of: view, withInset: Values.smallSpacing)
             }
         }
@@ -576,17 +577,57 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         profilePictureView.update(
             publicKey: userProfile.id,
             threadVariant: .contact,
-            customImageData: nil,
+            displayPictureFilename: nil,
             profile: userProfile,
-            additionalProfile: nil
+            profileIcon: {
+                switch (viewModel.dependencies[feature: .serviceNetwork], viewModel.dependencies[feature: .forceOffline]) {
+                    case (.testnet, false): return .letter("T", false)     // stringlint:ignore
+                    case (.testnet, true): return .letter("T", true)       // stringlint:ignore
+                    default: return .none
+                }
+            }(),
+            additionalProfile: nil,
+            using: viewModel.dependencies
         )
+        navBarProfileView = profilePictureView
         
         let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(openSettings))
         profilePictureView.addGestureRecognizer(tapGestureRecognizer)
         
         // Path status indicator
-        let pathStatusView = PathStatusView()
+        let pathStatusView = PathStatusView(using: viewModel.dependencies)
         pathStatusView.accessibilityLabel = "Current onion routing path indicator"
+        
+        viewModel.dependencies.publisher(feature: .serviceNetwork)
+            .subscribe(on: DispatchQueue.global(qos: .background), using: viewModel.dependencies)
+            .receive(on: DispatchQueue.main, using: viewModel.dependencies)
+            .sink(
+                receiveCompletion: { [weak self] _ in
+                    /// If the stream completes it means the network cache was reset in which case we want to
+                    /// re-register for updates in the next run loop (as the new cache should be created by then)
+                    DispatchQueue.main.async {
+                        self?.updateNavBarButtons(userProfile: userProfile)
+                    }
+                },
+                receiveValue: { [weak profilePictureView, dependencies = viewModel.dependencies] value in
+                    profilePictureView?.update(
+                        publicKey: userProfile.id,
+                        threadVariant: .contact,
+                        displayPictureFilename: nil,
+                        profile: userProfile,
+                        profileIcon: {
+                            switch (dependencies[feature: .serviceNetwork], dependencies[feature: .forceOffline]) {
+                                case (.testnet, false): return .letter("T", false)     // stringlint:ignore
+                                case (.testnet, true): return .letter("T", true)       // stringlint:ignore
+                                default: return .none
+                            }
+                        }(),
+                        additionalProfile: nil,
+                        using: dependencies
+                    )
+                }
+            )
+            .store(in: &profilePictureView.disposables)
         
         // Container view
         let profilePictureViewContainer = UIView()
@@ -610,17 +651,17 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     
     // MARK: - UITableViewDataSource
     
-    func numberOfSections(in tableView: UITableView) -> Int {
+    public func numberOfSections(in tableView: UITableView) -> Int {
         return viewModel.threadData.count
     }
     
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    public func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         let section: HomeViewModel.SectionModel = viewModel.threadData[section]
         
         return section.elements.count
     }
     
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    public func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let section: HomeViewModel.SectionModel = viewModel.threadData[indexPath.section]
         
         switch section.model {
@@ -635,7 +676,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
             case .threads:
                 let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
                 let cell: FullConversationCell = tableView.dequeue(type: FullConversationCell.self, for: indexPath)
-                cell.update(with: threadViewModel)
+                cell.update(with: threadViewModel, using: viewModel.dependencies)
                 cell.accessibilityIdentifier = "Conversation list item"
                 cell.accessibilityLabel = threadViewModel.displayName
                 return cell
@@ -644,7 +685,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         }
     }
     
-    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+    public func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         let section: HomeViewModel.SectionModel = viewModel.threadData[section]
         
         switch section.model {
@@ -666,7 +707,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     
     // MARK: - UITableViewDelegate
     
-    func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+    public func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
         let section: HomeViewModel.SectionModel = viewModel.threadData[section]
         
         switch section.model {
@@ -675,7 +716,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         }
     }
     
-    func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
+    public func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int) {
         guard self.hasLoadedInitialThreadData && self.viewHasAppeared && !self.isLoadingMore else { return }
         
         let section: HomeViewModel.SectionModel = self.viewModel.threadData[section]
@@ -692,7 +733,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         }
     }
 
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         
         let section: HomeViewModel.SectionModel = self.viewModel.threadData[indexPath.section]
@@ -700,38 +741,37 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         switch section.model {
             case .messageRequests:
                 let viewController: SessionTableViewController = SessionTableViewController(
-                    viewModel: MessageRequestsViewModel()
+                    viewModel: MessageRequestsViewModel(using: viewModel.dependencies)
                 )
                 self.navigationController?.pushViewController(viewController, animated: true)
                 
             case .threads:
                 let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
-                show(
-                    threadViewModel.threadId,
-                    variant: threadViewModel.threadVariant,
-                    isMessageRequest: (threadViewModel.threadIsMessageRequest == true),
-                    with: .none,
+                let viewController: ConversationVC = ConversationVC(
+                    threadId: threadViewModel.threadId,
+                    threadVariant: threadViewModel.threadVariant,
                     focusedInteractionInfo: nil,
-                    animated: true
+                    using: viewModel.dependencies
                 )
+                self.navigationController?.pushViewController(viewController, animated: true)
                 
             default: break
         }
     }
     
-    func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
+    public func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
         return true
     }
     
-    func tableView(_ tableView: UITableView, willBeginEditingRowAt indexPath: IndexPath) {
+    public func tableView(_ tableView: UITableView, willBeginEditingRowAt indexPath: IndexPath) {
         UIContextualAction.willBeginEditing(indexPath: indexPath, tableView: tableView)
     }
     
-    func tableView(_ tableView: UITableView, didEndEditingRowAt indexPath: IndexPath?) {
+    public func tableView(_ tableView: UITableView, didEndEditingRowAt indexPath: IndexPath?) {
         UIContextualAction.didEndEditing(indexPath: indexPath, tableView: tableView)
     }
     
-    func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+    public func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         let section: HomeViewModel.SectionModel = self.viewModel.threadData[indexPath.section]
         let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
         
@@ -751,7 +791,8 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                         tableView: tableView,
                         threadViewModel: threadViewModel,
                         viewController: self,
-                        navigatableStateHolder: viewModel
+                        navigatableStateHolder: viewModel,
+                        using: viewModel.dependencies
                     )
                 )
             
@@ -759,7 +800,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         }
     }
     
-    func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+    public func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         let section: HomeViewModel.SectionModel = self.viewModel.threadData[indexPath.section]
         let threadViewModel: SessionThreadViewModel = section.elements[indexPath.row]
         
@@ -773,12 +814,13 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                         tableView: tableView,
                         threadViewModel: threadViewModel,
                         viewController: self,
-                        navigatableStateHolder: viewModel
+                        navigatableStateHolder: viewModel,
+                        using: viewModel.dependencies
                     )
                 )
                 
             case .threads:
-                let sessionIdPrefix: SessionId.Prefix? = (try? SessionId(from: threadViewModel.threadId))?.prefix
+                let sessionIdPrefix: SessionId.Prefix? = try? SessionId.Prefix(from: threadViewModel.threadId)
                 
                 // Cannot properly sync outgoing blinded message requests so only provide valid options
                 let shouldHavePinAction: Bool = (
@@ -820,7 +862,8 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                         tableView: tableView,
                         threadViewModel: threadViewModel,
                         viewController: self,
-                        navigatableStateHolder: viewModel
+                        navigatableStateHolder: viewModel,
+                        using: viewModel.dependencies
                     )
                 )
                 
@@ -831,11 +874,7 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
     // MARK: - Interaction
     
     func handleContinueButtonTapped(from seedReminderView: SeedReminderView) {
-        if let recoveryPasswordView: RecoveryPasswordScreen = try? RecoveryPasswordScreen() {
-            let viewController: SessionHostingViewController = SessionHostingViewController(rootView: recoveryPasswordView)
-            viewController.setNavBarTitle("sessionRecoveryPassword".localized())
-            self.navigationController?.pushViewController(viewController, animated: true)
-        } else {
+        guard let recoveryPasswordView: RecoveryPasswordScreen = try? RecoveryPasswordScreen(using: viewModel.dependencies) else {
             let targetViewController: UIViewController = ConfirmationModal(
                 info: ConfirmationModal.Info(
                     title: "theError".localized(),
@@ -845,42 +884,17 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
                 )
             )
             present(targetViewController, animated: true, completion: nil)
+            return
         }
-    }
-    
-    func show(
-        _ threadId: String,
-        variant: SessionThread.Variant,
-        isMessageRequest: Bool,
-        with action: ConversationViewModel.Action,
-        focusedInteractionInfo: Interaction.TimestampInfo?,
-        animated: Bool
-    ) {
-        if let presentedVC = self.presentedViewController {
-            presentedVC.dismiss(animated: false, completion: nil)
-        }
-        
-        let finalViewControllers: [UIViewController] = [
-            self,
-            (
-                (isMessageRequest && action != .compose) ?
-                SessionTableViewController(viewModel: MessageRequestsViewModel()) :
-                nil
-            ),
-            ConversationVC(
-                threadId: threadId,
-                threadVariant: variant,
-                focusedInteractionInfo: focusedInteractionInfo,
-                using: viewModel.dependencies
-            )
-        ].compactMap { $0 }
-        
-        self.navigationController?.setViewControllers(finalViewControllers, animated: animated)
+
+        let viewController: SessionHostingViewController = SessionHostingViewController(rootView: recoveryPasswordView)
+        viewController.setNavBarTitle("sessionRecoveryPassword".localized())
+        self.navigationController?.pushViewController(viewController, animated: true)
     }
     
     @objc private func openSettings() {
         let settingsViewController: SessionTableViewController = SessionTableViewController(
-            viewModel: SettingsViewModel()
+            viewModel: SettingsViewModel(using: viewModel.dependencies)
         )
         let navigationController = StyledNavigationController(rootViewController: settingsViewController)
         navigationController.modalPresentationStyle = .fullScreen
@@ -895,24 +909,14 @@ final class HomeVC: BaseVC, LibSessionRespondingViewController, UITableViewDataS
         self.navigationController?.setViewControllers([ self, searchController ], animated: true)
     }
     
-    @objc func createNewConversation() {
-        let viewController = SessionHostingViewController(
-            rootView: StartConversationScreen(),
-            customizedNavigationBackground: .backgroundSecondary
-        )
-        viewController.setNavBarTitle("conversationsStart".localized())
-        viewController.setUpDismissingButton(on: .right)
-        
-        let navigationController = StyledNavigationController(rootViewController: viewController)
-        if UIDevice.current.isIPad {
-            navigationController.modalPresentationStyle = .fullScreen
-        }
-        navigationController.modalPresentationCapturesStatusBarAppearance = true
-        present(navigationController, animated: true, completion: nil)
+    @objc private func createNewConversation() {
+        viewModel.dependencies[singleton: .app].createNewConversation()
     }
     
     func createNewDMFromDeepLink(sessionId: String) {
-        let viewController: SessionHostingViewController = SessionHostingViewController(rootView: NewMessageScreen(accountId: sessionId))
+        let viewController: SessionHostingViewController = SessionHostingViewController(
+            rootView: NewMessageScreen(accountId: sessionId, using: viewModel.dependencies)
+        )
         viewController.setNavBarTitle(
             "messageNew"
                 .putNumber(1)

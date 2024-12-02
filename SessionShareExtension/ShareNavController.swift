@@ -6,6 +6,7 @@ import CoreServices
 import UniformTypeIdentifiers
 import SignalUtilitiesKit
 import SessionUIKit
+import SessionSnodeKit
 import SessionUtilitiesKit
 import SessionMessagingKit
 
@@ -13,7 +14,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     public static var attachmentPrepPublisher: AnyPublisher<[SignalAttachment], Error>?
     
     /// The `ShareNavController` is initialized from a storyboard so we need to manually initialize this
-    private let dependencies: Dependencies = Dependencies()
+    private let dependencies: Dependencies = Dependencies.createEmpty()
     private let versionMigrationsComplete: Atomic<Bool> = Atomic(false)
     
     // MARK: - Error
@@ -32,51 +33,56 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         
         view.themeBackgroundColor = .backgroundPrimary
 
-        // This should be the first thing we do (Note: If you leave the share context and return to it
-        // the context will already exist, trying to override it results in the share context crashing
-        // so ensure it doesn't exist first)
-        if !Singleton.hasAppContext {
-            Singleton.setup(appContext: ShareAppExtensionContext(rootViewController: self))
+        /// This should be the first thing we do (Note: If you leave the share context and return to it the context will already exist, trying
+        /// to override it results in the share context crashing so ensure it doesn't exist first)
+        if !dependencies[singleton: .appContext].isValid {
+            dependencies.set(singleton: .appContext, to: ShareAppExtensionContext(rootViewController: self, using: dependencies))
+            Dependencies.setIsRTLRetriever(requiresMainThread: false) { ShareAppExtensionContext.determineDeviceRTL() }
         }
 
-        _ = AppVersion.shared
-
-        // We don't need to use DeviceSleepManager in the SAE.
-
-        // We don't need to use applySignalAppearence in the SAE.
-
-        if SNUtilitiesKit.isRunningTests {
-            // TODO: Do we need to implement isRunningTests in the SAE context?
-            return
-        }
+        guard !SNUtilitiesKit.isRunningTests else { return }
+        
+        dependencies.warmCache(cache: .appVersion)
 
         AppSetup.setupEnvironment(
-            appSpecificBlock: {
+            additionalMigrationTargets: [DeprecatedUIKitMigrationTarget.self],
+            appSpecificBlock: { [dependencies] in
                 // stringlint:ignore_start
                 Log.setup(with: Logger(
                     primaryPrefix: "SessionShareExtension",
                     level: .info,
-                    customDirectory: "\(FileManager.default.appSharedDataDirectoryPath)/Logs/ShareExtension"
+                    customDirectory: "\(dependencies[singleton: .fileManager].appSharedDataDirectoryPath)/Logs/ShareExtension",
+                    using: dependencies
                 ))
                 // stringlint:ignore_stop
                 
-                SessionEnvironment.shared?.notificationsManager.mutate {
-                    $0 = NoopNotificationsManager()
-                }
-                
                 // Setup LibSession
-                LibSession.addLogger()
-                LibSession.createNetworkIfNeeded()
+                LibSession.setupLogger(using: dependencies)
+                dependencies.warmCache(cache: .libSessionNetwork)
+                
+                // Configure the different targets
+                SNUtilitiesKit.configure(
+                    networkMaxFileSize: Network.maxFileSize,
+                    localizedFormatted: { helper, font in SAESNUIKitConfig.localizedFormatted(helper, font) },
+                    localizedDeformatted: { helper in SAESNUIKitConfig.localizedDeformatted(helper) },
+                    using: dependencies
+                )
+                SNMessagingKit.configure(using: dependencies)
             },
-            migrationsCompletion: { [weak self] result, needsConfigSync in
+            migrationsCompletion: { [weak self, dependencies] result, needsConfigSync in
                 switch result {
                     case .failure: Log.error("Failed to complete migrations")
                     case .success:
                         DispatchQueue.main.async {
-                            // Need to manually trigger these since we don't have a "mainWindow" here
-                            // and the current theme might have been changed since the share extension
-                            // was last opened
-                            ThemeManager.applySavedTheme()
+                            /// Because the `SessionUIKit` target doesn't depend on the `SessionUtilitiesKit` dependency (it shouldn't
+                            /// need to since it should just be UI) but since the theme settings are stored in the database we need to pass these through
+                            /// to `SessionUIKit` and expose a mechanism to save updated settings - this is done here (once the migrations complete)
+                            SNUIKit.configure(
+                                with: SAESNUIKitConfig(using: dependencies),
+                                themeSettings: dependencies[singleton: .storage].read { db -> ThemeSettings in
+                                    (db[.theme], db[.themePrimaryColor], db[.themeMatchSystemDayNightCycle])
+                                }
+                            )
                             
                             // performUpdateCheck must be invoked after Environment has been initialized because
                             // upgrade process may depend on Environment.
@@ -94,12 +100,6 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
             name: .sessionDidEnterBackground,
             object: nil
         )
-        
-        /// **Note:** If the user opens, dismisses and re-opens the share extension it'll actually use the same instance which
-        /// results in the `AppSetup` not actually running (and the UI not actually being loaded correctly) - in order to avoid this
-        /// we call `checkIsAppReady` explicitly here assuming that either the `AppSetup` _hasn't_ complete or won't ever
-        /// get run
-        checkIsAppReady(migrationsCompleted: versionMigrationsComplete.wrappedValue)
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -115,8 +115,12 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         // If we need a config sync then trigger it now
         if needsConfigSync {
-            Storage.shared.write { db in
-                ConfigurationSyncJob.enqueue(db, publicKey: getUserHexEncodedPublicKey(db))
+            dependencies[singleton: .storage].write { [dependencies] db in
+                ConfigurationSyncJob.enqueue(
+                    db,
+                    swarmPublicKey: dependencies[cache: .general].sessionId.hexString,
+                    using: dependencies
+                )
             }
         }
 
@@ -127,54 +131,34 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     func checkIsAppReady(migrationsCompleted: Bool) {
         Log.assertOnMainThread()
 
-        // App isn't ready until storage is ready AND all version migrations are complete.
-        guard migrationsCompleted else { return }
-        guard Storage.shared.isValid else {
-            // If the database is invalid then the UI will handle it
-            showLockScreenOrMainContent()
-            return
-        }
-        guard !Singleton.appReadiness.isAppReady else {
-            // Only mark the app as ready once.
-            showLockScreenOrMainContent()
-            return
-        }
-
-        SignalUtilitiesKit.Configuration.performMainSetup()
+        // If something went wrong during startup then show the UI still (it has custom UI for
+        // this case) but don't mark the app as ready or trigger the 'launchDidComplete' logic
+        guard
+            migrationsCompleted,
+            dependencies[singleton: .storage].isValid,
+            !dependencies[singleton: .appReadiness].isAppReady
+        else { return showLockScreenOrMainContent() }
 
         // Note that this does much more than set a flag;
         // it will also run all deferred blocks.
-        Singleton.appReadiness.setAppReady()
-
-        // We don't need to use messageFetcherJob in the SAE.
-        // We don't need to use SyncPushTokensJob in the SAE.
-        // We don't need to use DeviceSleepManager in the SAE.
-
-        AppVersion.shared.saeLaunchDidComplete()
+        dependencies[singleton: .appReadiness].setAppReady()
+        dependencies.mutate(cache: .appVersion) { $0.saeLaunchDidComplete() }
 
         showLockScreenOrMainContent()
-
-        // We don't need to use OWSMessageReceiver in the SAE.
-        // We don't need to use OWSBatchMessageProcessor in the SAE.
-        // We don't need to fetch the local profile in the SAE
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         Log.appResumedExecution()
-        Singleton.appReadiness.runNowOrWhenAppDidBecomeReady { [weak self] in
-            Log.assertOnMainThread()
-            self?.showLockScreenOrMainContent()
-        }
     }
 
     @objc
     public func applicationDidEnterBackground() {
         Log.assertOnMainThread()
         Log.flush()
-
-        if Storage.shared[.isScreenLockEnabled] {
+        
+        if dependencies[singleton: .storage, key: .isScreenLockEnabled] {
             self.dismiss(animated: false) { [weak self] in
                 Log.assertOnMainThread()
                 self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
@@ -195,7 +179,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     // MARK: - Updating
     
     private func showLockScreenOrMainContent() {
-        if Storage.shared[.isScreenLockEnabled] {
+        if dependencies[singleton: .storage, key: .isScreenLockEnabled] {
             showLockScreen()
         }
         else {
@@ -265,22 +249,22 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
     
     // MARK: Attachment Prep
 
-    private class func createDataSource(type: UTType, url: URL, customFileName: String?) -> (any DataSource)? {
+    private class func createDataSource(type: UTType, url: URL, customFileName: String?, using dependencies: Dependencies) -> (any DataSource)? {
         switch (type, type.conforms(to: .text)) {
             // Share URLs as text messages whose text content is the URL
-            case (.url, _): return DataSourceValue(text: url.absoluteString)
-                
+            case (.url, _): return DataSourceValue(text: url.absoluteString, using: dependencies)
+            
             // Share text as oversize text messages.
             //
             // NOTE: SharingThreadPickerViewController will try to unpack them
             //       and send them as normal text messages if possible.
-            case (_, true): return DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false)
-                
+            case (_, true): return DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false, using: dependencies)
+            
             default:
-                guard let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false) else {
+                guard let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false, using: dependencies) else {
                     return nil
                 }
-                
+
                 // Fallback to the last part of the URL
                 dataSource.sourceFilename = (customFileName ?? url.lastPathComponent)
                 
@@ -408,9 +392,9 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         }
         Log.debug("matched UTType: \(srcType.identifier)")
 
-        return Deferred {
+        return Deferred { [weak self, dependencies] in
             Future<LoadedItem, Error> { resolver in
-                let loadCompletion: NSItemProvider.CompletionHandler = { [weak self] value, error in
+                let loadCompletion: NSItemProvider.CompletionHandler = { value, error in
                     guard self != nil else { return }
                     if let error: Error = error {
                         resolver(Result.failure(error))
@@ -431,7 +415,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
                             let customFileName = "Contact.vcf" // stringlint:ignore
                             let customFileExtension: String? = srcType.sessionFileExtension
                             
-                            guard let tempFilePath = try? FileSystem.write(data: data, toTemporaryFileWithExtension: customFileExtension) else {
+                            guard let tempFilePath = try? dependencies[singleton: .fileManager].write(data: data, toTemporaryFileWithExtension: customFileExtension) else {
                                 resolver(
                                     Result.failure(ShareViewControllerError.assertionError(description: "Error writing item data: \(String(describing: error))"))
                                 )
@@ -459,7 +443,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
                                 )
                                 return
                             }
-                            guard let tempFilePath: String = try? FileSystem.write(data: data, toTemporaryFileWithExtension: "txt") else { // stringlint:ignore
+                            guard let tempFilePath: String = try? dependencies[singleton: .fileManager].write(data: data, toTemporaryFileWithExtension: "txt") else { // stringlint:ignore
                                 resolver(
                                     Result.failure(ShareViewControllerError.assertionError(description: "Error writing item data: \(String(describing: error))"))
                                 )
@@ -529,7 +513,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
                             
                         case let image as UIImage:
                             if let data = image.pngData() {
-                                let tempFilePath: String = FileSystem.temporaryFilePath(fileExtension: "png") // stringlint:ignore
+                                let tempFilePath: String = dependencies[singleton: .fileManager].temporaryFilePath(fileExtension: "png") // stringlint:ignore
                                 do {
                                     let url = NSURL.fileURL(withPath: tempFilePath)
                                     try data.write(to: url)
@@ -578,7 +562,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
         var url = itemUrl
         do {
             if isVideoNeedingRelocation(itemProvider: itemProvider, itemUrl: itemUrl) {
-                url = try SignalAttachment.copyToVideoTempDir(url: itemUrl)
+                url = try SignalAttachment.copyToVideoTempDir(url: itemUrl, using: dependencies)
             }
         } catch {
             let error = ShareViewControllerError.assertionError(description: "Could not copy video")
@@ -588,7 +572,7 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         Log.debug("building DataSource with url: \(url), UTType: \(loadedItem.type)")
 
-        guard let dataSource = ShareNavController.createDataSource(type: loadedItem.type, url: url, customFileName: loadedItem.customFileName) else {
+        guard let dataSource = ShareNavController.createDataSource(type: loadedItem.type, url: url, customFileName: loadedItem.customFileName, using: dependencies) else {
             let error = ShareViewControllerError.assertionError(description: "Unable to read attachment data")
             return Fail(error: error)
                 .eraseToAnyPublisher()
@@ -610,11 +594,11 @@ final class ShareNavController: UINavigationController, ShareViewDelegate {
 
         guard !SignalAttachment.isInvalidVideo(dataSource: dataSource, type: specificType) else {
             // This can happen, e.g. when sharing a quicktime-video from iCloud drive.
-            let (publisher, _) = SignalAttachment.compressVideoAsMp4(dataSource: dataSource, type: specificType, using: Dependencies())
+            let (publisher, _) = SignalAttachment.compressVideoAsMp4(dataSource: dataSource, type: specificType, using: dependencies)
             return publisher
         }
 
-        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: specificType, imageQuality: .medium)
+        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: specificType, imageQuality: .medium, using: dependencies)
         if loadedItem.isConvertibleToContactShare {
             Log.info("isConvertibleToContactShare")
             attachment.isConvertibleToContactShare = true
@@ -740,3 +724,67 @@ private extension NSItemProvider {
     }
 }
 
+// MARK: - SAESNUIKitConfig
+
+private struct SAESNUIKitConfig: SNUIKit.ConfigType {
+    private let dependencies: Dependencies
+    
+    var maxFileSize: UInt { Network.maxFileSize }
+    var isStorageValid: Bool { dependencies[singleton: .storage].isValid }
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+    
+    // MARK: - Functions
+    
+    func themeChanged(_ theme: Theme, _ primaryColor: Theme.PrimaryColor, _ matchSystemNightModeSetting: Bool) {
+        dependencies[singleton: .storage].write { db in
+            db[.theme] = theme
+            db[.themePrimaryColor] = primaryColor
+            db[.themeMatchSystemDayNightCycle] = matchSystemNightModeSetting
+        }
+    }
+    
+    func persistentTopBannerChanged(warningKey: String?) {
+        dependencies[defaults: .appGroup, key: .topBannerWarningToShow] = warningKey
+    }
+    
+    func cachedContextualActionInfo(tableViewHash: Int, sideKey: String) -> [Int: Any]? {
+        Log.warn("[SAESNUIKitConfig] Attempted to retrieve ContextualActionInfo when it's not supported.")
+        return nil
+    }
+    
+    func cacheContextualActionInfo(tableViewHash: Int, sideKey: String, actionIndex: Int, actionInfo: Any) {
+        Log.warn("[SAESNUIKitConfig] Attempted to cache ContextualActionInfo when it's not supported.")
+    }
+    
+    func removeCachedContextualActionInfo(tableViewHash: Int, keys: [String]) {}
+    
+    func placeholderIconCacher(cacheKey: String, generator: @escaping () -> UIImage) -> UIImage {
+        if let cachedIcon: UIImage = dependencies[cache: .general].placeholderCache.object(forKey: cacheKey as NSString) {
+            return cachedIcon
+        }
+        
+        let generatedImage: UIImage = generator()
+        dependencies.mutate(cache: .general) {
+            $0.placeholderCache.setObject(generatedImage, forKey: cacheKey as NSString)
+        }
+        
+        return generatedImage
+    }
+    
+    func localizedString(for key: String) -> String {
+        return key.localized()
+    }
+    
+    public static func localizedFormatted(_ helper: LocalizationHelper, _ baseFont: UIFont) -> NSAttributedString {
+        return NSAttributedString(stringWithHTMLTags: helper.localized(), font: baseFont)
+    }
+    
+    public static func localizedDeformatted(_ helper: LocalizationHelper) -> String {
+        return NSAttributedString(stringWithHTMLTags: helper.localized(), font: .systemFont(ofSize: 14)).string
+    }
+}

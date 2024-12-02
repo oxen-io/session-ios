@@ -42,6 +42,7 @@ public class ImageEditorModel {
         return true
     }
 
+    private let dependencies: Dependencies
     public let srcImagePath: String
     public let srcImageSizePixels: CGSize
     private var contents: ImageEditorContents
@@ -53,13 +54,15 @@ public class ImageEditorModel {
     //
     // * They are invalid.
     // * We can't determine their size / aspect-ratio.
-    public required init(srcImagePath: String) throws {
+    public required init(srcImagePath: String, using dependencies: Dependencies) throws {
+        self.dependencies = dependencies
         self.srcImagePath = srcImagePath
 
         let srcFileName = (srcImagePath as NSString).lastPathComponent
         let srcFileExtension = (srcFileName as NSString).pathExtension
+        
         guard let type: UTType = UTType(sessionFileExtension: srcFileExtension) else {
-            Log.error("[ImageEditorModel] Couldn't determine MIME type for file.")
+            Log.error("[ImageEditorModel] Couldn't determine UTType for file.")
             throw ImageEditorError.invalidInput
         }
         guard type.isImage && !type.isAnimated else {
@@ -67,7 +70,7 @@ public class ImageEditorModel {
             throw ImageEditorError.invalidInput
         }
 
-        let srcImageSizePixels = Data.imageSize(for: srcImagePath, type: type)
+        let srcImageSizePixels = Data.imageSize(for: srcImagePath, type: type, using: dependencies)
         guard srcImageSizePixels.width > 0, srcImageSizePixels.height > 0 else {
             Log.error("[ImageEditorModel] Couldn't determine image size.")
             throw ImageEditorError.invalidInput
@@ -227,7 +230,7 @@ public class ImageEditorModel {
     public func temporaryFilePath(withFileExtension fileExtension: String) -> String {
         Log.assertOnMainThread()
 
-        let filePath = FileSystem.temporaryFilePath(fileExtension: fileExtension)
+        let filePath = dependencies[singleton: .fileManager].temporaryFilePath(fileExtension: fileExtension)
         temporaryFilePaths.append(filePath)
         return filePath
     }
@@ -237,9 +240,9 @@ public class ImageEditorModel {
 
         let temporaryFilePaths = self.temporaryFilePaths
 
-        DispatchQueue.global(qos: .background).async {
+        DispatchQueue.global(qos: .background).async { [dependencies] in
             for filePath in temporaryFilePaths {
-                do { try FileSystem.deleteFile(at: filePath) }
+                do { try dependencies[singleton: .fileManager].removeItem(atPath: filePath) }
                 catch { Log.error("[ImageEditorModel] Could not delete temp file: \(filePath)") }
             }
         }

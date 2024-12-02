@@ -4,6 +4,7 @@ import UIKit
 import NVActivityIndicatorView
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 final class LinkPreviewView: UIView {
     private static let loaderSize: CGFloat = 24
@@ -147,7 +148,8 @@ final class LinkPreviewView: UIView {
         delegate: TappableLabelDelegate? = nil,
         cellViewModel: MessageViewModel? = nil,
         bodyLabelTextColor: ThemeValue? = nil,
-        lastSearchText: String? = nil
+        lastSearchText: String? = nil,
+        using dependencies: Dependencies
     ) {
         cancelButton.removeFromSuperview()
         
@@ -205,7 +207,8 @@ final class LinkPreviewView: UIView {
                 with: maxWidth,
                 textColor: (bodyLabelTextColor ?? .textPrimary),
                 searchText: lastSearchText,
-                delegate: delegate
+                delegate: delegate,
+                using: dependencies
             )
             
             self.bodyTappableLabel = bodyTappableLabel

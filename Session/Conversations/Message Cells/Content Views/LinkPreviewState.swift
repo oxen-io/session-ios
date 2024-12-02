@@ -105,7 +105,7 @@ public extension LinkPreview {
             // Note: We don't check if the image is valid here because that can be confirmed
             // in 'imageState' and it's a little inefficient
             guard imageAttachment?.isImage == true else { return nil }
-            guard let imageData: Data = try? imageAttachment?.readDataFromFile() else {
+            guard let imageData: Data = try? imageAttachment?.readDataFromFile(using: dependencies) else {
                 return nil
             }
             guard let image = UIImage(data: imageData) else {
@@ -118,6 +118,7 @@ public extension LinkPreview {
         
         // MARK: - Type Specific
         
+        private let dependencies: Dependencies
         private let linkPreview: LinkPreview
         private let imageAttachment: Attachment?
 
@@ -131,7 +132,8 @@ public extension LinkPreview {
         
         // MARK: - Initialization
 
-        init(linkPreview: LinkPreview, imageAttachment: Attachment?) {
+        init(linkPreview: LinkPreview, imageAttachment: Attachment?, using dependencies: Dependencies) {
+            self.dependencies = dependencies
             self.linkPreview = linkPreview
             self.imageAttachment = imageAttachment
         }

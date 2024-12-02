@@ -1,17 +1,25 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
 import AVFoundation
 import SessionUtilitiesKit
 
+// MARK: - Singleton
+
+public extension Singleton {
+    static let thumbnailService: SingletonConfig<ThumbnailService> = Dependencies.create(
+        identifier: "thumbnailService",
+        createInstance: { dependencies in ThumbnailService(using: dependencies) }
+    )
+}
+
+// MARK: - ThumbnailService
+
 public class ThumbnailService {
-    // MARK: - Singleton class
-
-    public static let shared: ThumbnailService = ThumbnailService()
-
     public typealias SuccessBlock = (LoadedThumbnail) -> Void
     public typealias FailureBlock = (Error) -> Void
 
+    private let dependencies: Dependencies
     private let serialQueue = DispatchQueue(label: "ThumbnailService")
 
     // This property should only be accessed on the serialQueue.
@@ -19,6 +27,14 @@ public class ThumbnailService {
     // We want to process requests in _reverse_ order in which they
     // arrive so that we prioritize the most recent view state.
     private var requestStack = [Request]()
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+    
+    // MARK: - Functions
 
     private func canThumbnailAttachment(attachment: Attachment) -> Bool {
         return attachment.isImage || attachment.isAnimated || attachment.isVideo
@@ -84,7 +100,7 @@ public class ThumbnailService {
         
         let thumbnailPath = attachment.thumbnailPath(for: thumbnailRequest.dimensions)
         
-        if FileManager.default.fileExists(atPath: thumbnailPath) {
+        if dependencies[singleton: .fileManager].fileExists(atPath: thumbnailPath) {
             guard let image = UIImage(contentsOfFile: thumbnailPath) else {
                 throw ThumbnailError.failure(description: "Could not load thumbnail.")
             }
@@ -93,10 +109,10 @@ public class ThumbnailService {
 
         let thumbnailDirPath = (thumbnailPath as NSString).deletingLastPathComponent
         
-        guard case .success = Result(try FileSystem.ensureDirectoryExists(at: thumbnailDirPath)) else {
+        guard case .success = Result(try dependencies[singleton: .fileManager].ensureDirectoryExists(at: thumbnailDirPath)) else {
             throw ThumbnailError.failure(description: "Could not create attachment's thumbnail directory.")
         }
-        guard let originalFilePath = attachment.originalFilePath else {
+        guard let originalFilePath = attachment.originalFilePath(using: dependencies) else {
             throw ThumbnailError.failure(description: "Missing original file path.")
         }
         
@@ -104,10 +120,10 @@ public class ThumbnailService {
         let thumbnailImage: UIImage
         
         if attachment.isImage || attachment.isAnimated {
-            thumbnailImage = try MediaUtils.thumbnail(forImageAtPath: originalFilePath, maxDimension: maxDimension)
+            thumbnailImage = try MediaUtils.thumbnail(forImageAtPath: originalFilePath, maxDimension: maxDimension, type: attachment.contentType, using: dependencies)
         }
         else if attachment.isVideo {
-            thumbnailImage = try MediaUtils.thumbnail(forVideoAtPath: originalFilePath, maxDimension: maxDimension)
+            thumbnailImage = try MediaUtils.thumbnail(forVideoAtPath: originalFilePath, maxDimension: maxDimension, using: dependencies)
         }
         else {
             throw ThumbnailError.assertionFailure(description: "Invalid attachment type.")
@@ -124,7 +140,7 @@ public class ThumbnailService {
             throw ThumbnailError.externalError(description: "File write failed: \(thumbnailPath), \(error)", underlyingError: error)
         }
         
-        try? FileSystem.protectFileOrFolder(at: thumbnailPath)
+        try? dependencies[singleton: .fileManager].protectFileOrFolder(at: thumbnailPath)
         
         return LoadedThumbnail(image: thumbnailImage, data: thumbnailData)
     }

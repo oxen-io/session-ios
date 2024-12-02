@@ -4,11 +4,12 @@ import Foundation
 import GRDB
 import Quick
 import Nimble
+import SessionUtil
 import SessionUIKit
 import SessionSnodeKit
-import SessionMessagingKit
 
 @testable import Session
+@testable import SessionMessagingKit
 @testable import SessionUtilitiesKit
 
 class DatabaseSpec: QuickSpec {
@@ -18,13 +19,21 @@ class DatabaseSpec: QuickSpec {
     
     override class func spec() {
         // MARK: Configuration
-        @TestState var dependencies: Dependencies! = Dependencies()
-        @TestState var mockStorage: Storage! = {
-            let result = SynchronousStorage(customWriter: try! DatabaseQueue(), using: dependencies)
-            dependencies.storage = result
-            
-            return result
-        }()
+        
+        @TestState var dependencies: TestDependencies! = TestDependencies()
+        @TestState(singleton: .storage, in: dependencies) var mockStorage: Storage! = SynchronousStorage(
+            customWriter: try! DatabaseQueue(),
+            using: dependencies
+        )
+        @TestState(cache: .general, in: dependencies) var mockGeneralCache: MockGeneralCache! = MockGeneralCache(
+            initialSetup: { cache in
+                cache.when { $0.sessionId }.thenReturn(SessionId(.standard, hex: TestConstants.publicKey))
+            }
+        )
+        @TestState(cache: .libSession, in: dependencies) var libSessionCache: LibSession.Cache! = LibSession.Cache(
+            userSessionId: SessionId(.standard, hex: TestConstants.publicKey),
+            using: dependencies
+        )
         @TestState var initialResult: Result<Void, Error>! = nil
         @TestState var finalResult: Result<Void, Error>! = nil
         
@@ -33,7 +42,7 @@ class DatabaseSpec: QuickSpec {
                 SNUtilitiesKit.self,
                 SNSnodeKit.self,
                 SNMessagingKit.self,
-                SNUIKit.self
+                DeprecatedUIKitMigrationTarget.self
             ]
         )
         let dynamicTests: [MigrationTest] = MigrationTest.extractTests(allMigrations)
@@ -55,10 +64,44 @@ class DatabaseSpec: QuickSpec {
         
         // MARK: - a Database
         describe("a Database") {
-            beforeEach {
-                // FIXME: These should be mocked out instead of set this way
-                dependencies.caches.mutate(cache: .general) { $0.encodedPublicKey = "05\(TestConstants.publicKey)" }
-                LibSession.clearMemoryState(using: dependencies)
+            // MARK: -- triggers the migration requirements in the expected order
+            it("triggers the migration requirements in the expected order") {
+                var migrationRequirementsSet: [MigrationRequirement] = []
+                mockStorage.perform(
+                    migrationTargets: [
+                        TestMigratableTarget.self
+                    ],
+                    async: false,
+                    onProgressUpdate: nil,
+                    onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                        migrationRequirementsSet.append(requirement)
+                        
+                        MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                    },
+                    onComplete: { _, _ in }
+                )
+                
+                expect(migrationRequirementsSet).to(equal([.sessionIdCached, .libSessionStateLoaded]))
+            }
+            
+            // MARK: -- triggers all prior migration requirements if only a latter one is called
+            it("triggers all prior migration requirements if only a latter one is called") {
+                var migrationRequirementsSet: [MigrationRequirement] = []
+                mockStorage.perform(
+                    migrationTargets: [
+                        SNMessagingKit.self
+                    ],
+                    async: false,
+                    onProgressUpdate: nil,
+                    onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
+                        migrationRequirementsSet.append(requirement)
+                        
+                        MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
+                    },
+                    onComplete: { _, _ in }
+                )
+                
+                expect(migrationRequirementsSet).to(equal([.sessionIdCached, .libSessionStateLoaded]))
             }
             
             // MARK: -- can be created from an empty state
@@ -68,15 +111,14 @@ class DatabaseSpec: QuickSpec {
                         SNUtilitiesKit.self,
                         SNSnodeKit.self,
                         SNMessagingKit.self,
-                        SNUIKit.self
+                        DeprecatedUIKitMigrationTarget.self
                     ],
                     async: false,
                     onProgressUpdate: nil,
                     onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                         MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                     },
-                    onComplete: { result, _ in initialResult = result },
-                    using: dependencies
+                    onComplete: { result, _ in initialResult = result }
                 )
                 
                 expect(initialResult).to(beSuccess())
@@ -91,13 +133,13 @@ class DatabaseSpec: QuickSpec {
                     onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                         MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                     },
-                    onComplete: { result, _ in initialResult = result },
-                    using: dependencies
+                    onComplete: { result, _ in initialResult = result }
                 )
                 expect(initialResult).to(beSuccess())
                 
                 // Generate dummy data (fetching below won't do anything)
-                expect(try MigrationTest.generateDummyData(mockStorage, nullsWherePossible: false)).toNot(throwError())
+                expect(try MigrationTest.generateDummyData(mockStorage, nullsWherePossible: false))
+                    .toNot(throwError())
                 
                 // Fetch the records which are required by the migrations or were modified by them to
                 // ensure the decoding is also still working correctly
@@ -117,13 +159,13 @@ class DatabaseSpec: QuickSpec {
                     onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                         MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                     },
-                    onComplete: { result, _ in initialResult = result },
-                    using: dependencies
+                    onComplete: { result, _ in initialResult = result }
                 )
                 expect(initialResult).to(beSuccess())
                 
                 // Generate dummy data (fetching below won't do anything)
-                expect(try MigrationTest.generateDummyData(mockStorage, nullsWherePossible: true)).toNot(throwError())
+                expect(try MigrationTest.generateDummyData(mockStorage, nullsWherePossible: true))
+                    .toNot(throwError())
                 
                 // Fetch the records which are required by the migrations or were modified by them to
                 // ensure the decoding is also still working correctly
@@ -144,13 +186,13 @@ class DatabaseSpec: QuickSpec {
                         onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                             MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                         },
-                        onComplete: { result, _ in initialResult = result },
-                        using: dependencies
+                        onComplete: { result, _ in initialResult = result }
                     )
                     expect(initialResult).to(beSuccess())
                     
                     // Generate dummy data (otherwise structural issues or invalid foreign keys won't error)
-                    expect(try MigrationTest.generateDummyData(mockStorage, nullsWherePossible: false)).toNot(throwError())
+                    expect(try MigrationTest.generateDummyData(mockStorage, nullsWherePossible: false))
+                        .toNot(throwError())
                     
                     // Peform the target migrations to ensure the migrations themselves worked correctly
                     mockStorage.perform(
@@ -160,8 +202,7 @@ class DatabaseSpec: QuickSpec {
                         onMigrationRequirement: { [dependencies = dependencies!] db, requirement in
                             MigrationTest.handleRequirements(db, requirement: requirement, using: dependencies)
                         },
-                        onComplete: { result, _ in finalResult = result },
-                        using: dependencies
+                        onComplete: { result, _ in finalResult = result }
                     )
                     expect(finalResult).to(beSuccess())
                     
@@ -268,17 +309,24 @@ private class MigrationTest {
     
     static func handleRequirements(_ db: Database, requirement: MigrationRequirement, using dependencies: Dependencies) {
         switch requirement {
+            case .sessionIdCached:
+                guard Identity.userExists(db, using: dependencies) else { return }
+                
+                // Warm the general cache (will cache the users session id so we don't need to fetch it from
+                // the database every time)
+                dependencies.warmCache(cache: .general)
+            
             case .libSessionStateLoaded:
-                guard Identity.userExists(db) else { return }
+                guard Identity.userExists(db, using: dependencies) else { return }
                 
                 // After the migrations have run but before the migration completion we load the
                 // SessionUtil state
-                LibSession.loadState(
-                    db,
-                    userPublicKey: getUserHexEncodedPublicKey(db, using: dependencies),
-                    ed25519SecretKey: Identity.fetchUserEd25519KeyPair(db)?.secretKey,
+                let cache: LibSession.Cache = LibSession.Cache(
+                    userSessionId: dependencies[cache: .general].sessionId,
                     using: dependencies
                 )
+                cache.loadState(db)
+                dependencies.set(cache: .libSession, to: cache)
         }
     }
     
@@ -365,7 +413,7 @@ private class MigrationTest {
                     
                     try db.execute(
                         sql: "INSERT INTO \(name) (\(columnNames)) VALUES (\(columnArgs))",
-                        arguments: StatementArguments(columnInfo.map { column in
+                        arguments: StatementArguments(columnInfo.map { (column: Row) in
                             // If we want to allow setting nulls (and the column is nullable but not a primary
                             // key) then use null for it's value
                             guard !nullsWherePossible || column["notnull"] != 0 || column["pk"] == 1 else {
@@ -396,4 +444,30 @@ private class MigrationTest {
             }
         }
     }
+}
+
+enum TestMigratableTarget: MigratableTarget { // Just to make the external API nice
+    public static func migrations() -> TargetMigrations {
+        return TargetMigrations(
+            identifier: .session,
+            migrations: [
+                [
+                    TestRequiresLibSessionStateMigration.self
+                ]
+            ]
+        )
+    }
+}
+
+enum TestRequiresLibSessionStateMigration: Migration {
+    static let target: TargetMigrations.Identifier = .session
+    static let identifier: String = "test" // stringlint:ignore
+    static let needsConfigSync: Bool = false
+    static let minExpectedRunDuration: TimeInterval = 0.1
+    static var requirements: [MigrationRequirement] = [.libSessionStateLoaded]
+    static let fetchedTables: [(TableRecord & FetchableRecord).Type] = []
+    static let createdOrAlteredTables: [(TableRecord & FetchableRecord).Type] = []
+    static let droppedTables: [(TableRecord & FetchableRecord).Type] = []
+    
+    static func migrate(_ db: Database, using dependencies: Dependencies) throws {}
 }

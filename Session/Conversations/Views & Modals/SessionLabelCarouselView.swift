@@ -2,9 +2,12 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 final class SessionLabelCarouselView: UIView, UIScrollViewDelegate {
     private static let autoScrollingTimeInterval: TimeInterval = 10
+    
+    private let dependencies: Dependencies
     private var labelInfos: [LabelInfo] = []
     private var labelSize: CGSize = .zero
     private var shouldAutoScroll: Bool = false
@@ -88,8 +91,11 @@ final class SessionLabelCarouselView: UIView, UIScrollViewDelegate {
     
     // MARK: - Initialization
     
-    init(labelInfos: [LabelInfo] = [], labelSize: CGSize = .zero, shouldAutoScroll: Bool = false) {
+    init(labelInfos: [LabelInfo] = [], labelSize: CGSize = .zero, shouldAutoScroll: Bool = false, using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
         super.init(frame: .zero)
+        
         setUpViewHierarchy()
         self.update(with: labelInfos, labelSize: labelSize, shouldAutoScroll: shouldAutoScroll)
     }
@@ -175,7 +181,7 @@ final class SessionLabelCarouselView: UIView, UIScrollViewDelegate {
     
     private func startScrolling() {
         timer?.invalidate()
-        timer = Timer.scheduledTimerOnMainThread(withTimeInterval: Self.autoScrollingTimeInterval, repeats: true) { _ in
+        timer = Timer.scheduledTimerOnMainThread(withTimeInterval: Self.autoScrollingTimeInterval, repeats: true, using: dependencies) { _ in
             guard self.labelInfos.count != 0 else { return }
             let targetPage = (self.pageControl.currentPage + 1) % self.labelInfos.count
             self.scrollView.scrollRectToVisible(

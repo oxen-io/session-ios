@@ -63,24 +63,25 @@ final class OpenGroupInvitationView: UIView {
         labelStackView.axis = .vertical
         
         // Icon
-        let iconSize = OpenGroupInvitationView.iconSize
+        let iconContainerView: UIView = UIView()
+        iconContainerView.layer.cornerRadius = (OpenGroupInvitationView.iconImageViewSize / 2)
+        iconContainerView.themeBackgroundColor = (isOutgoing ? .messageBubble_overlay : .primary)
+        iconContainerView.set(.width, to: OpenGroupInvitationView.iconImageViewSize)
+        iconContainerView.set(.height, to: OpenGroupInvitationView.iconImageViewSize)
+        
         let iconName = (isOutgoing ? "Globe" : "Plus") // stringlint:ignore
-        let iconImageViewSize = OpenGroupInvitationView.iconImageViewSize
         let iconImageView = UIImageView(
-            image: UIImage(named: iconName)?
-                .resized(to: CGSize(width: iconSize, height: iconSize))?
-                .withRenderingMode(.alwaysTemplate)
+            image: UIImage(named: iconName)?.withRenderingMode(.alwaysTemplate)
         )
         iconImageView.themeTintColor = (isOutgoing ? .messageBubble_outgoingText : .textPrimary)
-        iconImageView.contentMode = .center
-        iconImageView.layer.cornerRadius = iconImageViewSize / 2
-        iconImageView.layer.masksToBounds = true
-        iconImageView.themeBackgroundColor = (isOutgoing ? .messageBubble_overlay : .primary)
-        iconImageView.set(.width, to: iconImageViewSize)
-        iconImageView.set(.height, to: iconImageViewSize)
+        iconImageView.contentMode = .scaleAspectFit
+        iconImageView.set(.width, to: OpenGroupInvitationView.iconSize)
+        iconImageView.set(.height, to: OpenGroupInvitationView.iconSize)
+        iconContainerView.addSubview(iconImageView)
+        iconImageView.center(in: iconContainerView)
         
         // Main stack
-        let mainStackView = UIStackView(arrangedSubviews: [ iconImageView, labelStackView ])
+        let mainStackView = UIStackView(arrangedSubviews: [ iconContainerView, labelStackView ])
         mainStackView.axis = .horizontal
         mainStackView.spacing = Values.mediumSpacing
         mainStackView.alignment = .center

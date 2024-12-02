@@ -157,7 +157,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
         public var publicKey: String?
         public var encryptedKeyPair: Data?
 
-        public var isValid: Bool { publicKey != nil && encryptedKeyPair != nil }
+        public func isValid(using dependencies: Dependencies) -> Bool { publicKey != nil && encryptedKeyPair != nil }
 
         public init(publicKey: String, encryptedKeyPair: Data) {
             self.publicKey = publicKey
@@ -185,15 +185,15 @@ public final class ClosedGroupControlMessage: ControlMessage {
     // MARK: - Initialization
 
     internal init(kind: Kind, sentTimestampMs: UInt64? = nil) {
-        super.init(sentTimestamp: sentTimestampMs)
+        super.init(sentTimestampMs: sentTimestampMs)
         
         self.kind = kind
     }
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid, let kind = kind else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies), let kind = kind else { return false }
         
         switch kind {
             case .new(let publicKey, let name, let encryptionKeyPair, let members, let admins, _):
@@ -235,7 +235,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
 
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> ClosedGroupControlMessage? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String, using dependencies: Dependencies) -> ClosedGroupControlMessage? {
         guard let closedGroupControlMessageProto = proto.dataMessage?.closedGroupControlMessage else {
             return nil
         }
@@ -253,7 +253,10 @@ public final class ClosedGroupControlMessage: ControlMessage {
                         publicKey: publicKey,
                         name: name,
                         encryptionKeyPair: KeyPair(
-                            publicKey: encryptionKeyPairAsProto.publicKey.removingIdPrefixIfNeeded().bytes,
+                            publicKey: SessionId(
+                                .standard,
+                                publicKey: Array(encryptionKeyPairAsProto.publicKey)
+                            ).publicKey,
                             secretKey: encryptionKeyPairAsProto.privateKey.bytes
                         ),
                         members: closedGroupControlMessageProto.members,
@@ -361,7 +364,7 @@ public final class ClosedGroupControlMessage: ControlMessage {
 // MARK: - Convenience
 
 public extension ClosedGroupControlMessage.Kind {
-    func infoMessage(_ db: Database, sender: String) throws -> String? {
+    func infoMessage(_ db: Database, sender: String, using dependencies: Dependencies) throws -> String? {
         switch self {
             case .nameChange(let name):
                 return "groupNameNew"
@@ -384,18 +387,18 @@ public extension ClosedGroupControlMessage.Kind {
                     .localized()
                 
             case .membersRemoved(let membersAsData):
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+                let userSessionId: SessionId = dependencies[cache: .general].sessionId
                 let memberIds: Set<String> = membersAsData
                     .map { $0.toHexString() }
                     .asSet()
                 
                 var infoMessage: String = ""
                 
-                if !memberIds.removing(userPublicKey).isEmpty {
+                if !memberIds.removing(userSessionId.hexString).isEmpty {
                     let knownMemberNameMap: [String: String] = try Profile
-                        .fetchAll(db, ids: memberIds.removing(userPublicKey))
+                        .fetchAll(db, ids: memberIds.removing(userSessionId.hexString))
                         .reduce(into: [:]) { result, next in result[next.id] = next.displayName() }
-                    let removedMemberNames: [String] = memberIds.removing(userPublicKey)
+                    let removedMemberNames: [String] = memberIds.removing(userSessionId.hexString)
                         .map {
                             knownMemberNameMap[$0] ??
                             Profile.truncated(id: $0, threadVariant: .legacyGroup)
@@ -406,7 +409,7 @@ public extension ClosedGroupControlMessage.Kind {
                             .localized()
                     )
                 }
-                if memberIds.contains(userPublicKey) {
+                if memberIds.contains(userSessionId.hexString) {
                     infoMessage = infoMessage
                         .appending(
                             "groupRemovedYou"
@@ -418,11 +421,9 @@ public extension ClosedGroupControlMessage.Kind {
                 return infoMessage
                 
             case .memberLeft:
-                let userPublicKey: String = getUserHexEncodedPublicKey(db)
+                guard sender != dependencies[cache: .general].sessionId.hexString else { return "groupMemberYouLeft".localized() }
                 
-                guard sender != userPublicKey else { return "groupMemberYouLeft".localized() }
-                
-                if let displayName: String = Profile.displayNameNoFallback(db, id: sender) {
+                if let displayName: String = Profile.displayNameNoFallback(db, id: sender, using: dependencies) {
                     return "groupMemberLeft"
                         .put(key: "name", value: displayName)
                         .localized()

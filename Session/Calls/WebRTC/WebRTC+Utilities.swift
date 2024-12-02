@@ -2,7 +2,7 @@
 
 import WebRTC
 
-extension RTCSignalingState : CustomStringConvertible {
+extension RTCSignalingState : @retroactive CustomStringConvertible {
     
     public var description: String {
         switch self {
@@ -17,7 +17,7 @@ extension RTCSignalingState : CustomStringConvertible {
     }
 }
 
-extension RTCIceConnectionState : CustomStringConvertible {
+extension RTCIceConnectionState : @retroactive CustomStringConvertible {
     
     public var description: String {
         switch self {
@@ -34,7 +34,7 @@ extension RTCIceConnectionState : CustomStringConvertible {
     }
 }
 
-extension RTCIceGatheringState : CustomStringConvertible {
+extension RTCIceGatheringState : @retroactive CustomStringConvertible {
     
     public var description: String {
         switch self {

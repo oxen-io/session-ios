@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import GRDB
 import DifferenceKit
 import SessionUIKit
@@ -28,17 +29,55 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
         case contacts
     }
     
-    private let contactProfiles: [Profile] = Profile.fetchAllContactProfiles(excludeCurrentUser: true)
+    private let dependencies: Dependencies
+    private let contactProfiles: [Profile]
     private lazy var data: [ArraySection<Section, Profile>] = [
         ArraySection(model: .contacts, elements: contactProfiles)
     ]
-    private var selectedContacts: Set<String> = []
+    private var selectedProfiles: [String: Profile] = [:]
     private var searchText: String = ""
-
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        self.contactProfiles = Profile.fetchAllContactProfiles(excludeCurrentUser: true, using: dependencies)
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     // MARK: - Components
     
     private static let textFieldHeight: CGFloat = 50
     private static let searchBarHeight: CGFloat = (36 + (Values.mediumSpacing * 2))
+    
+    private let contentStackView: UIStackView = {
+        let result: UIStackView = UIStackView()
+        result.axis = .vertical
+        result.distribution = .fill
+        
+        return result
+    }()
+    
+    private lazy var minVersionBanner: InfoBanner = {
+        let result: InfoBanner = InfoBanner(
+            info: InfoBanner.Info(
+                font: .systemFont(ofSize: Values.verySmallFontSize),
+                message: "groupInviteVersion".localized(),
+                icon: .none,
+                tintColor: .black,
+                backgroundColor: .warning,
+                accessibility: Accessibility(label: "Version warning banner")
+            )
+        )
+        result.isHidden = !dependencies[feature: .updatedGroups]
+        
+        return result
+    }()
     
     private lazy var nameTextField: TextField = {
         let result = TextField(
@@ -61,6 +100,7 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
         result.themeTintColor = .textPrimary
         result.themeBackgroundColor = .clear
         result.delegate = self
+        result.searchTextField.accessibilityIdentifier = "Search contacts field"
         result.set(.height, to: NewClosedGroupVC.searchBarHeight)
 
         return result
@@ -177,11 +217,14 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
             return
         }
         
-        view.addSubview(tableView)
-        tableView.pin(.top, to: .top, of: view)
-        tableView.pin(.leading, to: .leading, of: view)
-        tableView.pin(.trailing, to: .trailing, of: view)
-        tableView.pin(.bottom, to: .bottom, of: view)
+        view.addSubview(contentStackView)
+        contentStackView.pin(.top, to: .top, of: view)
+        contentStackView.pin(.leading, to: .leading, of: view)
+        contentStackView.pin(.trailing, to: .trailing, of: view)
+        contentStackView.pin(.bottom, to: .bottom, of: view)
+        
+        contentStackView.addArrangedSubview(minVersionBanner)
+        contentStackView.addArrangedSubview(tableView)
         
         view.addSubview(fadeView)
         fadeView.pin(.leading, to: .leading, of: view)
@@ -206,16 +249,15 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
             with: SessionCell.Info(
                 id: profile,
                 position: Position.with(indexPath.row, count: data[indexPath.section].elements.count),
-                leftAccessory: .profile(id: profile.id, profile: profile),
+                leadingAccessory: .profile(id: profile.id, profile: profile),
                 title: profile.displayName(),
-                rightAccessory: .radio(isSelected: { [weak self] in
-                    self?.selectedContacts.contains(profile.id) == true
-                }),
+                trailingAccessory: .radio(isSelected: (selectedProfiles[profile.id] != nil)),
                 styling: SessionCell.StyleInfo(backgroundStyle: .edgeToEdge),
                 accessibility: Accessibility(
                     identifier: "Contact"
                 )
-            )
+            ),
+            using: dependencies
         )
         
         return cell
@@ -232,13 +274,13 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        let profileId: String = data[indexPath.section].elements[indexPath.row].id
+        let profile: Profile = data[indexPath.section].elements[indexPath.row]
         
-        if !selectedContacts.contains(profileId) {
-            selectedContacts.insert(profileId)
+        if selectedProfiles[profile.id] == nil {
+            selectedProfiles[profile.id] = profile
         }
         else {
-            selectedContacts.remove(profileId)
+            selectedProfiles.removeValue(forKey: profile.id)
         }
         
         tableView.deselectRow(at: indexPath, animated: true)
@@ -318,20 +360,43 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
         else {
             return showError(title: "groupNameEnterPlease".localized())
         }
-        guard name.utf8CString.count < LibSession.libSessionMaxGroupNameByteLength else {
+        guard !LibSession.isTooLong(groupName: name) else {
             return showError(title: "groupNameEnterShorter".localized())
         }
-        guard selectedContacts.count >= 1 else {
+        guard selectedProfiles.count >= 1 else {
             return showError(title: "groupCreateErrorNoMembers".localized())
         }
-        guard selectedContacts.count < 100 else { // Minus one because we're going to include self later
+        /// Minus one because we're going to include self later
+        guard selectedProfiles.count < (LibSession.sizeMaxGroupMemberCount - 1) else {
             return showError(title: "groupAddMemberMaximum".localized())
         }
-        let selectedContacts = self.selectedContacts
-        let message: String? = (selectedContacts.count > 20 ? "deleteAfterLegacyGroupsGroupCreation".localized() : nil)
-        ModalActivityIndicatorViewController.present(fromViewController: navigationController!, message: message) { [weak self] _ in
-            MessageSender
-                .createClosedGroup(name: name, members: selectedContacts)
+        let selectedProfiles: [(String, Profile?)] = self.selectedProfiles
+            .reduce(into: []) { result, next in result.append((next.key, next.value)) }
+        let message: String? = (dependencies[feature: .updatedGroups] || selectedProfiles.count <= 20 ? nil : "deleteAfterLegacyGroupsGroupCreation".localized()
+        )
+
+        ModalActivityIndicatorViewController.present(fromViewController: navigationController!, message: message) { [weak self, dependencies] _ in
+            let createPublisher: AnyPublisher<SessionThread, Error> = {
+                switch dependencies[feature: .updatedGroups] {
+                    case true:
+                        return MessageSender.createGroup(
+                            name: name,
+                            description: nil,
+                            displayPictureData: nil,
+                            members: selectedProfiles,
+                            using: dependencies
+                        )
+                        
+                    case false:
+                        return MessageSender.createLegacyClosedGroup(
+                            name: name,
+                            members: selectedProfiles.map { $0.0 }.asSet(),
+                            using: dependencies
+                        )
+                }
+            }()
+            
+            createPublisher
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .receive(on: DispatchQueue.main)
                 .sinkUntilComplete(
@@ -354,9 +419,10 @@ final class NewClosedGroupVC: BaseVC, UITableViewDataSource, UITableViewDelegate
                         }
                     },
                     receiveValue: { thread in
-                        SessionApp.presentConversationCreatingIfNeeded(
+                        dependencies[singleton: .app].presentConversationCreatingIfNeeded(
                             for: thread.id,
                             variant: thread.variant,
+                            action: .none,
                             dismissing: self?.presentingViewController,
                             animated: false
                         )

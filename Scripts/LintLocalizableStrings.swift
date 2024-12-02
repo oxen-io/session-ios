@@ -62,7 +62,7 @@ extension ProjectState {
         "_SharedTestUtilities/",    // Exclude shared test directory
         "external/"                 // External dependencies
     ]
-    static let excludedPhrases: Set<String> = ["", " ", "  ", ",", ", ", "null", "\"", "@[0-9a-fA-F]{66}", "^[0-9A-Fa-f]+$", "/"]
+    static let excludedPhrases: Set<String> = [ "", " ", "  ", ",", ", ", "null", "\"", "@[0-9a-fA-F]{66}", "^[0-9A-Fa-f]+$", "/" ]
     static let excludedUnlocalizedStringLineMatching: [MatchType] = [
         .prefix("#import", caseSensitive: false),
         .prefix("@available(", caseSensitive: false),
@@ -72,9 +72,13 @@ extension ProjectState {
         .contains("precondition(", caseSensitive: false),
         .contains("preconditionFailure(", caseSensitive: false),
         .contains("logMessage:", caseSensitive: false),
+        .contains(".logging(", caseSensitive: false),
         .contains("owsFailDebug(", caseSensitive: false),
+        .contains("error: .other(", caseSensitive: false),
         .contains("#imageLiteral(resourceName:", caseSensitive: false),
         .contains("[UIImage imageNamed:", caseSensitive: false),
+        .contains("Image(", caseSensitive: false),
+        .contains("logo:", caseSensitive: false),
         .contains("UIFont(name:", caseSensitive: false),
         .contains(".dateFormat =", caseSensitive: false),
         .contains("accessibilityLabel =", caseSensitive: false),
@@ -84,6 +88,8 @@ extension ProjectState {
         .contains("accessibilityLabel:", caseSensitive: false),
         .contains("Accessibility(identifier:", caseSensitive: false),
         .contains("Accessibility(label:", caseSensitive: false),
+        .contains(".withAccessibility(identifier:", caseSensitive: false),
+        .contains(".withAccessibility(label:", caseSensitive: false),
         .contains("NSAttributedString.Key(", caseSensitive: false),
         .contains("Notification.Name(", caseSensitive: false),
         .contains("Notification.Key(", caseSensitive: false),
@@ -112,7 +118,17 @@ extension ProjectState {
         .contains("payload[", caseSensitive: false),
         .contains(".infoDictionary?[", caseSensitive: false),
         .contains("accessibilityId:", caseSensitive: false),
+        .contains("SNUIKit.localizedString(for:", caseSensitive: false),
+        .and(
+            .contains("id:", caseSensitive: false),
+            .previousLine(numEarlier: 1, .regex(Regex.crypto))
+        ),
+        .and(
+            .contains("identifier:", caseSensitive: false),
+            .previousLine(numEarlier: 1, .contains("Dependencies.create", caseSensitive: false))
+        ),
         .belowLineContaining("PreviewProvider"),
+        .belowLineContaining("#Preview"),
         .regex(Regex.logging),
         .regex(Regex.errorCreation),
         .regex(Regex.databaseTableName),
@@ -308,6 +324,8 @@ enum Regex {
     static let enumCaseDefinition = #/case .* = /#
     static let imageInitialization = #/(?:UI)?Image\((?:named:)?(?:imageName:)?(?:systemName:)?.*\)/#
     static let variableToStringConversion = #/"\\(.*)"/#
+    
+    static let crypto = #/Crypto.*\(/#
     
     static let dynamicStringVariable = #/\{\w+\}/#
     

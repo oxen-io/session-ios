@@ -18,6 +18,7 @@ public class MediaMessageView: UIView {
 
     // MARK: Properties
 
+    private let dependencies: Dependencies
     private var disposables: Set<AnyCancellable> = Set()
     public let mode: Mode
     public let attachment: SignalAttachment
@@ -38,7 +39,7 @@ public class MediaMessageView: UIView {
         else if attachment.isVideo {
             guard
                 attachment.isValidVideo,
-                let image: UIImage = attachment.videoPreview(),
+                let image: UIImage = attachment.videoPreview(using: dependencies),
                 image.size.width > 0,
                 image.size.height > 0
             else {
@@ -76,20 +77,21 @@ public class MediaMessageView: UIView {
 
     // Currently we only use one mode (AttachmentApproval), so we could simplify this class, but it's kind
     // of nice that it's written in a flexible way in case we'd want to use it elsewhere again in the future.
-    public required init(attachment: SignalAttachment, mode: MediaMessageView.Mode) {
+    public required init(attachment: SignalAttachment, mode: MediaMessageView.Mode, using dependencies: Dependencies) {
         if attachment.hasError { Log.error("[MediaMessageView] \(attachment.error.debugDescription)") }
         
+        self.dependencies = dependencies
         self.attachment = attachment
         self.mode = mode
         
         // Set the linkPreviewUrl if it's a url
-        if attachment.isUrl, let linkPreviewURL: String = LinkPreview.previewUrl(for: attachment.text()) {
+        if attachment.isUrl, let linkPreviewURL: String = LinkPreview.previewUrl(for: attachment.text(), using: dependencies) {
             self.linkPreviewInfo = (url: linkPreviewURL, draft: nil)
         }
         
         super.init(frame: CGRect.zero)
 
-        setupViews()
+        setupViews(using: dependencies)
         setupLayout()
     }
 
@@ -318,7 +320,7 @@ public class MediaMessageView: UIView {
     
     // MARK: - Layout
 
-    private func setupViews() {
+    private func setupViews(using dependencies: Dependencies) {
         // Plain text will just be put in the 'message' input so do nothing
         guard !attachment.isText else { return }
         
@@ -367,7 +369,7 @@ public class MediaMessageView: UIView {
                 // error message will be broken
                 stackView.axis = .horizontal
                 
-                loadLinkPreview(linkPreviewURL: linkPreviewUrl)
+                loadLinkPreview(linkPreviewURL: linkPreviewUrl, using: dependencies)
             }
         }
         else {
@@ -489,10 +491,10 @@ public class MediaMessageView: UIView {
     
     // MARK: - Link Loading
     
-    private func loadLinkPreview(linkPreviewURL: String) {
+    private func loadLinkPreview(linkPreviewURL: String, using dependencies: Dependencies) {
         loadingView.startAnimating()
         
-        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL)
+        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL, using: dependencies)
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .sink(
@@ -507,7 +509,7 @@ public class MediaMessageView: UIView {
                             self?.subtitleLabel.isHidden = false
                             
                             // Set the error text appropriately
-                            if let targetUrl: URL = URL(string: linkPreviewURL), targetUrl.scheme?.lowercased() != "https" {
+                            if let targetUrl: URL = URL(string: linkPreviewURL), targetUrl.scheme?.lowercased() != "https" { // stringlint:ignore
                                 // This error case is handled already in the 'subtitleLabel' creation
                             }
                             else {

@@ -6,6 +6,20 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class AppearanceViewController: BaseVC {
+    // MARK: - Initialization
+    
+    private let dependencies: Dependencies
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     // MARK: - Components
     
     private let scrollView: UIScrollView = {
@@ -48,7 +62,7 @@ final class AppearanceViewController: BaseVC {
     private lazy var themeSelectionViews: [ThemeSelectionView] = Theme.allCases
         .map { theme in
             let result: ThemeSelectionView = ThemeSelectionView(theme: theme) { [weak self] theme in
-                ThemeManager.currentTheme = theme
+                ThemeManager.updateThemeState(theme: theme)
             }
             result.update(isSelected: (ThemeManager.currentTheme == theme))
             
@@ -75,8 +89,8 @@ final class AppearanceViewController: BaseVC {
         return result
     }()
     
-    private let primaryColorPreviewView: ThemePreviewView = {
-        let result: ThemePreviewView = ThemePreviewView()
+    private lazy var primaryColorPreviewView: ThemePreviewView = {
+        let result: ThemePreviewView = ThemePreviewView(using: dependencies)
         result.translatesAutoresizingMaskIntoConstraints = false
         
         return result
@@ -94,7 +108,7 @@ final class AppearanceViewController: BaseVC {
             trailing: Values.largeSpacing
         )
         
-        if Singleton.hasAppContext && Singleton.appContext.isRTL {
+        if Dependencies.isRTL {
             result.transform = CGAffineTransform.identity.scaledBy(x: -1, y: 1)
         }
         
@@ -114,7 +128,7 @@ final class AppearanceViewController: BaseVC {
     private lazy var primaryColorSelectionViews: [PrimaryColorSelectionView] = Theme.PrimaryColor.allCases
         .map { color in
             let result: PrimaryColorSelectionView = PrimaryColorSelectionView(color: color) { [weak self] color in
-                ThemeManager.primaryColor = color
+                ThemeManager.updateThemeState(primaryColor: color)
             }
             result.update(isSelected: (ThemeManager.primaryColor == color))
             
@@ -218,7 +232,7 @@ final class AppearanceViewController: BaseVC {
         nightModeToggleView.addSubview(nightModeToggleLabel)
         nightModeToggleView.addSubview(nightModeToggleSwitch)
         
-        // Register an observer so when the theme changes the selected theme and primary colour
+        // Register an observer so when the theme changes the selected theme and primary color
         // are both updated to match
         ThemeManager.onThemeChange(observer: self) { [weak self] theme, primaryColor in
             self?.themeSelectionViews.forEach { view in
@@ -281,6 +295,6 @@ final class AppearanceViewController: BaseVC {
     // MARK: - Actions
     
     @objc private func nightModeToggleChanged(sender: UISwitch) {
-        ThemeManager.matchSystemNightModeSetting = sender.isOn
+        ThemeManager.updateThemeState(matchSystemNightModeSetting: sender.isOn)
     }
 }

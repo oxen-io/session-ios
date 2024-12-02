@@ -23,23 +23,6 @@ public extension MutablePersistableRecord where Self: TableRecord & EncodableRec
         return updatedRecord.originalRecord
     }
     
-    func migrationSafeSave(
-        _ db: Database,
-        onConflict conflictResolution: Database.ConflictResolution? = nil
-    ) throws {
-        var record = try MigrationSafeMutableRecord(db, originalRecord: self)
-        try record.save(db, onConflict: conflictResolution)
-    }
-    
-    func migrationSafeSaved(
-        _ db: Database,
-        onConflict conflictResolution: Database.ConflictResolution? = nil
-    ) throws -> Self {
-        let record = try MigrationSafeMutableRecord(db, originalRecord: self)
-        let updatedRecord = try record.saved(db, onConflict: conflictResolution)
-        return updatedRecord.originalRecord
-    }
-    
     func migrationSafeUpsert(_ db: Database) throws {
         var record = try MigrationSafeMutableRecord(db, originalRecord: self)
         try record.upsert(db)

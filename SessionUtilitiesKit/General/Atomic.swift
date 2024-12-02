@@ -72,8 +72,8 @@ public class Atomic<Value> {
     }
 }
 
-extension Atomic where Value: CustomDebugStringConvertible {
-    var debugDescription: String {
+extension Atomic: CustomDebugStringConvertible where Value: CustomDebugStringConvertible {
+    public var debugDescription: String {
         return value.debugDescription
     }
 }

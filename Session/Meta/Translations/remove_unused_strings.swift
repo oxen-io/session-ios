@@ -3,7 +3,9 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 //
 // stringlint:disable
-//
+
+import Foundation
+
 // The way this works is:
 // • Run the AbandonedStrings executable (see https://www.avanderlee.com/xcode/unused-localized-strings/)
 // • Paste the list of unused strings below

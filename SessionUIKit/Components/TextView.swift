@@ -1,3 +1,5 @@
+// Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+
 import UIKit
 
 public final class TextView : UITextView, UITextViewDelegate {

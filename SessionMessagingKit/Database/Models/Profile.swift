@@ -3,11 +3,12 @@
 import Foundation
 import GRDB
 import DifferenceKit
+import SessionUIKit
 import SessionUtilitiesKit
 
 /// This type is duplicate in both the database and within the LibSession config so should only ever have it's data changes via the
 /// `updateAllAndConfig` function. Updating it elsewhere could result in issues with syncing data between devices
-public struct Profile: Codable, Identifiable, Equatable, Hashable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible, CustomStringConvertible, Differentiable {
+public struct Profile: Codable, Identifiable, Equatable, Hashable, FetchableRecord, PersistableRecord, TableRecord, ColumnExpressible, Differentiable {
     public static var databaseTableName: String { "profile" }
     internal static let interactionForeignKey = ForeignKey([Columns.id], to: [Interaction.Columns.authorId])
     internal static let contactForeignKey = ForeignKey([Columns.id], to: [Contact.Columns.id])
@@ -87,15 +88,34 @@ public struct Profile: Codable, Identifiable, Equatable, Hashable, FetchableReco
         self.blocksCommunityMessageRequests = blocksCommunityMessageRequests
         self.lastBlocksCommunityMessageRequests = lastBlocksCommunityMessageRequests
     }
-    
-    // MARK: - Description
-    
+}
+
+// MARK: - Description
+
+extension Profile: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         """
         Profile(
             name: \(name),
             profileKey: \(profileEncryptionKey?.description ?? "null"),
             profilePictureUrl: \(profilePictureUrl ?? "null")
+        )
+        """
+    }
+    
+    public var debugDescription: String {
+        return """
+        Profile(
+            id: \(id),
+            name: \(name),
+            lastNameUpdate: \(lastNameUpdate.map { "\($0)" } ?? "null"),
+            nickname: \(nickname.map { "\($0)" } ?? "null"),
+            profilePictureUrl: \(profilePictureUrl.map { "\"\($0)\"" } ?? "null"),
+            profilePictureFileName: \(profilePictureFileName.map { "\"\($0)\"" } ?? "null"),
+            profileEncryptionKey: \(profileEncryptionKey?.toHexString() ?? "null"),
+            lastProfilePictureUpdate: \(lastProfilePictureUpdate.map { "\($0)" } ?? "null"),
+            blocksCommunityMessageRequests: \(blocksCommunityMessageRequests.map { "\($0)" } ?? "null"),
+            lastBlocksCommunityMessageRequests: \(lastBlocksCommunityMessageRequests.map { "\($0)" } ?? "null")
         )
         """
     }
@@ -152,33 +172,6 @@ public extension Profile {
 // MARK: - Protobuf
 
 public extension Profile {
-    static func fromProto(_ proto: SNProtoDataMessage, id: String) -> Profile? {
-        guard let profileProto = proto.profile, let displayName = profileProto.displayName else { return nil }
-        
-        var profileKey: Data?
-        var profilePictureUrl: String?
-        let sentTimestamp: TimeInterval = (proto.hasTimestamp ? (TimeInterval(proto.timestamp) / 1000) : 0)
-        
-        // If we have both a `profileKey` and a `profilePicture` then the key MUST be valid
-        if let profileKeyData: Data = proto.profileKey, profileProto.profilePicture != nil {
-            profileKey = profileKeyData
-            profilePictureUrl = profileProto.profilePicture
-        }
-        
-        return Profile(
-            id: id,
-            name: displayName,
-            lastNameUpdate: sentTimestamp,
-            nickname: nil,
-            profilePictureUrl: profilePictureUrl,
-            profilePictureFileName: nil,
-            profileEncryptionKey: profileKey,
-            lastProfilePictureUpdate: sentTimestamp,
-            blocksCommunityMessageRequests: (proto.hasBlocksCommunityMessageRequests ? proto.blocksCommunityMessageRequests : nil),
-            lastBlocksCommunityMessageRequests: (proto.hasBlocksCommunityMessageRequests ? sentTimestamp : 0)
-        )
-    }
-
     func toProto() -> SNProtoDataMessage? {
         let dataMessageProto = SNProtoDataMessage.builder()
         let profileProto = SNProtoLokiProfile.builder()
@@ -213,14 +206,18 @@ public extension Profile {
             )
     }
     
-    static func fetchAllContactProfiles(excluding: Set<String> = [], excludeCurrentUser: Bool = true) -> [Profile] {
-        return Storage.shared
+    static func fetchAllContactProfiles(
+        excluding: Set<String> = [],
+        excludeCurrentUser: Bool = true,
+        using dependencies: Dependencies
+    ) -> [Profile] {
+        return dependencies[singleton: .storage]
             .read { db in
                 // Sort the contacts by their displayName value
                 try Profile
                     .allContactProfiles(
                         excluding: excluding
-                            .inserting(excludeCurrentUser ? getUserHexEncodedPublicKey(db) : nil)
+                            .inserting(excludeCurrentUser ? dependencies[cache: .general].sessionId.hexString : nil)
                     )
                     .fetchAll(db)
                     .sorted(by: { lhs, rhs -> Bool in lhs.displayName() < rhs.displayName() })
@@ -228,10 +225,24 @@ public extension Profile {
             .defaulting(to: [])
     }
     
-    static func displayName(_ db: Database? = nil, id: ID, threadVariant: SessionThread.Variant = .contact, customFallback: String? = nil) -> String {
+    static func displayName(
+        _ db: Database? = nil,
+        id: ID,
+        threadVariant: SessionThread.Variant = .contact,
+        customFallback: String? = nil,
+        using dependencies: Dependencies
+    ) -> String {
         guard let db: Database = db else {
-            return Storage.shared
-                .read { db in displayName(db, id: id, threadVariant: threadVariant, customFallback: customFallback) }
+            return dependencies[singleton: .storage]
+                .read { db in
+                    displayName(
+                        db,
+                        id: id,
+                        threadVariant: threadVariant,
+                        customFallback: customFallback,
+                        using: dependencies
+                    )
+                }
                 .defaulting(to: (customFallback ?? id))
         }
         
@@ -241,9 +252,16 @@ public extension Profile {
         return (existingDisplayName ?? (customFallback ?? id))
     }
     
-    static func displayNameNoFallback(_ db: Database? = nil, id: ID, threadVariant: SessionThread.Variant = .contact) -> String? {
+    static func displayNameNoFallback(
+        _ db: Database? = nil,
+        id: ID,
+        threadVariant: SessionThread.Variant = .contact,
+        using dependencies: Dependencies
+    ) -> String? {
         guard let db: Database = db else {
-            return Storage.shared.read { db in displayNameNoFallback(db, id: id, threadVariant: threadVariant) }
+            return dependencies[singleton: .storage].read { db in
+                displayNameNoFallback(db, id: id, threadVariant: threadVariant, using: dependencies)
+            }
         }
         
         return (try? Profile.fetchOne(db, id: id))?
@@ -252,7 +270,7 @@ public extension Profile {
     
     // MARK: - Fetch or Create
     
-    private static func defaultFor(_ id: String) -> Profile {
+    static func defaultFor(_ id: String) -> Profile {
         return Profile(
             id: id,
             name: "",
@@ -271,18 +289,24 @@ public extension Profile {
     ///
     /// **Note:** This method intentionally does **not** save the newly created Profile,
     /// it will need to be explicitly saved after calling
-    static func fetchOrCreateCurrentUser(_ db: Database? = nil, using dependencies: Dependencies = Dependencies()) -> Profile {
-        let userPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
+    static func fetchOrCreateCurrentUser(using dependencies: Dependencies) -> Profile {
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         
-        guard let db: Database = db else {
-            return dependencies.storage
-                .read { db in fetchOrCreateCurrentUser(db, using: dependencies) }
-                .defaulting(to: defaultFor(userPublicKey))
-        }
+        return dependencies[singleton: .storage]
+            .read { db in fetchOrCreateCurrentUser(db, using: dependencies) }
+            .defaulting(to: defaultFor(userSessionId.hexString))
+    }
+    
+    /// Fetches or creates a Profile for the current user
+    ///
+    /// **Note:** This method intentionally does **not** save the newly created Profile,
+    /// it will need to be explicitly saved after calling
+    static func fetchOrCreateCurrentUser(_ db: Database, using dependencies: Dependencies) -> Profile {
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         
         return (
-            (try? Profile.fetchOne(db, id: userPublicKey)) ??
-            defaultFor(userPublicKey)
+            (try? Profile.fetchOne(db, id: userSessionId.hexString)) ??
+            defaultFor(userSessionId.hexString)
         )
     }
     
@@ -343,8 +367,17 @@ public extension Profile {
     }
     
     /// The name to display in the UI for a given thread variant
-    func displayName(for threadVariant: SessionThread.Variant = .contact) -> String {
-        return Profile.displayName(for: threadVariant, id: id, name: name, nickname: nickname, suppressId: false)
+    func displayName(
+        for threadVariant: SessionThread.Variant = .contact,
+        ignoringNickname: Bool = false
+    ) -> String {
+        return Profile.displayName(
+            for: threadVariant,
+            id: id,
+            name: name,
+            nickname: (ignoringNickname ? nil : nickname),
+            suppressId: false
+        )
     }
     
     static func displayName(
@@ -368,6 +401,61 @@ public extension Profile {
                 // In open groups, where it's more likely that multiple users have the same name,
                 // we display a bit of the Session ID after a user's display name for added context
                 return "\(name) (\(Profile.truncated(id: id, truncating: .middle)))"
+        }
+    }
+}
+
+// MARK: - WithProfile<T>
+
+public struct WithProfile<T: ProfileAssociated>: Equatable, Hashable, Comparable {
+    public let value: T
+    public let profile: Profile?
+    public let currentUserSessionId: SessionId
+    
+    public var profileId: String { value.profileId }
+    
+    public func itemDescription(using dependencies: Dependencies) -> String? {
+        return value.itemDescription(using: dependencies)
+    }
+    
+    public func itemDescriptionColor(using dependencies: Dependencies) -> ThemeValue {
+        return value.itemDescriptionColor(using: dependencies)
+    }
+    
+    public static func < (lhs: WithProfile<T>, rhs: WithProfile<T>) -> Bool {
+        return T.compare(lhs: lhs, rhs: rhs)
+    }
+}
+
+public protocol ProfileAssociated: Equatable, Hashable {
+    var profileId: String { get }
+    var profileIcon: ProfilePictureView.ProfileIcon { get }
+    
+    func itemDescription(using dependencies: Dependencies) -> String?
+    func itemDescriptionColor(using dependencies: Dependencies) -> ThemeValue
+    static func compare(lhs: WithProfile<Self>, rhs: WithProfile<Self>) -> Bool
+}
+
+public extension ProfileAssociated {
+    var profileIcon: ProfilePictureView.ProfileIcon { return .none }
+    
+    func itemDescription(using dependencies: Dependencies) -> String? { return nil }
+    func itemDescriptionColor(using dependencies: Dependencies) -> ThemeValue { return .textPrimary }
+}
+
+public extension FetchRequest where RowDecoder: FetchableRecord & ProfileAssociated {
+    func fetchAllWithProfiles(_ db: Database, using dependencies: Dependencies) throws -> [WithProfile<RowDecoder>] {
+        let originalResult: [RowDecoder] = try self.fetchAll(db)
+        let profiles: [String: Profile]? = try? Profile
+            .fetchAll(db, ids: originalResult.map { $0.profileId }.asSet())
+            .reduce(into: [:]) { result, next in result[next.id] = next }
+        
+        return originalResult.map {
+            WithProfile(
+                value: $0,
+                profile: profiles?[$0.profileId],
+                currentUserSessionId: dependencies[cache: .general].sessionId
+            )
         }
     }
 }

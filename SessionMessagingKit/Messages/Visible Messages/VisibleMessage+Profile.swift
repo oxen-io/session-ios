@@ -44,11 +44,9 @@ public extension VisibleMessage {
             )
         }
 
-        public func toProto() -> SNProtoDataMessage? {
-            guard let displayName = displayName else {
-                SNLog("Couldn't construct profile proto from: \(self).")
-                return nil
-            }
+        public func toProtoBuilder() throws -> SNProtoDataMessage.SNProtoDataMessageBuilder {
+            guard let displayName = displayName else { throw MessageSenderError.protoConversionFailed }
+            
             let dataMessageProto = SNProtoDataMessage.builder()
             let profileProto = SNProtoLokiProfile.builder()
             profileProto.setDisplayName(displayName)
@@ -61,14 +59,24 @@ public extension VisibleMessage {
                 dataMessageProto.setProfileKey(profileKey)
                 profileProto.setProfilePicture(profilePictureUrl)
             }
-            do {
-                dataMessageProto.setProfile(try profileProto.build())
-                return try dataMessageProto.build()
-            } catch {
+            
+            dataMessageProto.setProfile(try profileProto.build())
+            return dataMessageProto
+        }
+        
+        public func toProto() -> SNProtoDataMessage? {
+            guard
+                let dataMessageProtoBuilder = try? toProtoBuilder(),
+                let result = try? dataMessageProtoBuilder.build()
+            else {
                 SNLog("Couldn't construct profile proto from: \(self).")
                 return nil
             }
+            
+            return result
         }
+        
+        // MARK: - MessageRequestResponse
         
         public static func fromProto(_ proto: SNProtoMessageRequestResponse) -> VMProfile? {
             guard
@@ -143,3 +151,6 @@ public protocol MessageWithProfile {
 
 extension VisibleMessage: MessageWithProfile {}
 extension MessageRequestResponse: MessageWithProfile {}
+extension GroupUpdateInviteMessage: MessageWithProfile {}
+extension GroupUpdatePromoteMessage: MessageWithProfile {}
+extension GroupUpdateInviteResponseMessage: MessageWithProfile {}

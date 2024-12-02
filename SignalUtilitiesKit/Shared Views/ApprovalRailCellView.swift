@@ -67,8 +67,8 @@ public class ApprovalRailCellView: GalleryRailCellView {
         }
     }
 
-    override func configure(item: GalleryRailItem, delegate: GalleryRailCellViewDelegate) {
-        super.configure(item: item, delegate: delegate)
+    override func configure(item: GalleryRailItem, delegate: GalleryRailCellViewDelegate, using dependencies: Dependencies) {
+        super.configure(item: item, delegate: delegate, using: dependencies)
 
         var hasCaption = false
         if let attachmentItem = item as? SignalAttachmentItem {

@@ -1,5 +1,5 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
-
+//
 // stringlint:disable
 
 import Foundation
@@ -61,15 +61,16 @@ public struct LinkPreview: Codable, Equatable, Hashable, FetchableRecord, Persis
     
     public init(
         url: String,
-        timestamp: TimeInterval = LinkPreview.timestampFor(
-            sentTimestampMs: TimeInterval(SnodeAPI.currentOffsetTimestampMs())  // Default to now
-        ),
+        timestamp: TimeInterval? = nil,
         variant: Variant = .standard,
         title: String?,
-        attachmentId: String? = nil
+        attachmentId: String? = nil,
+        using dependencies: Dependencies
     ) {
         self.url = url
-        self.timestamp = timestamp
+        self.timestamp = (timestamp ?? LinkPreview.timestampFor(
+            sentTimestampMs: dependencies[cache: .snodeAPI].currentOffsetTimestampMs()  // Default to now
+        ))
         self.variant = variant
         self.title = title
         self.attachmentId = attachmentId
@@ -130,16 +131,16 @@ public extension LinkPreview {
         return (floor(sentTimestampMs / 1000 / LinkPreview.timstampResolution) * LinkPreview.timstampResolution)
     }
     
-    static func generateAttachmentIfPossible(imageData: Data?, type: UTType) throws -> Attachment? {
+    static func generateAttachmentIfPossible(imageData: Data?, type: UTType, using dependencies: Dependencies) throws -> Attachment? {
         guard let imageData: Data = imageData, !imageData.isEmpty else { return nil }
         guard let fileExtension: String = type.sessionFileExtension else { return nil }
         guard let mimeType: String = type.preferredMIMEType else { return nil }
         
-        let filePath = FileSystem.temporaryFilePath(fileExtension: fileExtension)
+        let filePath = dependencies[singleton: .fileManager].temporaryFilePath(fileExtension: fileExtension)
         try imageData.write(to: NSURL.fileURL(withPath: filePath), options: .atomicWrite)
-        let dataSource: DataSourcePath = DataSourcePath(filePath: filePath, shouldDeleteOnDeinit: true)
+        let dataSource: DataSourcePath = DataSourcePath(filePath: filePath, shouldDeleteOnDeinit: true, using: dependencies)
         
-        return Attachment(contentType: mimeType, dataSource: dataSource)
+        return Attachment(contentType: mimeType, dataSource: dataSource, using: dependencies)
     }
     
     static func isValidLinkUrl(_ urlString: String) -> Bool {
@@ -209,8 +210,12 @@ public extension LinkPreview {
 
     private static var previewUrlCache: Atomic<NSCache<NSString, NSString>> = Atomic(NSCache())
 
-    static func previewUrl(for body: String?, selectedRange: NSRange? = nil) -> String? {
-        guard Storage.shared[.areLinkPreviewsEnabled] else { return nil }
+    static func previewUrl(
+        for body: String?,
+        selectedRange: NSRange? = nil,
+        using dependencies: Dependencies
+    ) -> String? {
+        guard dependencies[singleton: .storage, key: .areLinkPreviewsEnabled] else { return nil }
         guard let body: String = body else { return nil }
 
         if let cachedUrl = previewUrlCache.wrappedValue.object(forKey: body as NSString) as String? {
@@ -282,20 +287,27 @@ public extension LinkPreview {
         }
     }
     
-    private static func setCachedLinkPreview(_ linkPreviewDraft: LinkPreviewDraft, forPreviewUrl previewUrl: String) {
+    private static func setCachedLinkPreview(
+        _ linkPreviewDraft: LinkPreviewDraft,
+        forPreviewUrl previewUrl: String,
+        using dependencies: Dependencies
+    ) {
         assert(previewUrl == linkPreviewDraft.urlString)
 
         // Exit early if link previews are not enabled in order to avoid
         // tainting the cache.
-        guard Storage.shared[.areLinkPreviewsEnabled] else { return }
+        guard dependencies[singleton: .storage, key: .areLinkPreviewsEnabled] else { return }
 
         serialQueue.sync {
             linkPreviewDraftCache = linkPreviewDraft
         }
     }
     
-    static func tryToBuildPreviewInfo(previewUrl: String?) -> AnyPublisher<LinkPreviewDraft, Error> {
-        guard Storage.shared[.areLinkPreviewsEnabled] else {
+    static func tryToBuildPreviewInfo(
+        previewUrl: String?,
+        using dependencies: Dependencies
+    ) -> AnyPublisher<LinkPreviewDraft, Error> {
+        guard dependencies[singleton: .storage, key: .areLinkPreviewsEnabled] else {
             return Fail(error: LinkPreviewError.featureDisabled)
                 .eraseToAnyPublisher()
         }
@@ -314,13 +326,18 @@ public extension LinkPreview {
         }
         
         return downloadLink(url: previewUrl)
-            .flatMap { data, response in
-                parseLinkDataAndBuildDraft(linkData: data, response: response, linkUrlString: previewUrl)
+            .flatMap { [dependencies] data, response in
+                parseLinkDataAndBuildDraft(
+                    linkData: data,
+                    response: response,
+                    linkUrlString: previewUrl,
+                    using: dependencies
+                )
             }
-            .tryMap { linkPreviewDraft -> LinkPreviewDraft in
+            .tryMap { [dependencies] linkPreviewDraft -> LinkPreviewDraft in
                 guard linkPreviewDraft.isValid() else { throw LinkPreviewError.noPreview }
                 
-                setCachedLinkPreview(linkPreviewDraft, forPreviewUrl: previewUrl)
+                setCachedLinkPreview(linkPreviewDraft, forPreviewUrl: previewUrl, using: dependencies)
 
                 return linkPreviewDraft
             }
@@ -386,7 +403,8 @@ public extension LinkPreview {
     private static func parseLinkDataAndBuildDraft(
         linkData: Data,
         response: URLResponse,
-        linkUrlString: String
+        linkUrlString: String,
+        using dependencies: Dependencies
     ) -> AnyPublisher<LinkPreviewDraft, Error> {
         do {
             let contents = try parse(linkData: linkData, response: response)
@@ -415,7 +433,7 @@ public extension LinkPreview {
             }
 
             return LinkPreview
-                .downloadImage(url: imageUrl, imageMimeType: imageMimeType)
+                .downloadImage(url: imageUrl, imageMimeType: imageMimeType, using: dependencies)
                 .map { imageData -> LinkPreviewDraft in
                     // We always recompress images to Jpeg
                     LinkPreviewDraft(urlString: linkUrlString, title: title, jpegImageData: imageData)
@@ -464,7 +482,8 @@ public extension LinkPreview {
     
     private static func downloadImage(
         url urlString: String,
-        imageMimeType: String
+        imageMimeType: String,
+        using dependencies: Dependencies
     ) -> AnyPublisher<Data, Error> {
         guard
             let url = URL(string: urlString),
@@ -476,7 +495,7 @@ public extension LinkPreview {
                 .eraseToAnyPublisher()
         }
         
-        return ProxiedContentDownloader.defaultDownloader
+        return dependencies[singleton: .proxiedContentDownloader]
             .requestAsset(
                 assetDescription: assetDescription,
                 priority: .high,
@@ -484,7 +503,7 @@ public extension LinkPreview {
             )
             .tryMap { asset, _ -> Data in
                 let type: UTType? = UTType(sessionMimeType: imageMimeType)
-                let imageSize = Data.imageSize(for: asset.filePath, type: type)
+                let imageSize = Data.imageSize(for: asset.filePath, type: type, using: dependencies)
                 
                 guard imageSize.width > 0, imageSize.height > 0 else {
                     throw LinkPreviewError.invalidContent

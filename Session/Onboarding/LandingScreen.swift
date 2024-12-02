@@ -1,16 +1,59 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import SwiftUI
+import Combine
 import SessionUIKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 struct LandingScreen: View {
-    @EnvironmentObject var host: HostWrapper
-    private let dependencies: Dependencies
+    public class ViewModel {
+        fileprivate let dependencies: Dependencies
+        private let onOnboardingComplete: () -> ()
+        private var disposables: Set<AnyCancellable> = Set()
+        
+        init(onOnboardingComplete: @escaping () -> Void, using dependencies: Dependencies) {
+            self.dependencies = dependencies
+            self.onOnboardingComplete = onOnboardingComplete
+        }
+        
+        fileprivate func register(setupComplete: () -> ()) {
+            // Reset the Onboarding cache to create a new user (in case the user previously went back)
+            dependencies.set(cache: .onboarding, to: Onboarding.Cache(flow: .register, using: dependencies))
+            
+            /// Once the onboarding process is complete we need to call `onOnboardingComplete`
+            dependencies[cache: .onboarding].onboardingCompletePublisher
+                .subscribe(on: DispatchQueue.main, using: dependencies)
+                .receive(on: DispatchQueue.main, using: dependencies)
+                .sink(receiveValue: { [weak self] _ in self?.onOnboardingComplete() })
+                .store(in: &disposables)
+            
+            setupComplete()
+        }
+        
+        fileprivate func restore(setupComplete: () -> ()) {
+            // Reset the Onboarding cache to create a new user (in case the user previously went back)
+            dependencies.set(cache: .onboarding, to: Onboarding.Cache(flow: .restore, using: dependencies))
+            
+            /// Once the onboarding process is complete we need to call `onOnboardingComplete`
+            dependencies[cache: .onboarding].onboardingCompletePublisher
+                .subscribe(on: DispatchQueue.main, using: dependencies)
+                .receive(on: DispatchQueue.main, using: dependencies)
+                .sink(receiveValue: { [weak self] _ in self?.onOnboardingComplete() })
+                .store(in: &disposables)
+            
+            setupComplete()
+        }
+    }
     
-    public init(using dependencies: Dependencies) {
-        self.dependencies = dependencies
+    @EnvironmentObject var host: HostWrapper
+    private let viewModel: ViewModel
+    
+    public init(using dependencies: Dependencies, onOnboardingComplete: @escaping () -> ()) {
+        self.viewModel = ViewModel(
+            onOnboardingComplete: onOnboardingComplete,
+            using: dependencies
+        )
     }
 
     var body: some View {
@@ -31,7 +74,7 @@ struct LandingScreen: View {
                 Spacer(minLength: 0)
                     .frame(maxHeight: 2 * Values.mediumSpacing)
                 
-                FakeChat()
+                FakeChat(using: viewModel.dependencies)
                 
                 Spacer(minLength: 0)
                     .frame(maxHeight: Values.massiveSpacing)
@@ -116,32 +159,23 @@ struct LandingScreen: View {
     }
     
     private func register() {
-        let seed: Data! = try! Randomness.generateRandomBytes(numberBytes: 16)
-        let (ed25519KeyPair, x25519KeyPair): (KeyPair, KeyPair) = try! Identity.generate(from: seed)
-        Onboarding.Flow.register
-            .preregister(
-                with: seed,
-                ed25519KeyPair: ed25519KeyPair,
-                x25519KeyPair: x25519KeyPair,
-                using: dependencies
+        viewModel.register {
+            let viewController: SessionHostingViewController = SessionHostingViewController(
+                rootView: DisplayNameScreen(using: viewModel.dependencies)
             )
-        
-        let viewController: SessionHostingViewController = SessionHostingViewController(
-            rootView: DisplayNameScreen(flow: .register, using: dependencies)
-        )
-        viewController.setUpNavBarSessionIcon()
-        viewController.setUpClearDataBackButton(flow: .register)
-        self.host.controller?.navigationController?.setViewControllers([viewController], animated: true)
+            viewController.setUpNavBarSessionIcon(using: viewModel.dependencies)
+            self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
+        }
     }
     
     private func restore() {
-        Onboarding.Flow.register.unregister(using: dependencies)
-        
-        let viewController: SessionHostingViewController = SessionHostingViewController(
-            rootView: LoadAccountScreen(using: dependencies)
-        )
-        viewController.setNavBarTitle("loadAccount".localized())
-        self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
+        viewModel.restore {
+            let viewController: SessionHostingViewController = SessionHostingViewController(
+                rootView: LoadAccountScreen(using: viewModel.dependencies)
+            )
+            viewController.setNavBarTitle("loadAccount".localized())
+            self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
+        }
     }
     
     private func openLegalUrl() {
@@ -191,6 +225,11 @@ struct ChatBubble: View {
 
 struct FakeChat: View {
     @State var numberOfBubblesShown: Int = 0
+    private let dependencies: Dependencies
+    
+    public init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
     
     let chatBubbles: [ChatBubble] = [
         ChatBubble(
@@ -255,11 +294,11 @@ struct FakeChat: View {
         .onAppear {
             guard numberOfBubblesShown < 4 else { return }
             
-            Timer.scheduledTimerOnMainThread(withTimeInterval: 0.2, repeats: false) { _ in
+            Timer.scheduledTimerOnMainThread(withTimeInterval: 0.2, repeats: false, using: dependencies) { [dependencies] _ in
                 withAnimation(.spring().speed(0.68)) {
                     numberOfBubblesShown = 1
                 }
-                Timer.scheduledTimerOnMainThread(withTimeInterval: 1.5, repeats: true) { timer in
+                Timer.scheduledTimerOnMainThread(withTimeInterval: 1.5, repeats: true, using: dependencies) { timer in
                     withAnimation(.spring().speed(0.68)) {
                         numberOfBubblesShown += 1
                         if numberOfBubblesShown >= 4 {
@@ -274,6 +313,6 @@ struct FakeChat: View {
 
 struct LandingView_Previews: PreviewProvider {
     static var previews: some View {
-        LandingScreen(using: Dependencies())
+        LandingScreen(using: Dependencies.createEmpty(), onOnboardingComplete: {})
     }
 }

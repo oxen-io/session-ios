@@ -7,6 +7,7 @@ import Combine
 import CoreServices
 import Photos
 import PhotosUI
+import UniformTypeIdentifiers
 import GRDB
 import SessionUIKit
 import SessionMessagingKit
@@ -33,35 +34,69 @@ extension ConversationVC:
         openSettingsFromTitleView()
     }
     
-    @objc func openSettingsFromTitleView() {
-        switch self.titleView.currentLabelType {
-            case .userCount:
-                if self.viewModel.threadData.threadVariant == .group || self.viewModel.threadData.threadVariant == .legacyGroup {
-                    let viewController = EditClosedGroupVC(
+    func openSettingsFromTitleView() {
+        switch (titleView.currentLabelType, viewModel.threadData.threadVariant, viewModel.threadData.currentUserIsClosedGroupMember, viewModel.threadData.currentUserIsClosedGroupAdmin) {
+            case (.userCount, .group, _, true), (.userCount, .legacyGroup, _, true):
+                let viewController = SessionTableViewController(
+                    viewModel: EditGroupViewModel(
                         threadId: self.viewModel.threadData.threadId,
-                        threadVariant: self.viewModel.threadData.threadVariant
+                        using: self.viewModel.dependencies
                     )
-                    navigationController?.pushViewController(viewController, animated: true)
-                } else {
-                    openSettings()
+                )
+                navigationController?.pushViewController(viewController, animated: true)
+                
+            case (.userCount, .group, true, _), (.userCount, .legacyGroup, true, _):
+                let viewController: SessionTableViewController = SessionTableViewController(
+                    viewModel: UserListViewModel(
+                        title: "groupMembers".localized(),
+                        showProfileIcons: true,
+                        request: GroupMember
+                            .filter(GroupMember.Columns.groupId == self.viewModel.threadData.threadId),
+                        onTap: .callback { [weak self, dependencies = viewModel.dependencies] _, memberInfo in
+                            dependencies[singleton: .storage].write { db in
+                                try SessionThread.fetchOrCreate(
+                                    db,
+                                    id: memberInfo.profileId,
+                                    variant: .contact,
+                                    creationDateTimestamp: (dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000),
+                                    shouldBeVisible: nil,
+                                    calledFromConfig: nil,
+                                    using: dependencies
+                                )
+                            }
+                            
+                            self?.navigationController?.pushViewController(
+                                ConversationVC(
+                                    threadId: memberInfo.profileId,
+                                    threadVariant: .contact,
+                                    using: dependencies
+                                ),
+                                animated: true
+                            )
+                        },
+                        using: self.viewModel.dependencies
+                    )
+                )
+                navigationController?.pushViewController(viewController, animated: true)
+                
+            case (.disappearingMessageSetting, _, _, _):
+                guard let config: DisappearingMessagesConfiguration = self.viewModel.threadData.disappearingMessagesConfiguration else {
+                    return openSettings()
                 }
-                break
-            case .none, .notificationSettings:
-                openSettings()
-                break
-            
-            case .disappearingMessageSetting:
+                
                 let viewController = SessionTableViewController(
                     viewModel: ThreadDisappearingMessagesSettingsViewModel(
                         threadId: self.viewModel.threadData.threadId,
                         threadVariant: self.viewModel.threadData.threadVariant,
                         currentUserIsClosedGroupMember: self.viewModel.threadData.currentUserIsClosedGroupMember,
                         currentUserIsClosedGroupAdmin: self.viewModel.threadData.currentUserIsClosedGroupAdmin,
-                        config: self.viewModel.threadData.disappearingMessagesConfiguration!
+                        config: config,
+                        using: self.viewModel.dependencies
                     )
                 )
                 navigationController?.pushViewController(viewController, animated: true)
-                break
+                
+            case (.userCount, _, _, _), (.none, _, _, _), (.notificationSettings, _, _, _): openSettings()
         }
     }
 
@@ -79,7 +114,8 @@ extension ConversationVC:
                             }
                         }
                     }
-                }
+                },
+                using: self.viewModel.dependencies
             )
         )
         navigationController?.pushViewController(viewController, animated: true)
@@ -90,19 +126,20 @@ extension ConversationVC:
     @objc func startCall(_ sender: Any?) {
         guard SessionCall.isEnabled else { return }
         guard viewModel.threadData.threadIsBlocked == false else { return }
-        guard Storage.shared[.areCallsEnabled] else {
+        guard viewModel.dependencies[singleton: .storage, key: .areCallsEnabled] else {
             let confirmationModal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
                     title: "callsPermissionsRequired".localized(),
                     body: .text("callsPermissionsRequiredDescription".localized()),
                     confirmTitle: "sessionSettings".localized(),
                     dismissOnConfirm: false // Custom dismissal logic
-                ) { [weak self] _ in
+                ) { [weak self, dependencies = viewModel.dependencies] _ in
                     self?.dismiss(animated: true) {
                         let navController: UINavigationController = StyledNavigationController(
                             rootViewController: SessionTableViewController(
                                 viewModel: PrivacySettingsViewModel(
-                                    shouldShowCloseButton: true
+                                    shouldShowCloseButton: true,
+                                    using: dependencies
                                 )
                             )
                         )
@@ -116,18 +153,28 @@ extension ConversationVC:
             return
         }
         
-        Permissions.requestMicrophonePermissionIfNeeded()
+        Permissions.requestMicrophonePermissionIfNeeded(using: viewModel.dependencies)
         
         let threadId: String = self.viewModel.threadData.threadId
         
-        guard AVAudioSession.sharedInstance().recordPermission == .granted else { return }
-        guard self.viewModel.threadData.threadVariant == .contact else { return }
-        guard AppEnvironment.shared.callManager.currentCall == nil else { return }
-        guard let call: SessionCall = Storage.shared.read({ db in SessionCall(db, for: threadId, uuid: UUID().uuidString.lowercased(), mode: .offer, outgoing: true) }) else {
-            return
-        }
+        guard
+            AVAudioSession.sharedInstance().recordPermission == .granted,
+            self.viewModel.threadData.threadVariant == .contact,
+            viewModel.dependencies[singleton: .callManager].currentCall == nil,
+            let call: SessionCall = viewModel.dependencies[singleton: .storage]
+                .read({ [dependencies = viewModel.dependencies] db in
+                    SessionCall(
+                        db,
+                        for: threadId,
+                        uuid: UUID().uuidString.lowercased(),
+                        mode: .offer,
+                        outgoing: true,
+                        using: dependencies
+                    )
+                })
+        else { return }
         
-        let callVC = CallVC(for: call)
+        let callVC = CallVC(for: call, using: viewModel.dependencies)
         callVC.conversationVC = self
         hideInputAccessoryView()
         resignFirstResponder()
@@ -245,7 +292,7 @@ extension ConversationVC:
     // MARK: - ExpandingAttachmentsButtonDelegate
 
     func handleGIFButtonTapped() {
-        guard Storage.shared[.isGiphyEnabled] else {
+        guard viewModel.dependencies[singleton: .storage, key: .isGiphyEnabled] else {
             let modal: ConfirmationModal = ConfirmationModal(
                 info: ConfirmationModal.Info(
                     title: "giphyWarning".localized(),
@@ -255,8 +302,8 @@ extension ConversationVC:
                             .localized()
                     ),
                     confirmTitle: "theContinue".localized()
-                ) { [weak self] _ in
-                    Storage.shared.writeAsync(
+                ) { [weak self, dependencies = viewModel.dependencies] _ in
+                    dependencies[singleton: .storage].writeAsync(
                         updates: { db in
                             db[.isGiphyEnabled] = true
                         },
@@ -273,7 +320,7 @@ extension ConversationVC:
             return
         }
         
-        let gifVC = GifPickerViewController()
+        let gifVC = GifPickerViewController(using: viewModel.dependencies)
         gifVC.delegate = self
         
         let navController = StyledNavigationController(rootViewController: gifVC)
@@ -295,7 +342,7 @@ extension ConversationVC:
         let threadId: String = self.viewModel.threadData.threadId
         let threadVariant: SessionThread.Variant = self.viewModel.threadData.threadVariant
         
-        Permissions.requestLibraryPermissionIfNeeded(isSavingMedia: false) { [weak self, dependencies = viewModel.dependencies] in
+        Permissions.requestLibraryPermissionIfNeeded(isSavingMedia: false, using: viewModel.dependencies) { [weak self, dependencies = viewModel.dependencies] in
             DispatchQueue.main.async {
                 let sendMediaNavController = SendMediaNavigationController.showingMediaLibraryFirst(
                     threadId: threadId,
@@ -310,9 +357,9 @@ extension ConversationVC:
     }
     
     func handleCameraButtonTapped() {
-        guard Permissions.requestCameraPermissionIfNeeded(presentingViewController: self) else { return }
+        guard Permissions.requestCameraPermissionIfNeeded(presentingViewController: self, using: viewModel.dependencies) else { return }
         
-        Permissions.requestMicrophonePermissionIfNeeded()
+        Permissions.requestMicrophonePermissionIfNeeded(using: viewModel.dependencies)
         
         if AVAudioSession.sharedInstance().recordPermission != .granted {
             SNLog("Proceeding without microphone access. Any recorded video will be silent.")
@@ -368,8 +415,8 @@ extension ConversationVC:
             return
         }
         
-        let fileName = urlResourceValues.name ?? "attachment".localized()
-        guard let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false) else {
+        let fileName: String = (urlResourceValues.name ?? "attachment".localized())
+        guard let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false, using: viewModel.dependencies) else {
             DispatchQueue.main.async { [weak self] in
                 self?.viewModel.showToast(text: "attachmentsErrorLoad".localized())
             }
@@ -384,7 +431,7 @@ extension ConversationVC:
         }
         
         // "Document picker" attachments _SHOULD NOT_ be resized
-        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: type, imageQuality: .original)
+        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: type, imageQuality: .original, using: viewModel.dependencies)
         showAttachmentApprovalDialog(for: [ attachment ])
     }
 
@@ -403,7 +450,11 @@ extension ConversationVC:
 
     func showAttachmentApprovalDialogAfterProcessingVideo(at url: URL, with fileName: String) {
         ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: true, message: nil) { [weak self, dependencies = viewModel.dependencies] modalActivityIndicator in
-            let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false)!
+            
+            guard let dataSource = DataSourcePath(fileUrl: url, shouldDeleteOnDeinit: false, using: dependencies) else {
+                self?.showErrorAlert(for: SignalAttachment.empty(using: dependencies))
+                return
+            }
             dataSource.sourceFilename = fileName
             
             SignalAttachment
@@ -498,16 +549,8 @@ extension ConversationVC:
         // use it to determine if the user is creating a new thread and update the 'isApproved'
         // flags appropriately
         let oldThreadShouldBeVisible: Bool = (self.viewModel.threadData.threadShouldBeVisible == true)
-        let sentTimestampMs: Int64 = SnodeAPI.currentOffsetTimestampMs()
+        let sentTimestampMs: Int64 = viewModel.dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
 
-        // If this was a message request then approve it
-        approveMessageRequestIfNeeded(
-            for: self.viewModel.threadData.threadId,
-            threadVariant: self.viewModel.threadData.threadVariant,
-            isNewThread: !oldThreadShouldBeVisible,
-            timestampMs: (sentTimestampMs - 1)  // Set 1ms earlier as this is used for sorting
-        )
-        
         // Optimistically insert the outgoing message (this will trigger a UI update)
         self.viewModel.sentMessageBeforeUpdate = true
         let optimisticData: ConversationViewModel.OptimisticMessageData = self.viewModel.optimisticallyAppendOutgoingMessage(
@@ -518,7 +561,17 @@ extension ConversationVC:
             quoteModel: quoteModel
         )
         
-        sendMessage(optimisticData: optimisticData)
+        // If this was a message request then approve it
+        approveMessageRequestIfNeeded(
+            for: self.viewModel.threadData.threadId,
+            threadVariant: self.viewModel.threadData.threadVariant,
+            isNewThread: !oldThreadShouldBeVisible,
+            timestampMs: (sentTimestampMs - 1)  // Set 1ms earlier as this is used for sorting
+        ).sinkUntilComplete(
+            receiveCompletion: { [weak self] _ in
+                self?.sendMessage(optimisticData: optimisticData)
+            }
+        )
     }
     
     private func sendMessage(optimisticData: ConversationViewModel.OptimisticMessageData) {
@@ -528,10 +581,11 @@ extension ConversationVC:
         DispatchQueue.global(qos:.userInitiated).async(using: viewModel.dependencies) { [dependencies = viewModel.dependencies] in
             // Generate the quote thumbnail if needed (want this to happen outside of the DBWrite thread as
             // this can take up to 0.5s
-            let quoteThumbnailAttachment: Attachment? = optimisticData.quoteModel?.attachment?.cloneAsQuoteThumbnail()
+            let quoteThumbnailAttachment: Attachment? = optimisticData.quoteModel?.attachment?
+                .cloneAsQuoteThumbnail(using: dependencies)
             
             // Actually send the message
-            dependencies.storage
+            dependencies[singleton: .storage]
                 .writePublisher { [weak self] db in
                     // Update the thread to be visible (if it isn't already)
                     if self?.viewModel.threadData.threadShouldBeVisible == false {
@@ -540,7 +594,9 @@ extension ConversationVC:
                             .updateAllAndConfig(
                                 db,
                                 SessionThread.Columns.shouldBeVisible.set(to: true),
-                                SessionThread.Columns.pinnedPriority.set(to: LibSession.visiblePriority)
+                                SessionThread.Columns.pinnedPriority.set(to: LibSession.visiblePriority),
+                                calledFromConfig: nil,
+                                using: dependencies
                             )
                     }
                     
@@ -574,8 +630,9 @@ extension ConversationVC:
                             try LinkPreview(
                                 url: linkPreviewDraft.urlString,
                                 title: linkPreviewDraft.title,
-                                attachmentId: try optimisticData.linkPreviewAttachment?.inserted(db).id
-                            ).save(db)
+                                attachmentId: try optimisticData.linkPreviewAttachment?.inserted(db).id,
+                                using: dependencies
+                            ).upsert(db)
                         }
                     }
                     
@@ -593,7 +650,7 @@ extension ConversationVC:
                     // Process any attachments
                     try Attachment.process(
                         db,
-                        data: optimisticData.attachmentData,
+                        attachments: optimisticData.attachmentData,
                         for: insertedInteraction.id
                     )
                     
@@ -621,15 +678,15 @@ extension ConversationVC:
     }
 
     func handleMessageSent() {
-        if Storage.shared[.playNotificationSoundInForeground] {
+        if viewModel.dependencies[singleton: .storage, key: .playNotificationSoundInForeground] {
             let soundID = Preferences.Sound.systemSoundId(for: .messageSent, quiet: true)
             AudioServicesPlaySystemSound(soundID)
         }
         
         let threadId: String = self.viewModel.threadData.threadId
         
-        Storage.shared.writeAsync { db in
-            TypingIndicators.didStopTyping(db, threadId: threadId, direction: .outgoing)
+        viewModel.dependencies[singleton: .storage].writeAsync { [dependencies = viewModel.dependencies] db in
+            dependencies[singleton: .typingIndicators].didStopTyping(db, threadId: threadId, direction: .outgoing)
             
             _ = try SessionThread
                 .filter(id: threadId)
@@ -649,8 +706,8 @@ extension ConversationVC:
                 confirmTitle: "enable".localized(),
                 confirmStyle: .danger,
                 cancelStyle: .alert_text
-            ) { [weak self] _ in
-                Storage.shared.writeAsync { db in
+            ) { [weak self, dependencies = viewModel.dependencies] _ in
+                dependencies[singleton: .storage].writeAsync { db in
                     db[.areLinkPreviewsEnabled] = true
                 }
                 
@@ -673,18 +730,18 @@ extension ConversationVC:
             let threadVariant: SessionThread.Variant = self.viewModel.threadData.threadVariant
             let threadIsMessageRequest: Bool = (self.viewModel.threadData.threadIsMessageRequest == true)
             let threadIsBlocked: Bool = (self.viewModel.threadData.threadIsBlocked == true)
-            let needsToStartTypingIndicator: Bool = TypingIndicators.didStartTypingNeedsToStart(
+            let needsToStartTypingIndicator: Bool = viewModel.dependencies[singleton: .typingIndicators].didStartTypingNeedsToStart(
                 threadId: threadId,
                 threadVariant: threadVariant,
                 threadIsBlocked: threadIsBlocked,
                 threadIsMessageRequest: threadIsMessageRequest,
                 direction: .outgoing,
-                timestampMs: SnodeAPI.currentOffsetTimestampMs()
+                timestampMs: viewModel.dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
             )
             
             if needsToStartTypingIndicator {
-                Storage.shared.writeAsync { db in
-                    TypingIndicators.start(db, threadId: threadId, direction: .outgoing)
+                viewModel.dependencies[singleton: .storage].writeAsync { [dependencies = viewModel.dependencies] db in
+                    dependencies[singleton: .typingIndicators].start(db, threadId: threadId, direction: .outgoing)
                 }
             }
         }
@@ -697,8 +754,8 @@ extension ConversationVC:
     func didPasteImageFromPasteboard(_ image: UIImage) {
         guard let imageData = image.jpegData(compressionQuality: 1.0) else { return }
         
-        let dataSource = DataSourceValue(data: imageData, dataType: .jpeg)
-        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: .jpeg, imageQuality: .medium)
+        let dataSource = DataSourceValue(data: imageData, dataType: .jpeg, using: viewModel.dependencies)
+        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: .jpeg, imageQuality: .medium, using: viewModel.dependencies)
 
         guard let approvalVC = AttachmentApprovalViewController.wrappedInNavController(
             threadId: self.viewModel.threadData.threadId,
@@ -823,17 +880,18 @@ extension ConversationVC:
             let actions: [ContextMenuVC.Action] = ContextMenuVC.actions(
                 for: cellViewModel,
                 recentEmojis: (self.viewModel.threadData.recentReactionEmoji ?? []).compactMap { EmojiWithSkinTones(rawValue: $0) },
-                currentUserPublicKey: self.viewModel.threadData.currentUserPublicKey,
-                currentUserBlinded15PublicKey: self.viewModel.threadData.currentUserBlinded15PublicKey,
-                currentUserBlinded25PublicKey: self.viewModel.threadData.currentUserBlinded25PublicKey,
-                currentUserIsOpenGroupModerator: OpenGroupManager.isUserModeratorOrAdmin(
-                    self.viewModel.threadData.currentUserPublicKey,
+                currentUserSessionId: self.viewModel.threadData.currentUserSessionId,
+                currentUserBlinded15SessionId: self.viewModel.threadData.currentUserBlinded15SessionId,
+                currentUserBlinded25SessionId: self.viewModel.threadData.currentUserBlinded25SessionId,
+                currentUserIsOpenGroupModerator: viewModel.dependencies[singleton: .openGroupManager].isUserModeratorOrAdmin(
+                    publicKey: self.viewModel.threadData.currentUserSessionId,
                     for: self.viewModel.threadData.openGroupRoomToken,
                     on: self.viewModel.threadData.openGroupServer
                 ),
                 currentThreadIsMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true),
                 forMessageInfoScreen: false,
-                delegate: self
+                delegate: self,
+                using: viewModel.dependencies
             )
         else { return }
         
@@ -846,7 +904,8 @@ extension ConversationVC:
             snapshot: snapshot,
             frame: contextSnapshotView.convert(contextSnapshotView.bounds, to: keyWindow),
             cellViewModel: cellViewModel,
-            actions: actions
+            actions: actions,
+            using: viewModel.dependencies
         ) { [weak self] in
             self?.contextMenuWindow?.isHidden = true
             self?.contextMenuVC = nil
@@ -876,8 +935,7 @@ extension ConversationVC:
     func handleItemTapped(
         _ cellViewModel: MessageViewModel,
         cell: UITableViewCell,
-        cellLocation: CGPoint,
-        using dependencies: Dependencies = Dependencies()
+        cellLocation: CGPoint
     ) {
         // For call info messages show the "call missed" modal
         guard cellViewModel.variant != .infoCall else {
@@ -896,7 +954,7 @@ extension ConversationVC:
                 return
             }
             
-            Permissions.requestMicrophonePermissionIfNeeded(presentingViewController: self)
+            Permissions.requestMicrophonePermissionIfNeeded(presentingViewController: self, using: viewModel.dependencies)
             return
         }
         
@@ -925,24 +983,25 @@ extension ConversationVC:
                     confirmStyle: .danger,
                     cancelStyle: .textPrimary,
                     dismissOnConfirm: false // Custom dismissal logic
-                ) { [weak self] _ in
-                    dependencies.storage.writeAsync { db in
-                        let userPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
-                        let currentTimestampMs: Int64 = SnodeAPI.currentOffsetTimestampMs()
+                ) { [weak self, dependencies = viewModel.dependencies] _ in
+                    dependencies[singleton: .storage].writeAsync { db in
+                        let userSessionId: SessionId = dependencies[cache: .general].sessionId
+                        let currentTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
                         
                         let interactionId = try messageDisappearingConfig
                             .saved(db)
                             .insertControlMessage(
                                 db,
                                 threadVariant: cellViewModel.threadVariant,
-                                authorId: userPublicKey,
+                                authorId: userSessionId.hexString,
                                 timestampMs: currentTimestampMs,
                                 serverHash: nil,
-                                serverExpirationTimestamp: nil
+                                serverExpirationTimestamp: nil,
+                                using: dependencies
                             )
                         
                         let expirationTimerUpdateMessage: ExpirationTimerUpdate = ExpirationTimerUpdate()
-                            .with(sentTimestamp: UInt64(currentTimestampMs))
+                            .with(sentTimestampMs: UInt64(currentTimestampMs))
                             .with(messageDisappearingConfig)
 
                         try MessageSender.send(
@@ -958,7 +1017,8 @@ extension ConversationVC:
                             .update(
                                 db,
                                 sessionId: cellViewModel.threadId,
-                                disappearingMessagesConfig: messageDisappearingConfig
+                                disappearingMessagesConfig: messageDisappearingConfig,
+                                using: dependencies
                             )
                     }
                     self?.dismiss(animated: true, completion: nil)
@@ -1029,8 +1089,8 @@ extension ConversationVC:
                         let threadId: String = self.viewModel.threadData.threadId
                         
                         // Retry downloading the failed attachment
-                        dependencies.storage.writeAsync { db in
-                            dependencies.jobRunner.add(
+                        viewModel.dependencies[singleton: .storage].writeAsync { [dependencies = viewModel.dependencies] db in
+                            dependencies[singleton: .jobRunner].add(
                                 db,
                                 job: Job(
                                     variant: .attachmentDownload,
@@ -1040,8 +1100,7 @@ extension ConversationVC:
                                         attachmentId: mediaView.attachment.id
                                     )
                                 ),
-                                canStartJob: true,
-                                using: dependencies
+                                canStartJob: true
                             )
                         }
                         break
@@ -1052,8 +1111,8 @@ extension ConversationVC:
                         
                         guard albumView.numItems > 1 || !mediaView.attachment.isVideo else {
                             guard
-                                let originalFilePath: String = mediaView.attachment.originalFilePath,
-                                FileManager.default.fileExists(atPath: originalFilePath)
+                                let originalFilePath: String = mediaView.attachment.originalFilePath(using: viewModel.dependencies),
+                                viewModel.dependencies[singleton: .fileManager].fileExists(atPath: originalFilePath)
                             else { return SNLog("Missing video file") }
                             
                             /// When playing media we need to change the AVAudioSession to 'playback' mode so the device "silent mode"
@@ -1070,7 +1129,8 @@ extension ConversationVC:
                             threadVariant: self.viewModel.threadData.threadVariant,
                             interactionId: cellViewModel.id,
                             selectedAttachmentId: mediaView.attachment.id,
-                            options: [ .sliderEnabled, .showAllMediaButton ]
+                            options: [ .sliderEnabled, .showAllMediaButton ],
+                            using: viewModel.dependencies
                         )
                         
                         if let viewController: UIViewController = viewController {
@@ -1099,7 +1159,7 @@ extension ConversationVC:
                 guard
                     !handleLinkTapIfNeeded(cell: cell, targetView: (cell as? VisibleMessageCell)?.documentView),
                     let attachment: Attachment = cellViewModel.attachments?.first,
-                    let originalFilePath: String = attachment.originalFilePath
+                    let originalFilePath: String = attachment.originalFilePath(using: viewModel.dependencies)
                 else { return }
                 
                 /// When playing media we need to change the AVAudioSession to 'playback' mode so the device "silent mode"
@@ -1113,7 +1173,7 @@ extension ConversationVC:
                 guard
                     !handleLinkTapIfNeeded(cell: cell, targetView: (cell as? VisibleMessageCell)?.documentView),
                     let attachment: Attachment = cellViewModel.attachments?.first,
-                    let originalFilePath: String = attachment.originalFilePath
+                    let originalFilePath: String = attachment.originalFilePath(using: viewModel.dependencies)
                 else { return }
                 
                 let fileUrl: URL = URL(fileURLWithPath: originalFilePath)
@@ -1166,7 +1226,7 @@ extension ConversationVC:
                     // If the message contains both links and a quote, and the user tapped on the quote; OR the
                     // message only contained a quote, then scroll to the quote
                     case (true, true, _, .some(let quote), _), (false, _, _, .some(let quote), _):
-                        let maybeOriginalInteractionInfo: Interaction.TimestampInfo? = Storage.shared.read { db in
+                        let maybeOriginalInteractionInfo: Interaction.TimestampInfo? = viewModel.dependencies[singleton: .storage].read { db in
                             try quote.originalInteraction
                                 .select(.id, .timestampMs)
                                 .asRequest(of: Interaction.TimestampInfo.self)
@@ -1233,6 +1293,7 @@ extension ConversationVC:
                 confirmStyle: .danger,
                 cancelTitle: "urlCopy".localized(),
                 cancelStyle: .alert_text,
+                hasCloseButton: true,
                 onConfirm:  { [weak self] _ in
                     UIApplication.shared.open(url, options: [:], completionHandler: nil)
                     self?.showInputAccessoryView()
@@ -1247,18 +1308,29 @@ extension ConversationVC:
         self.present(modal, animated: true)
     }
     
-    func handleReplyButtonTapped(for cellViewModel: MessageViewModel, using dependencies: Dependencies) {
-        reply(cellViewModel, using: dependencies)
+    func handleReplyButtonTapped(for cellViewModel: MessageViewModel) {
+        reply(cellViewModel)
     }
     
-    func startThread(with sessionId: String, openGroupServer: String?, openGroupPublicKey: String?) {
-        guard viewModel.threadData.canWrite else { return }
-        // FIXME: Add in support for starting a thread with a 'blinded25' id
+    func startThread(
+        with sessionId: String,
+        openGroupServer: String?,
+        openGroupPublicKey: String?
+    ) {
+        guard viewModel.threadData.canWrite(using: viewModel.dependencies) else { return }
+        // FIXME: Add in support for starting a thread with a 'blinded25' id (disabled until we support this decoding)
         guard (try? SessionId.Prefix(from: sessionId)) != .blinded25 else { return }
         guard (try? SessionId.Prefix(from: sessionId)) == .blinded15 else {
-            Storage.shared.write { db in
-                try SessionThread
-                    .fetchOrCreate(db, id: sessionId, variant: .contact, shouldBeVisible: nil)
+            viewModel.dependencies[singleton: .storage].write { [dependencies = viewModel.dependencies] db in
+                try SessionThread.fetchOrCreate(
+                    db,
+                    id: sessionId,
+                    variant: .contact,
+                    creationDateTimestamp: (dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000),
+                    shouldBeVisible: nil,
+                    calledFromConfig: nil,
+                    using: dependencies
+                )
             }
             
             let conversationVC: ConversationVC = ConversationVC(
@@ -1277,14 +1349,15 @@ extension ConversationVC:
             return
         }
         
-        let targetThreadId: String? = Storage.shared.write { db in
+        let targetThreadId: String? = viewModel.dependencies[singleton: .storage].write { [dependencies = viewModel.dependencies] db in
             let lookup: BlindedIdLookup = try BlindedIdLookup
                 .fetchOrCreate(
                     db,
                     blindedId: sessionId,
                     openGroupServer: openGroupServer,
                     openGroupPublicKey: openGroupPublicKey,
-                    isCheckingForOutbox: false
+                    isCheckingForOutbox: false,
+                    using: dependencies
                 )
             
             return try SessionThread
@@ -1292,7 +1365,10 @@ extension ConversationVC:
                     db,
                     id: (lookup.sessionId ?? lookup.blindedId),
                     variant: .contact,
-                    shouldBeVisible: nil
+                    creationDateTimestamp: (dependencies[cache: .snodeAPI].currentOffsetTimestampMs() / 1000),
+                    shouldBeVisible: nil,
+                    calledFromConfig: nil,
+                    using: dependencies
                 )
                 .id
         }
@@ -1320,7 +1396,7 @@ extension ConversationVC:
                 .elements
         else { return }
         
-        let reactionListSheet: ReactionListSheet = ReactionListSheet(for: cellViewModel.id) { [weak self] in
+        let reactionListSheet: ReactionListSheet = ReactionListSheet(for: cellViewModel.id, using: viewModel.dependencies) { [weak self] in
             self?.currentReactionListSheet = nil
         }
         reactionListSheet.delegate = self
@@ -1328,8 +1404,8 @@ extension ConversationVC:
             allMessages,
             selectedReaction: selectedReaction,
             initialLoad: true,
-            shouldShowClearAllButton: OpenGroupManager.isUserModeratorOrAdmin(
-                self.viewModel.threadData.currentUserPublicKey,
+            shouldShowClearAllButton: viewModel.dependencies[singleton: .openGroupManager].isUserModeratorOrAdmin(
+                publicKey: self.viewModel.threadData.currentUserSessionId,
                 for: self.viewModel.threadData.openGroupRoomToken,
                 on: self.viewModel.threadData.openGroupServer
             )
@@ -1365,19 +1441,19 @@ extension ConversationVC:
         UIView.setAnimationsEnabled(true)
     }
     
-    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones, using dependencies: Dependencies) {
-        react(cellViewModel, with: emoji.rawValue, remove: false, using: dependencies)
+    func react(_ cellViewModel: MessageViewModel, with emoji: EmojiWithSkinTones) {
+        react(cellViewModel, with: emoji.rawValue, remove: false)
     }
     
-    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones, using dependencies: Dependencies) {
-        react(cellViewModel, with: emoji.rawValue, remove: true, using: dependencies)
+    func removeReact(_ cellViewModel: MessageViewModel, for emoji: EmojiWithSkinTones) {
+        react(cellViewModel, with: emoji.rawValue, remove: true)
     }
     
-    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String, using dependencies: Dependencies) {
+    func removeAllReactions(_ cellViewModel: MessageViewModel, for emoji: String) {
         guard cellViewModel.threadVariant == .community else { return }
         
-        Storage.shared
-            .readPublisher { db -> (Network.PreparedRequest<OpenGroupAPI.ReactionRemoveAllResponse>, OpenGroupAPI.PendingChange) in
+        viewModel.dependencies[singleton: .storage]
+            .readPublisher { [dependencies = viewModel.dependencies] db -> (Network.PreparedRequest<OpenGroupAPI.ReactionRemoveAllResponse>, OpenGroupAPI.PendingChange) in
                 guard
                     let openGroup: OpenGroup = try? OpenGroup
                         .fetchOne(db, id: cellViewModel.threadId),
@@ -1397,7 +1473,7 @@ extension ConversationVC:
                         on: openGroup.server,
                         using: dependencies
                     )
-                let pendingChange: OpenGroupAPI.PendingChange = OpenGroupManager
+                let pendingChange: OpenGroupAPI.PendingChange = dependencies[singleton: .openGroupManager]
                     .addPendingReaction(
                         emoji: emoji,
                         id: openGroupServerMessageId,
@@ -1408,23 +1484,22 @@ extension ConversationVC:
                 
                 return (preparedRequest, pendingChange)
             }
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .flatMap { preparedRequest, pendingChange in
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: viewModel.dependencies)
+            .flatMap { [dependencies = viewModel.dependencies] preparedRequest, pendingChange in
                 preparedRequest.send(using: dependencies)
                     .handleEvents(
                         receiveOutput: { _, response in
-                            OpenGroupManager
-                                .updatePendingChange(
-                                    pendingChange,
-                                    seqNo: response.seqNo
-                                )
+                            dependencies[singleton: .openGroupManager].updatePendingChange(
+                                pendingChange,
+                                seqNo: response.seqNo
+                            )
                         }
                     )
                     .eraseToAnyPublisher()
             }
             .sinkUntilComplete(
-                receiveCompletion: { _ in
-                    Storage.shared.writeAsync { db in
+                receiveCompletion: { [dependencies = viewModel.dependencies] _ in
+                    dependencies[singleton: .storage].writeAsync { db in
                         _ = try Reaction
                             .filter(Reaction.Columns.interactionId == cellViewModel.id)
                             .filter(Reaction.Columns.emoji == emoji)
@@ -1434,12 +1509,7 @@ extension ConversationVC:
             )
     }
     
-    func react(
-        _ cellViewModel: MessageViewModel,
-        with emoji: String,
-        remove: Bool,
-        using dependencies: Dependencies = Dependencies()
-    ) {
+    func react(_ cellViewModel: MessageViewModel, with emoji: String, remove: Bool) {
         guard
             self.viewModel.threadData.threadIsMessageRequest != true && (
                 cellViewModel.variant == .standardIncoming ||
@@ -1450,12 +1520,12 @@ extension ConversationVC:
         // Perform local rate limiting (don't allow more than 20 reactions within 60 seconds)
         let threadVariant: SessionThread.Variant = self.viewModel.threadData.threadVariant
         let openGroupRoom: String? = self.viewModel.threadData.openGroupRoomToken
-        let sentTimestamp: Int64 = SnodeAPI.currentOffsetTimestampMs()
-        let recentReactionTimestamps: [Int64] = dependencies.caches[.general].recentReactionTimestamps
+        let sentTimestampMs: Int64 = viewModel.dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
+        let recentReactionTimestamps: [Int64] = viewModel.dependencies[cache: .general].recentReactionTimestamps
         
         guard
             recentReactionTimestamps.count < 20 ||
-            (sentTimestamp - (recentReactionTimestamps.first ?? sentTimestamp)) > (60 * 1000)
+            (sentTimestampMs - (recentReactionTimestamps.first ?? sentTimestampMs)) > (60 * 1000)
         else {
             let toastController: ToastController = ToastController(
                 text: "emojiReactsCoolDown".localized(),
@@ -1469,10 +1539,10 @@ extension ConversationVC:
             return
         }
         
-        dependencies.caches.mutate(cache: .general) {
+        viewModel.dependencies.mutate(cache: .general) {
             $0.recentReactionTimestamps = Array($0.recentReactionTimestamps
                 .suffix(19))
-                .appending(sentTimestamp)
+                .appending(sentTimestampMs)
         }
         
         typealias OpenGroupInfo = (
@@ -1483,7 +1553,7 @@ extension ConversationVC:
         
         /// Perform the sending logic, we generate the pending reaction first in a deferred future closure to prevent the OpenGroup
         /// cache from blocking either the main thread or the database write thread
-        Deferred {
+        Deferred { [dependencies = viewModel.dependencies] in
             Future<OpenGroupAPI.PendingChange?, Error> { resolver in
                 guard
                     threadVariant == .community,
@@ -1494,7 +1564,7 @@ extension ConversationVC:
                   
                 // Create the pending change if we have open group info
                 return resolver(Result.success(
-                    OpenGroupManager.addPendingReaction(
+                    dependencies[singleton: .openGroupManager].addPendingReaction(
                         emoji: emoji,
                         id: serverMessageId,
                         in: openGroupServer,
@@ -1504,21 +1574,26 @@ extension ConversationVC:
                 ))
             }
         }
-        .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
-        .flatMap { pendingChange -> AnyPublisher<(MessageSender.PreparedSendData?, OpenGroupInfo?), Error> in
-            dependencies.storage.writePublisher { [weak self] db -> (MessageSender.PreparedSendData?, OpenGroupInfo?) in
+        .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: viewModel.dependencies)
+        .flatMap { [dependencies = viewModel.dependencies] pendingChange -> AnyPublisher<Network.PreparedRequest<Void>, Error> in
+            dependencies[singleton: .storage].writePublisher { [weak self] db -> Network.PreparedRequest<Void> in
                 // Update the thread to be visible (if it isn't already)
                 if self?.viewModel.threadData.threadShouldBeVisible == false {
                     _ = try SessionThread
                         .filter(id: cellViewModel.threadId)
-                        .updateAllAndConfig(db, SessionThread.Columns.shouldBeVisible.set(to: true))
+                        .updateAllAndConfig(
+                            db,
+                            SessionThread.Columns.shouldBeVisible.set(to: true),
+                            calledFromConfig: nil,
+                            using: dependencies
+                        )
                 }
                 
                 let pendingReaction: Reaction? = {
                     guard !remove else {
                         return try? Reaction
                             .filter(Reaction.Columns.interactionId == cellViewModel.id)
-                            .filter(Reaction.Columns.authorId == cellViewModel.currentUserPublicKey)
+                            .filter(Reaction.Columns.authorId == cellViewModel.currentUserSessionId)
                             .filter(Reaction.Columns.emoji == emoji)
                             .fetchOne(db)
                     }
@@ -1532,8 +1607,8 @@ extension ConversationVC:
                     return Reaction(
                         interactionId: cellViewModel.id,
                         serverHash: nil,
-                        timestampMs: sentTimestamp,
-                        authorId: cellViewModel.currentUserPublicKey,
+                        timestampMs: sentTimestampMs,
+                        authorId: cellViewModel.currentUserSessionId,
                         emoji: emoji,
                         count: 1,
                         sortId: sortId
@@ -1544,7 +1619,7 @@ extension ConversationVC:
                 if remove {
                     try Reaction
                         .filter(Reaction.Columns.interactionId == cellViewModel.id)
-                        .filter(Reaction.Columns.authorId == cellViewModel.currentUserPublicKey)
+                        .filter(Reaction.Columns.authorId == cellViewModel.currentUserSessionId)
                         .filter(Reaction.Columns.emoji == emoji)
                         .deleteAll(db)
                 }
@@ -1562,7 +1637,7 @@ extension ConversationVC:
                             let openGroupServer: String = cellViewModel.threadOpenGroupServer,
                             let openGroupRoom: String = openGroupRoom,
                             let pendingChange: OpenGroupAPI.PendingChange = pendingChange,
-                            OpenGroupManager.doesOpenGroupSupport(db, capability: .reactions, on: openGroupServer)
+                            dependencies[singleton: .openGroupManager].doesOpenGroupSupport(db, capability: .reactions, on: openGroupServer)
                         else { throw MessageSenderError.invalidMessage }
                         
                         let preparedRequest: Network.PreparedRequest<Int64?> = try {
@@ -1591,19 +1666,37 @@ extension ConversationVC:
                                 .map { _, response in response.seqNo }
                         }()
                         
-                        return (nil, (pendingReaction, pendingChange, preparedRequest))
+                        return preparedRequest
+                            .handleEvents(
+                                receiveOutput: { _, seqNo in
+                                    dependencies[singleton: .openGroupManager].updatePendingChange(
+                                        pendingChange,
+                                        seqNo: seqNo
+                                    )
+                                },
+                                receiveCompletion: { [weak self] result in
+                                    switch result {
+                                        case .finished: break
+                                        case .failure:
+                                            dependencies[singleton: .openGroupManager].removePendingChange(pendingChange)
+                                            
+                                            self?.handleReactionSentFailure(pendingReaction, remove: remove)
+                                    }
+                                }
+                            )
+                            .map { _, _ in () }
                         
                     default:
-                        let sendData: MessageSender.PreparedSendData = try MessageSender.preparedSendData(
+                        return try MessageSender.preparedSend(
                             db,
                             message: VisibleMessage(
-                                sentTimestamp: UInt64(sentTimestamp),
+                                sentTimestampMs: UInt64(sentTimestampMs),
                                 text: nil,
                                 reaction: VisibleMessage.VMReaction(
                                     timestamp: UInt64(cellViewModel.timestampMs),
                                     publicKey: {
                                         guard cellViewModel.variant == .standardIncoming else {
-                                            return cellViewModel.currentUserPublicKey
+                                            return cellViewModel.currentUserSessionId
                                         }
                                         
                                         return cellViewModel.authorId
@@ -1618,53 +1711,19 @@ extension ConversationVC:
                                 .from(db, threadId: cellViewModel.threadId, threadVariant: cellViewModel.threadVariant)
                                 .defaultNamespace,
                             interactionId: cellViewModel.id,
+                            fileIds: [],
                             using: dependencies
                         )
-                        
-                        return (sendData, nil)
                 }
             }
         }
-        .tryFlatMap { messageSendData, openGroupInfo -> AnyPublisher<Void, Error> in
-            switch (messageSendData, openGroupInfo) {
-                case (.some(let sendData), _):
-                    return MessageSender.sendImmediate(data: sendData, using: dependencies)
-                    
-                case (_, .some(let info)):
-                    return info.preparedRequest.send(using: dependencies)
-                        .handleEvents(
-                            receiveOutput: { _, seqNo in
-                                OpenGroupManager
-                                    .updatePendingChange(
-                                        info.pendingChange,
-                                        seqNo: seqNo
-                                    )
-                            },
-                            receiveCompletion: { [weak self] result in
-                                switch result {
-                                    case .finished: break
-                                    case .failure:
-                                        OpenGroupManager.removePendingChange(info.pendingChange)
-
-                                        self?.handleReactionSentFailure(
-                                            info.pendingReaction,
-                                            remove: remove
-                                        )
-                                }
-                            }
-                        )
-                        .map { _ in () }
-                        .eraseToAnyPublisher()
-                    
-                default: throw MessageSenderError.invalidMessage
-            }
-        }
+        .flatMap { [dependencies = viewModel.dependencies] request in request.send(using: dependencies) }
         .sinkUntilComplete()
     }
     
     func handleReactionSentFailure(_ pendingReaction: Reaction?, remove: Bool) {
         guard let pendingReaction = pendingReaction else { return }
-        Storage.shared.writeAsync { db in
+        viewModel.dependencies[singleton: .storage].writeAsync { db in
             // Reverse the database
             if remove {
                 try pendingReaction.insert(db)
@@ -1679,18 +1738,19 @@ extension ConversationVC:
         }
     }
     
-    func showFullEmojiKeyboard(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func showFullEmojiKeyboard(_ cellViewModel: MessageViewModel) {
         hideInputAccessoryView()
         
         let emojiPicker = EmojiPickerSheet(
             completionHandler: { [weak self] emoji in
                 guard let emoji: EmojiWithSkinTones = emoji else { return }
                 
-                self?.react(cellViewModel, with: emoji, using: dependencies)
+                self?.react(cellViewModel, with: emoji)
             },
             dismissHandler: { [weak self] in
                 self?.showInputAccessoryView()
-            }
+            },
+            using: self.viewModel.dependencies
         )
         
         present(emojiPicker, animated: true, completion: nil)
@@ -1719,7 +1779,7 @@ extension ConversationVC:
                         )
                 ),
                 confirmTitle: "join".localized(),
-                onConfirm: { modal in
+                onConfirm: { [dependencies = viewModel.dependencies] modal in
                     guard let presentingViewController: UIViewController = modal.presentingViewController else {
                         return
                     }
@@ -1738,23 +1798,24 @@ extension ConversationVC:
                         return presentingViewController.present(errorModal, animated: true, completion: nil)
                     }
                     
-                    Storage.shared
+                    dependencies[singleton: .storage]
                         .writePublisher { db in
-                            OpenGroupManager.shared.add(
+                            dependencies[singleton: .openGroupManager].add(
                                 db,
                                 roomToken: room,
                                 server: server,
                                 publicKey: publicKey,
-                                calledFromConfigHandling: false
+                                calledFromConfig: nil
                             )
                         }
                         .flatMap { successfullyAddedGroup in
-                            OpenGroupManager.shared.performInitialRequestsAfterAdd(
+                            dependencies[singleton: .openGroupManager].performInitialRequestsAfterAdd(
+                                queue: DispatchQueue.global(qos: .userInitiated),
                                 successfullyAddedGroup: successfullyAddedGroup,
                                 roomToken: room,
                                 server: server,
                                 publicKey: publicKey,
-                                calledFromConfigHandling: false
+                                calledFromConfig: nil
                             )
                         }
                         .subscribe(on: DispatchQueue.global(qos: .userInitiated))
@@ -1767,11 +1828,11 @@ extension ConversationVC:
                                         // If there was a failure then the group will be in invalid state until
                                         // the next launch so remove it (the user will be left on the previous
                                         // screen so can re-trigger the join)
-                                        Storage.shared.writeAsync { db in
-                                            OpenGroupManager.shared.delete(
+                                        dependencies[singleton: .storage].writeAsync { db in
+                                            try dependencies[singleton: .openGroupManager].delete(
                                                 db,
                                                 openGroupId: OpenGroup.idFor(roomToken: room, server: server),
-                                                calledFromConfigHandling: false
+                                                calledFromConfig: nil
                                             )
                                         }
                                         
@@ -1800,34 +1861,35 @@ extension ConversationVC:
     
     // MARK: - ContextMenuActionDelegate
     
-    func info(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func info(_ cellViewModel: MessageViewModel) {
         let actions: [ContextMenuVC.Action] = ContextMenuVC.actions(
             for: cellViewModel,
             recentEmojis: [],
-            currentUserPublicKey: self.viewModel.threadData.currentUserPublicKey,
-            currentUserBlinded15PublicKey: self.viewModel.threadData.currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: self.viewModel.threadData.currentUserBlinded25PublicKey,
-            currentUserIsOpenGroupModerator: OpenGroupManager.isUserModeratorOrAdmin(
-                self.viewModel.threadData.currentUserPublicKey,
+            currentUserSessionId: self.viewModel.threadData.currentUserSessionId,
+            currentUserBlinded15SessionId: self.viewModel.threadData.currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: self.viewModel.threadData.currentUserBlinded25SessionId,
+            currentUserIsOpenGroupModerator: viewModel.dependencies[singleton: .openGroupManager].isUserModeratorOrAdmin(
+                publicKey: self.viewModel.threadData.currentUserSessionId,
                 for: self.viewModel.threadData.openGroupRoomToken,
                 on: self.viewModel.threadData.openGroupServer
             ),
             currentThreadIsMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true),
             forMessageInfoScreen: true,
             delegate: self,
-            using: dependencies
+            using: viewModel.dependencies
         ) ?? []
         
         let messageInfoViewController = MessageInfoViewController(
             actions: actions,
-            messageViewModel: cellViewModel
+            messageViewModel: cellViewModel,
+            using: viewModel.dependencies
         )
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.navigationController?.pushViewController(messageInfoViewController, animated: true)
         }
     }
 
-    func retry(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func retry(_ cellViewModel: MessageViewModel) {
         guard cellViewModel.id != MessageViewModel.optimisticUpdateId else {
             guard
                 let optimisticMessageId: UUID = cellViewModel.optimisticMessageId,
@@ -1852,7 +1914,7 @@ extension ConversationVC:
             return
         }
         
-        dependencies.storage.writeAsync { [weak self] db in
+        viewModel.dependencies[singleton: .storage].writeAsync { [weak self, dependencies = viewModel.dependencies] db in
             guard
                 let threadId: String = self?.viewModel.threadData.threadId,
                 let threadVariant: SessionThread.Variant = self?.viewModel.threadData.threadVariant,
@@ -1880,7 +1942,7 @@ extension ConversationVC:
                     return nil
                 }()
                 try quote.with(
-                    attachmentId: attachment?.cloneAsQuoteThumbnail()?.inserted(db).id
+                    attachmentId: attachment?.cloneAsQuoteThumbnail(using: dependencies)?.inserted(db).id
                 ).update(db)
             }
             
@@ -1899,7 +1961,7 @@ extension ConversationVC:
         }
     }
 
-    func reply(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func reply(_ cellViewModel: MessageViewModel) {
         let maybeQuoteDraft: QuotedReplyModel? = QuotedReplyModel.quotedReplyForSending(
             threadId: self.viewModel.threadData.threadId,
             authorId: cellViewModel.authorId,
@@ -1908,9 +1970,9 @@ extension ConversationVC:
             timestampMs: cellViewModel.timestampMs,
             attachments: cellViewModel.attachments,
             linkPreviewAttachment: cellViewModel.linkPreviewAttachment,
-            currentUserPublicKey: cellViewModel.currentUserPublicKey,
-            currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey
+            currentUserSessionId: cellViewModel.currentUserSessionId,
+            currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId
         )
         
         guard let quoteDraft: QuotedReplyModel = maybeQuoteDraft else { return }
@@ -1922,7 +1984,7 @@ extension ConversationVC:
         snInputView.becomeFirstResponder()
     }
 
-    func copy(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func copy(_ cellViewModel: MessageViewModel) {
         switch cellViewModel.cellType {
             case .typingIndicator, .dateHeader, .unreadMarker: break
             
@@ -1944,7 +2006,7 @@ extension ConversationVC:
                         attachment.state == .uploaded
                     ),
                     let type: UTType = UTType(sessionMimeType: attachment.contentType),
-                    let originalFilePath: String = attachment.originalFilePath,
+                    let originalFilePath: String = attachment.originalFilePath(using: viewModel.dependencies),
                     let data: Data = try? Data(contentsOf: URL(fileURLWithPath: originalFilePath))
                 else { return }
             
@@ -1953,312 +2015,99 @@ extension ConversationVC:
     }
 
     func copySessionID(_ cellViewModel: MessageViewModel) {
-        guard cellViewModel.variant == .standardIncoming || cellViewModel.variant == .standardIncomingDeleted else {
-            return
-        }
+        guard cellViewModel.variant == .standardIncoming else { return }
         
         UIPasteboard.general.string = cellViewModel.authorId
     }
 
-    func delete(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
-        switch cellViewModel.variant {
-            case .standardIncomingDeleted, .infoCall,
-                .infoScreenshotNotification, .infoMediaSavedNotification,
-                .infoClosedGroupCreated, .infoClosedGroupUpdated,
-                .infoClosedGroupCurrentUserLeft, .infoClosedGroupCurrentUserLeaving, .infoClosedGroupCurrentUserErrorLeaving,
-                .infoMessageRequestAccepted, .infoDisappearingMessagesUpdate:
-                // Info messages and unsent messages should just trigger a local
-                // deletion (they are created as side effects so we wouldn't be
-                // able to delete them for all participants anyway)
-                Storage.shared.writeAsync { db in
-                    _ = try Interaction
-                        .filter(id: cellViewModel.id)
-                        .deleteAll(db)
-                }
-                return
-                
-            case .standardOutgoing, .standardIncoming: break
+    func delete(_ cellViewModel: MessageViewModel) {
+        /// Retrieve the deletion actions for the selected message(s) of there are any
+        let messagesToDelete: [MessageViewModel] = [cellViewModel]
+        
+        guard let deletionBehaviours: MessageViewModel.DeletionBehaviours = self.viewModel.deletionActions(for: messagesToDelete) else {
+            return
         }
         
-        let userPublicKey: String = getUserHexEncodedPublicKey()
-        
-        // Remote deletion logic
-        func deleteRemotely(from viewController: UIViewController?, request: AnyPublisher<Void, Error>, onComplete: (() -> ())?) {
-            // Show a loading indicator
-            Deferred {
-                Future<Void, Error> { resolver in
-                    DispatchQueue.main.async {
-                        ModalActivityIndicatorViewController.present(fromViewController: viewController, canCancel: false) { _ in
-                            resolver(Result.success(()))
-                        }
+        let modal: ConfirmationModal = ConfirmationModal(
+            info: ConfirmationModal.Info(
+                title: deletionBehaviours.title,
+                body: .radio(
+                    explanation: NSAttributedString(string: deletionBehaviours.body),
+                    warning: deletionBehaviours.warning.map { NSAttributedString(string: $0) },
+                    options: deletionBehaviours.actions.map { action in
+                        (
+                            action.title,
+                            action.state != .disabled,
+                            action.state == .enabledAndDefaultSelected,
+                            action.accessibility
+                        )
                     }
-                }
-            }
-            .flatMap { _ in request }
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .receive(on: DispatchQueue.main)
-            .sinkUntilComplete(
-                receiveCompletion: { [weak self] result in
-                    switch result {
-                        case .failure: break
-                        case .finished:
-                            // Delete the interaction (and associated data) from the database
-                            Storage.shared.writeAsync { db in
-                                _ = try Interaction
-                                    .filter(id: cellViewModel.id)
-                                    .deleteAll(db)
-                            }
+                ),
+                confirmTitle: "delete".localized(),
+                confirmStyle: .danger,
+                cancelTitle: "cancel".localized(),
+                cancelStyle: .alert_text,
+                onConfirm: { [weak self, dependencies = viewModel.dependencies] modal in
+                    /// Determine the selected action index
+                    let selectedIndex: Int = {
+                        switch modal.info.body {
+                            case .radio(_, _, let options):
+                                return options
+                                    .enumerated()
+                                    .first(where: { _, value in value.selected })
+                                    .map { index, _ in index }
+                                    .defaulting(to: 0)
                             
-                            // Stop it's audio if needed
-                            self?.viewModel.stopAudioIfNeeded(for: cellViewModel)
+                            default: return 0
+                        }
+                    }()
+                    
+                    /// Stop the messages audio if needed
+                    messagesToDelete.forEach { cellViewModel in
+                        self?.viewModel.stopAudioIfNeeded(for: cellViewModel)
                     }
                     
-                    // Regardless of success we should dismiss and callback
-                    if self?.presentedViewController is ModalActivityIndicatorViewController {
-                        self?.dismiss(animated: true, completion: nil) // Dismiss the loader
-                    }
-                    
-                    onComplete?()
+                    /// Trigger the deletion behaviours
+                    deletionBehaviours
+                        .publisherForAction(at: selectedIndex, using: dependencies)
+                        .sinkUntilComplete(
+                            receiveCompletion: { result in
+                                DispatchQueue.main.async {
+                                    self?.viewModel.showToast(
+                                        text: {
+                                            switch result {
+                                                case .finished:
+                                                    return "deleteMessageDeleted"
+                                                        .putNumber(messagesToDelete.count)
+                                                        .localized()
+                                                    
+                                                case .failure:
+                                                    return "deleteMessageFailed"
+                                                        .putNumber(messagesToDelete.count)
+                                                        .localized()
+                                            }
+                                        }(),
+                                        backgroundColor: .backgroundSecondary,
+                                        inset: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
+                                    )
+                                }
+                            }
+                        )
+                },
+                afterClosed: { [weak self] in
+                    self?.becomeFirstResponder()
                 }
             )
-        }
+        )
         
-        // How we delete the message differs depending on the type of thread
-        switch cellViewModel.threadVariant {
-            // Handle open group messages the old way
-            case .community:
-                // If it's an incoming message the user must have moderator status
-                let result: (openGroupServerMessageId: Int64?, openGroup: OpenGroup?)? = Storage.shared.read { db -> (Int64?, OpenGroup?) in
-                    (
-                        try Interaction
-                            .select(.openGroupServerMessageId)
-                            .filter(id: cellViewModel.id)
-                            .asRequest(of: Int64.self)
-                            .fetchOne(db),
-                        try OpenGroup.fetchOne(db, id: cellViewModel.threadId)
-                    )
-                }
-                
-                guard
-                    let openGroup: OpenGroup = result?.openGroup,
-                    let openGroupServerMessageId: Int64 = result?.openGroupServerMessageId, (
-                        cellViewModel.variant != .standardIncoming ||
-                        OpenGroupManager.isUserModeratorOrAdmin(
-                            userPublicKey,
-                            for: openGroup.roomToken,
-                            on: openGroup.server
-                        )
-                    )
-                else {
-                    // If the message hasn't been sent yet then just delete locally
-                    guard cellViewModel.state == .sending || cellViewModel.state == .failed else { return }
-                    
-                    // Retrieve any message send jobs for this interaction
-                    let jobs: [Job] = Storage.shared
-                        .read { db in
-                            try? Job
-                                .filter(Job.Columns.variant == Job.Variant.messageSend)
-                                .filter(Job.Columns.interactionId == cellViewModel.id)
-                                .fetchAll(db)
-                        }
-                        .defaulting(to: [])
-                    
-                    // If the job is currently running then wait until it's done before triggering
-                    // the deletion
-                    let targetJob: Job? = jobs.first(where: { JobRunner.isCurrentlyRunning($0) })
-                    
-                    guard targetJob == nil else {
-                        JobRunner.afterJob(targetJob, state: .running) { [weak self] result in
-                            switch result {
-                                // If it succeeded then we'll need to delete from the server so re-run
-                                // this function (if we still don't have the server id for some reason
-                                // then this would result in a local-only deletion which should be fine
-                                case .succeeded: self?.delete(cellViewModel)
-                                    
-                                // Otherwise we just need to cancel the pending job (in case it retries)
-                                // and delete the interaction
-                                default:
-                                    JobRunner.removePendingJob(targetJob)
-                                    
-                                    Storage.shared.writeAsync { db in
-                                        _ = try Interaction
-                                            .filter(id: cellViewModel.id)
-                                            .deleteAll(db)
-                                    }
-                                    
-                                    // Stop it's audio if needed
-                                    self?.viewModel.stopAudioIfNeeded(for: cellViewModel)
-                            }
-                        }
-                        return
-                    }
-                    
-                    // If it's not currently running then remove any pending jobs (just to be safe) and
-                    // delete the interaction locally
-                    jobs.forEach { JobRunner.removePendingJob($0) }
-                    
-                    Storage.shared.writeAsync { db in
-                        _ = try Interaction
-                            .filter(id: cellViewModel.id)
-                            .deleteAll(db)
-                    }
-                    
-                    // Stop it's audio if needed
-                    viewModel.stopAudioIfNeeded(for: cellViewModel)
-                    return
-                }
-                
-                // Delete the message from the open group
-                deleteRemotely(
-                    from: self,
-                    request: Storage.shared
-                        .readPublisher { db in
-                            try OpenGroupAPI.preparedMessageDelete(
-                                db,
-                                id: openGroupServerMessageId,
-                                in: openGroup.roomToken,
-                                on: openGroup.server,
-                                using: dependencies
-                            )
-                        }
-                        .flatMap { $0.send(using: dependencies) }
-                        .map { _ in () }
-                        .eraseToAnyPublisher()
-                ) { [weak self] in
-                    self?.showInputAccessoryView()
-                }
-                
-            case .contact, .legacyGroup, .group:
-                let targetPublicKey: String = (cellViewModel.threadVariant == .contact ?
-                    userPublicKey :
-                    cellViewModel.threadId
-                )
-                let serverHash: String? = Storage.shared.read { db -> String? in
-                    try Interaction
-                        .select(.serverHash)
-                        .filter(id: cellViewModel.id)
-                        .asRequest(of: String.self)
-                        .fetchOne(db)
-                }
-                let unsendRequest: UnsendRequest = UnsendRequest(
-                    timestamp: UInt64(cellViewModel.timestampMs),
-                    author: (cellViewModel.variant == .standardOutgoing ?
-                        userPublicKey :
-                        cellViewModel.authorId
-                    )
-                )
-                .with(
-                    expiresInSeconds: cellViewModel.expiresInSeconds,
-                    expiresStartedAtMs: cellViewModel.expiresStartedAtMs
-                )
-                
-                // For incoming interactions or interactions with no serverHash just delete them locally
-                guard cellViewModel.variant == .standardOutgoing, let serverHash: String = serverHash else {
-                    Storage.shared.writeAsync { db in
-                        _ = try Interaction
-                            .filter(id: cellViewModel.id)
-                            .deleteAll(db)
-                        
-                        // No need to send the unsendRequest if there is no serverHash (ie. the message
-                        // was outgoing but never got to the server)
-                        guard serverHash != nil else { return }
-                        
-                        MessageSender
-                            .send(
-                                db,
-                                message: unsendRequest,
-                                threadId: cellViewModel.threadId,
-                                interactionId: nil,
-                                to: .contact(publicKey: userPublicKey),
-                                using: dependencies
-                            )
-                    }
-                    
-                    // Stop it's audio if needed
-                    viewModel.stopAudioIfNeeded(for: cellViewModel)
-                    return
-                }
-                
-                let actionSheet: UIAlertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-                actionSheet.addAction(UIAlertAction(
-                    title: "deleteMessageDeviceOnly".localized(),
-                    accessibilityIdentifier: "Delete for me",
-                    style: .destructive
-                ) { [weak self] _ in
-                    Storage.shared.writeAsync { db in
-                        _ = try Interaction
-                            .filter(id: cellViewModel.id)
-                            .deleteAll(db)
-                        
-                        MessageSender
-                            .send(
-                                db,
-                                message: unsendRequest,
-                                threadId: cellViewModel.threadId,
-                                interactionId: nil,
-                                to: .contact(publicKey: userPublicKey),
-                                using: dependencies
-                            )
-                    }
-                    self?.showInputAccessoryView()
-                    
-                    // Stop it's audio if needed
-                    self?.viewModel.stopAudioIfNeeded(for: cellViewModel)
-                })
-                
-                actionSheet.addAction(UIAlertAction(
-                    title: {
-                        switch (cellViewModel.threadVariant, cellViewModel.threadId) {
-                            case (.legacyGroup, _), (.group, _): return "clearMessagesForEveryone".localized()
-                            case (_, userPublicKey): return "deleteMessageDevicesAll".localized()
-                            default: return "deleteMessageEveryone".localized()
-                        }
-                    }(),
-                    accessibilityIdentifier: "Delete for everyone",
-                    style: .destructive
-                ) { [weak self] _ in
-                    let completeServerDeletion = {
-                        Storage.shared.writeAsync { db in
-                            try MessageSender
-                                .send(
-                                    db,
-                                    message: unsendRequest,
-                                    interactionId: nil,
-                                    threadId: cellViewModel.threadId,
-                                    threadVariant: cellViewModel.threadVariant,
-                                    using: dependencies
-                                )
-                        }
-                    }
-                        
-                    // We can only delete messages on the server for `contact` and `group` conversations
-                    guard cellViewModel.threadVariant == .contact || cellViewModel.threadVariant == .group else {
-                        return completeServerDeletion()
-                    }
-                    
-                    deleteRemotely(
-                        from: self,
-                        request: SnodeAPI
-                            .deleteMessages(
-                                swarmPublicKey: targetPublicKey,
-                                serverHashes: [serverHash]
-                            )
-                            .map { _ in () }
-                            .eraseToAnyPublisher()
-                    ) { completeServerDeletion() }
-                })
-
-                actionSheet.addAction(UIAlertAction.init(title: "cancel".localized(), style: .cancel) { [weak self] _ in
-                    self?.showInputAccessoryView()
-                })
-
-                self.hideInputAccessoryView()
-                Modal.setupForIPadIfNeeded(actionSheet, targetView: self.view)
-                self.present(actionSheet, animated: true)
+        /// Show the modal after a small delay so it doesn't look as weird with the context menu dismissal
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(ContextMenuVC.dismissDurationPartOne * 1000))) { [weak self] in
+            self?.present(modal, animated: true)
+            self?.resignFirstResponder()
         }
     }
 
-    func save(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func save(_ cellViewModel: MessageViewModel) {
         guard cellViewModel.cellType == .mediaMessage else { return }
         
         let mediaAttachments: [(Attachment, String)] = (cellViewModel.attachments ?? [])
@@ -2270,7 +2119,9 @@ extension ConversationVC:
                 )
             }
             .compactMap { attachment in
-                guard let originalFilePath: String = attachment.originalFilePath else { return nil }
+                guard let originalFilePath: String = attachment.originalFilePath(using: viewModel.dependencies) else {
+                    return nil
+                }
                 
                 return (attachment, originalFilePath)
             }
@@ -2279,7 +2130,8 @@ extension ConversationVC:
     
         Permissions.requestLibraryPermissionIfNeeded(
             isSavingMedia: true,
-            presentingViewController: self
+            presentingViewController: self,
+            using: viewModel.dependencies
         ) { [weak self] in
             mediaAttachments.forEach { attachment, originalFilePath in
                 PHPhotoLibrary.shared().performChanges(
@@ -2308,7 +2160,7 @@ extension ConversationVC:
         }
     }
 
-    func ban(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func ban(_ cellViewModel: MessageViewModel) {
         guard cellViewModel.threadVariant == .community else { return }
         
         let threadId: String = self.viewModel.threadData.threadId
@@ -2320,8 +2172,8 @@ extension ConversationVC:
                 confirmTitle: "theContinue".localized(),
                 confirmStyle: .danger,
                 cancelStyle: .alert_text,
-                onConfirm: { [weak self] _ in
-                    Storage.shared
+                onConfirm: { [weak self, dependencies = viewModel.dependencies] _ in
+                    dependencies[singleton: .storage]
                         .readPublisher { db -> Network.PreparedRequest<NoResponse> in
                             guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
                                 throw StorageError.objectNotFound
@@ -2337,8 +2189,8 @@ extension ConversationVC:
                                 )
                         }
                         .flatMap { $0.send(using: dependencies) }
-                        .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                        .receive(on: DispatchQueue.main)
+                        .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
+                        .receive(on: DispatchQueue.main, using: dependencies)
                         .sinkUntilComplete(
                             receiveCompletion: { result in
                                 switch result {
@@ -2347,7 +2199,7 @@ extension ConversationVC:
                                             self?.viewModel.showToast(
                                                 text: "banUserBanned".localized(),
                                                 backgroundColor: .backgroundSecondary,
-                                                insect: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
+                                                inset: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
                                             )
                                         }
                                     case .failure:
@@ -2355,7 +2207,7 @@ extension ConversationVC:
                                             self?.viewModel.showToast(
                                                 text: "banErrorFailed".localized(),
                                                 backgroundColor: .backgroundSecondary,
-                                                insect: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
+                                                inset: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
                                             )
                                         }
                                 }
@@ -2370,7 +2222,7 @@ extension ConversationVC:
         self.present(modal, animated: true)
     }
 
-    func banAndDeleteAllMessages(_ cellViewModel: MessageViewModel, using dependencies: Dependencies) {
+    func banAndDeleteAllMessages(_ cellViewModel: MessageViewModel) {
         guard cellViewModel.threadVariant == .community else { return }
         
         let threadId: String = self.viewModel.threadData.threadId
@@ -2382,8 +2234,8 @@ extension ConversationVC:
                 confirmTitle: "theContinue".localized(),
                 confirmStyle: .danger,
                 cancelStyle: .alert_text,
-                onConfirm: { [weak self] _ in
-                    Storage.shared
+                onConfirm: { [weak self, dependencies = viewModel.dependencies] _ in
+                    dependencies[singleton: .storage]
                         .readPublisher { db in
                             guard let openGroup: OpenGroup = try OpenGroup.fetchOne(db, id: threadId) else {
                                 throw StorageError.objectNotFound
@@ -2399,8 +2251,8 @@ extension ConversationVC:
                                 )
                         }
                         .flatMap { $0.send(using: dependencies) }
-                        .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                        .receive(on: DispatchQueue.main)
+                        .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
+                        .receive(on: DispatchQueue.main, using: dependencies)
                         .sinkUntilComplete(
                             receiveCompletion: { result in
                                 switch result {
@@ -2409,7 +2261,7 @@ extension ConversationVC:
                                             self?.viewModel.showToast(
                                                 text: "banUserBanned".localized(),
                                                 backgroundColor: .backgroundSecondary,
-                                                insect: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
+                                                inset: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
                                             )
                                         }
                                     case .failure:
@@ -2417,7 +2269,7 @@ extension ConversationVC:
                                             self?.viewModel.showToast(
                                                 text: "banErrorFailed".localized(),
                                                 backgroundColor: .backgroundSecondary,
-                                                insect: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
+                                                inset: (self?.inputAccessoryView?.frame.height ?? Values.mediumSpacing) + Values.smallSpacing
                                             )
                                         }
                                 }
@@ -2434,9 +2286,9 @@ extension ConversationVC:
 
     // MARK: - VoiceMessageRecordingViewDelegate
 
-    func startVoiceMessageRecording(using dependencies: Dependencies) {
+    func startVoiceMessageRecording() {
         // Request permission if needed
-        Permissions.requestMicrophonePermissionIfNeeded() { [weak self] in
+        Permissions.requestMicrophonePermissionIfNeeded(using: viewModel.dependencies) { [weak self] in
             DispatchQueue.main.async {
                 self?.cancelVoiceMessageRecording()
             }
@@ -2450,8 +2302,9 @@ extension ConversationVC:
         self.viewModel.stopAudio()
         
         // Create URL
-        let directory: String = Singleton.appContext.temporaryDirectory
-        let fileName: String = "\(SnodeAPI.currentOffsetTimestampMs()).m4a" // stringlint:ignore
+        let currentOffsetTimestamp: Int64 = viewModel.dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
+        let directory: String = viewModel.dependencies[singleton: .fileManager].temporaryDirectory
+        let fileName: String = "\(currentOffsetTimestamp).m4a" // stringlint:ignore
         let url: URL = URL(fileURLWithPath: directory).appendingPathComponent(fileName)
         
         // Set up audio session
@@ -2483,7 +2336,7 @@ extension ConversationVC:
         // Limit voice messages to a minute
         audioTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: false, block: { [weak self] _ in
             self?.snInputView.hideVoiceMessageUI()
-            self?.endVoiceMessageRecording(using: dependencies)
+            self?.endVoiceMessageRecording()
         })
         
         // Prepare audio recorder and start recording
@@ -2512,7 +2365,7 @@ extension ConversationVC:
         }
     }
 
-    func endVoiceMessageRecording(using dependencies: Dependencies) {
+    func endVoiceMessageRecording() {
         UIApplication.shared.isIdleTimerDisabled = true
         
         // Hide the UI
@@ -2548,7 +2401,7 @@ extension ConversationVC:
         }
         
         // Get data
-        let dataSourceOrNil = DataSourcePath(fileUrl: audioRecorder.url, shouldDeleteOnDeinit: true)
+        let dataSourceOrNil = DataSourcePath(fileUrl: audioRecorder.url, shouldDeleteOnDeinit: true, using: viewModel.dependencies)
         self.audioRecorder = nil
         
         guard let dataSource = dataSourceOrNil else { return SNLog("Couldn't load recorded data.") }
@@ -2558,7 +2411,7 @@ extension ConversationVC:
             .appendingPathExtension("m4a") // stringlint:ignore
         dataSource.sourceFilename = fileName
         
-        let attachment = SignalAttachment.voiceMessageAttachment(dataSource: dataSource, type: .mpeg4Audio)
+        let attachment = SignalAttachment.voiceMessageAttachment(dataSource: dataSource, type: .mpeg4Audio, using: viewModel.dependencies)
         
         guard !attachment.hasError else {
             return showErrorAlert(for: attachment)
@@ -2584,22 +2437,19 @@ extension ConversationVC:
     
     @objc func sendScreenshotNotification() { sendDataExtraction(kind: .screenshot) }
     
-    func sendDataExtraction(
-        kind: DataExtractionNotification.Kind,
-        using dependencies: Dependencies = Dependencies()
-    ) {
+    func sendDataExtraction(kind: DataExtractionNotification.Kind) {
         // Only send screenshot notifications to one-to-one conversations
         guard self.viewModel.threadData.threadVariant == .contact else { return }
         
         let threadId: String = self.viewModel.threadData.threadId
         let threadVariant: SessionThread.Variant = self.viewModel.threadData.threadVariant
         
-        dependencies.storage.writeAsync { db in
+        viewModel.dependencies[singleton: .storage].writeAsync { [dependencies = viewModel.dependencies] db in
             try MessageSender.send(
                 db,
                 message: DataExtractionNotification(
                     kind: kind,
-                    sentTimestamp: UInt64(SnodeAPI.currentOffsetTimestampMs())
+                    sentTimestampMs: dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
                 )
                 .with(DisappearingMessagesConfiguration
                     .fetchOne(db, id: threadId)?
@@ -2646,11 +2496,8 @@ extension ConversationVC {
         for threadId: String,
         threadVariant: SessionThread.Variant,
         isNewThread: Bool,
-        timestampMs: Int64,
-        using dependencies: Dependencies = Dependencies()
-    ) {
-        guard threadVariant == .contact else { return }
-        
+        timestampMs: Int64
+    ) -> AnyPublisher<Void, Never> {
         let updateNavigationBackStack: () -> Void = {
             // Remove the 'SessionTableViewController<MessageRequestsViewModel>' from the nav hierarchy if present
             DispatchQueue.main.async { [weak self] in
@@ -2668,73 +2515,148 @@ extension ConversationVC {
                 }
             }
         }
-
-        // If the contact doesn't exist then we should create it so we can store the 'isApproved' state
-        // (it'll be updated with correct profile info if they accept the message request so this
-        // shouldn't cause weird behaviours)
-        guard
-            let contact: Contact = Storage.shared.read({ db in Contact.fetchOrCreate(db, id: threadId) }),
-            !contact.isApproved
-        else { return }
         
-        Storage.shared
-            .writePublisher { db in
-                // If we aren't creating a new thread (ie. sending a message request) then send a
-                // messageRequestResponse back to the sender (this allows the sender to know that
-                // they have been approved and can now use this contact in closed groups)
-                if !isNewThread {
-                    let interaction = try? Interaction(
-                        threadId: threadId,
-                        threadVariant: threadVariant,
-                        authorId: getUserHexEncodedPublicKey(db),
-                        variant: .infoMessageRequestAccepted,
-                        body: "messageRequestYouHaveAccepted"
-                            .put(key: "name", value: self.viewModel.threadData.displayName)
-                            .localized(),
-                        timestampMs: timestampMs
-                    ).inserted(db)
-                    
-                    try MessageSender.send(
-                        db,
-                        message: MessageRequestResponse(
-                            isApproved: true,
-                            sentTimestampMs: UInt64(timestampMs)
-                        ),
-                        interactionId: interaction?.id,
-                        threadId: threadId,
-                        threadVariant: threadVariant,
-                        using: dependencies
-                    )
-                }
+        switch threadVariant {
+            case .contact:
+                // If the contact doesn't exist then we should create it so we can store the 'isApproved' state
+                // (it'll be updated with correct profile info if they accept the message request so this
+                // shouldn't cause weird behaviours)
+                guard
+                    let contact: Contact = viewModel.dependencies[singleton: .storage].read({ [dependencies = viewModel.dependencies] db in
+                        Contact.fetchOrCreate(db, id: threadId, using: dependencies)
+                    }),
+                    !contact.isApproved
+                else { return Just(()).eraseToAnyPublisher() }
                 
-                // Default 'didApproveMe' to true for the person approving the message request
-                try contact.save(db)
-                try Contact
-                    .filter(id: contact.id)
-                    .updateAllAndConfig(
-                        db,
-                        Contact.Columns.isApproved.set(to: true),
-                        Contact.Columns.didApproveMe
-                            .set(to: contact.didApproveMe || !isNewThread)
+                return viewModel.dependencies[singleton: .storage]
+                    .writePublisher { [displayName = self.viewModel.threadData.displayName, dependencies = viewModel.dependencies] db in
+                        // If we aren't creating a new thread (ie. sending a message request) then send a
+                        // messageRequestResponse back to the sender (this allows the sender to know that
+                        // they have been approved and can now use this contact in closed groups)
+                        if !isNewThread {
+                            _ = try? Interaction(
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                authorId: dependencies[cache: .general].sessionId.hexString,
+                                variant: .infoMessageRequestAccepted,
+                                body: "messageRequestYouHaveAccepted"
+                                    .put(key: "name", value: displayName)
+                                    .localized(),
+                                timestampMs: timestampMs,
+                                using: dependencies
+                            ).inserted(db)
+                            
+                            try MessageSender.send(
+                                db,
+                                message: MessageRequestResponse(
+                                    isApproved: true,
+                                    sentTimestampMs: UInt64(timestampMs)
+                                ),
+                                interactionId: nil,
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                using: dependencies
+                            )
+                        }
+                        
+                        // Default 'didApproveMe' to true for the person approving the message request
+                        try contact.upsert(db)
+                        try Contact
+                            .filter(id: contact.id)
+                            .updateAllAndConfig(
+                                db,
+                                Contact.Columns.isApproved.set(to: true),
+                                Contact.Columns.didApproveMe
+                                    .set(to: contact.didApproveMe || !isNewThread),
+                                calledFromConfig: nil,
+                                using: dependencies
+                            )
+                    }
+                    .map { _ in () }
+                    .catch { _ in Just(()).eraseToAnyPublisher() }
+                    .handleEvents(
+                        receiveOutput: { _ in
+                            // Update the UI
+                            updateNavigationBackStack()
+                        }
                     )
-            }
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .receive(on: DispatchQueue.main)
-            .sinkUntilComplete(
-                receiveCompletion: { _ in
-                    // Update the UI
-                    updateNavigationBackStack()
-                }
-            )
+                    .eraseToAnyPublisher()
+                
+            case .group:
+                // If the group is not in the invited state then don't bother doing anything
+                guard
+                    let group: ClosedGroup = viewModel.dependencies[singleton: .storage].read({ db in
+                        try ClosedGroup.fetchOne(db, id: threadId)
+                    }),
+                    group.invited == true
+                else { return Just(()).eraseToAnyPublisher() }
+                
+                return viewModel.dependencies[singleton: .storage]
+                    .writePublisher { [dependencies = viewModel.dependencies] db in
+                        /// Remove any existing `infoGroupInfoInvited` interactions from the group (don't want to have a duplicate one from
+                        /// inside the group history)
+                        _ = try Interaction
+                            .filter(Interaction.Columns.threadId == group.id)
+                            .filter(Interaction.Columns.variant == Interaction.Variant.infoGroupInfoInvited)
+                            .deleteAll(db)
+                        
+                        /// Optimistically insert a `standard` member for the current user in this group (it'll be update to the correct
+                        /// one once we receive the first `GROUP_MEMBERS` config message but adding it here means the `canWrite`
+                        /// state of the group will continue to be `true` while we wait on the initial poll to get back)
+                        try GroupMember(
+                            groupId: group.id,
+                            profileId: dependencies[cache: .general].sessionId.hexString,
+                            role: .standard,
+                            roleStatus: .accepted,
+                            isHidden: false
+                        ).upsert(db)
+                        
+                        /// If we aren't creating a new thread (ie. sending a message request) and the user is not an admin
+                        /// then schedule sending a `GroupUpdateInviteResponseMessage` to the group (this allows
+                        /// other members to know that the user has joined the group)
+                        if !isNewThread && group.groupIdentityPrivateKey == nil {
+                            try MessageSender.send(
+                                db,
+                                message: GroupUpdateInviteResponseMessage(
+                                    isApproved: true,
+                                    sentTimestampMs: UInt64(timestampMs)
+                                ),
+                                interactionId: nil,
+                                threadId: threadId,
+                                threadVariant: threadVariant,
+                                using: dependencies
+                            )
+                        }
+                        
+                        /// Actually trigger the approval
+                        try ClosedGroup.approveGroupIfNeeded(
+                            db,
+                            group: group,
+                            calledFromConfig: nil,
+                            using: dependencies
+                        )
+                    }
+                    .map { _ in () }
+                    .catch { _ in Just(()).eraseToAnyPublisher() }
+                    .handleEvents(
+                        receiveOutput: { _ in
+                            // Update the UI
+                            updateNavigationBackStack()
+                        }
+                    )
+                    .eraseToAnyPublisher()
+                
+            default: return Just(()).eraseToAnyPublisher()
+        }
     }
 
     func acceptMessageRequest() {
-        self.approveMessageRequestIfNeeded(
+        approveMessageRequestIfNeeded(
             for: self.viewModel.threadData.threadId,
             threadVariant: self.viewModel.threadData.threadVariant,
             isNewThread: false,
-            timestampMs: SnodeAPI.currentOffsetTimestampMs()
-        )
+            timestampMs: viewModel.dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
+        ).sinkUntilComplete()
     }
 
     func declineMessageRequest() {
@@ -2745,7 +2667,8 @@ extension ConversationVC {
             tableView: self.tableView,
             threadViewModel: self.viewModel.threadData,
             viewController: self, 
-            navigatableStateHolder: nil
+            navigatableStateHolder: nil,
+            using: viewModel.dependencies
         )
         
         guard let action: UIContextualAction = actions?.first else { return }
@@ -2769,7 +2692,8 @@ extension ConversationVC {
             tableView: self.tableView,
             threadViewModel: self.viewModel.threadData,
             viewController: self,
-            navigatableStateHolder: nil
+            navigatableStateHolder: nil,
+            using: viewModel.dependencies
         )
         
         guard let action: UIContextualAction = actions?.first else { return }
@@ -2790,7 +2714,7 @@ extension ConversationVC {
 
 extension ConversationVC: MediaPresentationContextProvider {
     func mediaPresentationContext(mediaItem: Media, in coordinateSpace: UICoordinateSpace) -> MediaPresentationContext? {
-        guard case let .gallery(galleryItem) = mediaItem else { return nil }
+        guard case let .gallery(galleryItem, _) = mediaItem else { return nil }
         
         // Note: According to Apple's docs the 'indexPathsForVisibleRows' method returns an
         // unsorted array which means we can't use it to determine the desired 'visibleCell'

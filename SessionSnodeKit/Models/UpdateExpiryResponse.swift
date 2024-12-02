@@ -90,7 +90,7 @@ extension UpdateExpiryResponse: ValidatableResponse {
                         result.append(contentsOf: "\(nextUnchanged.value)".data(using: .ascii)?.bytes ?? [])
                     }
                 )
-            let isValid: Bool = dependencies.crypto.verify(
+            let isValid: Bool = dependencies[singleton: .crypto].verify(
                 .signature(
                     message: verificationBytes,
                     publicKey: Data(hex: next.key).bytes,

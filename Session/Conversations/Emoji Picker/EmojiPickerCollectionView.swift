@@ -10,6 +10,7 @@ protocol EmojiPickerCollectionViewDelegate: AnyObject {
 }
 
 class EmojiPickerCollectionView: UICollectionView {
+    private let dependencies: Dependencies
     let layout: UICollectionViewFlowLayout
 
     weak var pickerDelegate: EmojiPickerCollectionViewDelegate?
@@ -46,7 +47,9 @@ class EmojiPickerCollectionView: UICollectionView {
     
     // MARK: - Initialization
 
-    init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
         layout = UICollectionViewFlowLayout()
         layout.itemSize = CGSize(width: Self.emojiWidth, height: Self.emojiWidth)
         layout.minimumInteritemSpacing = EmojiPickerCollectionView.minimumSpacing
@@ -70,7 +73,7 @@ class EmojiPickerCollectionView: UICollectionView {
         tapGestureRecognizer.delegate = self
         
         // Fetch the emoji data from the database
-        let maybeEmojiData: (recent: [EmojiWithSkinTones], allGrouped: [Emoji.Category: [EmojiWithSkinTones]])? = Storage.shared.read { db in
+        let maybeEmojiData: (recent: [EmojiWithSkinTones], allGrouped: [Emoji.Category: [EmojiWithSkinTones]])? = dependencies[singleton: .storage].read { db in
             // Some emoji have two different code points but identical appearances. Let's remove them!
             // If we normalize to a different emoji than the one currently in our array, we want to drop
             // the non-normalized variant if the normalized variant already exists. Otherwise, map to the
@@ -180,9 +183,9 @@ class EmojiPickerCollectionView: UICollectionView {
             guard let cell = cellForItem(at: indexPath) else { return }
 
             currentSkinTonePicker?.dismiss()
-            currentSkinTonePicker = EmojiSkinTonePicker.present(referenceView: cell, emoji: emoji) { [weak self] emoji in
+            currentSkinTonePicker = EmojiSkinTonePicker.present(referenceView: cell, emoji: emoji) { [weak self, dependencies] emoji in
                 if let emoji: EmojiWithSkinTones = emoji {
-                    Storage.shared.writeAsync { db in
+                    dependencies[singleton: .storage].writeAsync { db in
                         emoji.baseEmoji?.setPreferredSkinTones(
                             db,
                             preferredSkinTonePermutation: emoji.skinTones
@@ -241,7 +244,7 @@ extension EmojiPickerCollectionView: UICollectionViewDataSource {
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        let cell = dequeue(type: EmojiCell.self, for: indexPath)
+        let cell: EmojiCell = dequeue(type: EmojiCell.self, for: indexPath)
 
         guard let emoji = emojiForIndexPath(indexPath) else {
             Log.error("[EmojiPickerCollectionView] unexpected indexPath")
@@ -254,8 +257,7 @@ extension EmojiPickerCollectionView: UICollectionViewDataSource {
     }
 
     func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView {
-        let sectionHeader = dequeue(type:  EmojiSectionHeader.self, ofKind: kind, for: indexPath)
-
+        let sectionHeader: EmojiSectionHeader = dequeue(type:  EmojiSectionHeader.self, ofKind: kind, for: indexPath)
         sectionHeader.label.text = nameForSection(indexPath.section)
 
         return sectionHeader

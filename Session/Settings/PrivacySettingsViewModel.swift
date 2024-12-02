@@ -19,7 +19,7 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
     
     // MARK: - Initialization
     
-    init(shouldShowCloseButton: Bool = false, using dependencies: Dependencies = Dependencies()) {
+    init(shouldShowCloseButton: Bool = false, using dependencies: Dependencies) {
         self.dependencies = dependencies
         self.shouldShowCloseButton = shouldShowCloseButton
     }
@@ -111,12 +111,9 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             subtitle: "lockAppDescriptionIos"
                                 .put(key: "app_name", value: Constants.app_name)
                                 .localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .isScreenLockEnabled,
-                                    value: current.isScreenLockEnabled,
-                                    oldValue: (previous ?? current).isScreenLockEnabled
-                                ),
+                            trailingAccessory: .toggle(
+                                current.isScreenLockEnabled,
+                                oldValue: previous?.isScreenLockEnabled,
                                 accessibility: Accessibility(
                                     identifier: "Lock App - Switch"
                                 )
@@ -138,8 +135,12 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                     return
                                 }
                                 
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.isScreenLockEnabled, to: !db[.isScreenLockEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .isScreenLockEnabled,
+                                        to: !db[.isScreenLockEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -152,21 +153,19 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .communityMessageRequests,
                             title: "messageRequestsCommunities".localized(),
                             subtitle: "messageRequestsCommunitiesDescription".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .checkForCommunityMessageRequests,
-                                    value: current.checkForCommunityMessageRequests,
-                                    oldValue: (previous ?? current).checkForCommunityMessageRequests
-                                ),
+                            trailingAccessory: .toggle(
+                                current.checkForCommunityMessageRequests,
+                                oldValue: previous?.checkForCommunityMessageRequests,
                                 accessibility: Accessibility(
                                     identifier: "Community Message Requests - Switch"
                                 )
                             ),
                             onTap: { [weak self] in
-                                Storage.shared.write { db in
+                                dependencies[singleton: .storage].write { db in
                                     try db.setAndUpdateConfig(
                                         .checkForCommunityMessageRequests,
-                                        to: !db[.checkForCommunityMessageRequests]
+                                        to: !db[.checkForCommunityMessageRequests],
+                                        using: dependencies
                                     )
                                 }
                             }
@@ -180,19 +179,20 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .readReceipts,
                             title: "readReceipts".localized(),
                             subtitle: "readReceiptsDescription".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .areReadReceiptsEnabled,
-                                    value: current.areReadReceiptsEnabled,
-                                    oldValue: (previous ?? current).areReadReceiptsEnabled
-                                ),
+                            trailingAccessory: .toggle(
+                                current.areReadReceiptsEnabled,
+                                oldValue: previous?.areReadReceiptsEnabled,
                                 accessibility: Accessibility(
                                     identifier: "Read Receipts - Switch"
                                 )
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.areReadReceiptsEnabled, to: !db[.areReadReceiptsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .areReadReceiptsEnabled,
+                                        to: !db[.areReadReceiptsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -240,19 +240,20 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                     return result
                                 }
                             ),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .typingIndicatorsEnabled,
-                                    value: current.typingIndicatorsEnabled,
-                                    oldValue: (previous ?? current).typingIndicatorsEnabled
-                                ),
+                            trailingAccessory: .toggle(
+                                current.typingIndicatorsEnabled,
+                                oldValue: previous?.typingIndicatorsEnabled,
                                 accessibility: Accessibility(
                                     identifier: "Typing Indicators - Switch"
                                 )
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.typingIndicatorsEnabled, to: !db[.typingIndicatorsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .typingIndicatorsEnabled,
+                                        to: !db[.typingIndicatorsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -265,19 +266,20 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .linkPreviews,
                             title: "linkPreviewsSend".localized(),
                             subtitle: "linkPreviewsDescription".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .areLinkPreviewsEnabled,
-                                    value: current.areLinkPreviewsEnabled,
-                                    oldValue: (previous ?? current).areLinkPreviewsEnabled
-                                ),
+                            trailingAccessory: .toggle(
+                                current.areLinkPreviewsEnabled,
+                                oldValue: previous?.areLinkPreviewsEnabled,
                                 accessibility: Accessibility(
                                     identifier: "Send Link Previews - Switch"
                                 )
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.areLinkPreviewsEnabled, to: !db[.areLinkPreviewsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .areLinkPreviewsEnabled,
+                                        to: !db[.areLinkPreviewsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )
@@ -290,12 +292,9 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                             id: .calls,
                             title: "callsVoiceAndVideo".localized(),
                             subtitle: "callsVoiceAndVideoToggleDescription".localized(),
-                            rightAccessory: .toggle(
-                                .boolValue(
-                                    key: .areCallsEnabled,
-                                    value: current.areCallsEnabled,
-                                    oldValue: (previous ?? current).areCallsEnabled
-                                ),
+                            trailingAccessory: .toggle(
+                                current.areCallsEnabled,
+                                oldValue: previous?.areCallsEnabled,
                                 accessibility: Accessibility(
                                     identifier: "Voice and Video Calls - Switch"
                                 )
@@ -310,11 +309,15 @@ class PrivacySettingsViewModel: SessionTableViewModel, NavigationItemSource, Nav
                                 confirmTitle: "theContinue".localized(),
                                 confirmStyle: .danger,
                                 cancelStyle: .alert_text,
-                                onConfirm: { _ in Permissions.requestMicrophonePermissionIfNeeded() }
+                                onConfirm: { _ in Permissions.requestMicrophonePermissionIfNeeded(using: dependencies) }
                             ),
                             onTap: {
-                                Storage.shared.write { db in
-                                    try db.setAndUpdateConfig(.areCallsEnabled, to: !db[.areCallsEnabled])
+                                dependencies[singleton: .storage].write { db in
+                                    try db.setAndUpdateConfig(
+                                        .areCallsEnabled,
+                                        to: !db[.areCallsEnabled],
+                                        using: dependencies
+                                    )
                                 }
                             }
                         )

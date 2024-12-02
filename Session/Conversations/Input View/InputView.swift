@@ -13,6 +13,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     private static let linkPreviewViewInset: CGFloat = 6
 
     private var disposables: Set<AnyCancellable> = Set()
+    private let dependencies: Dependencies
     private let threadVariant: SessionThread.Variant
     private weak var delegate: InputViewDelegate?
     
@@ -82,7 +83,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     private lazy var voiceMessageButtonContainer = container(for: voiceMessageButton)
 
     private lazy var mentionsView: MentionSelectionView = {
-        let result: MentionSelectionView = MentionSelectionView()
+        let result: MentionSelectionView = MentionSelectionView(using: dependencies)
         result.delegate = self
         
         return result
@@ -144,7 +145,8 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     // MARK: - Initialization
     
-    init(threadVariant: SessionThread.Variant, delegate: InputViewDelegate) {
+    init(threadVariant: SessionThread.Variant, delegate: InputViewDelegate, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.threadVariant = threadVariant
         self.delegate = delegate
         
@@ -263,11 +265,12 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
             authorId: quoteDraftInfo.model.authorId,
             quotedText: quoteDraftInfo.model.body,
             threadVariant: threadVariant,
-            currentUserPublicKey: quoteDraftInfo.model.currentUserPublicKey,
-            currentUserBlinded15PublicKey: quoteDraftInfo.model.currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: quoteDraftInfo.model.currentUserBlinded25PublicKey,
+            currentUserSessionId: quoteDraftInfo.model.currentUserSessionId,
+            currentUserBlinded15SessionId: quoteDraftInfo.model.currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: quoteDraftInfo.model.currentUserBlinded25SessionId,
             direction: (quoteDraftInfo.isOutgoing ? .outgoing : .incoming),
-            attachment: quoteDraftInfo.model.attachment
+            attachment: quoteDraftInfo.model.attachment,
+            using: dependencies
         ) { [weak self] in
             self?.quoteDraftInfo = nil
         }
@@ -286,15 +289,15 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         // Suggest that the user enable link previews if they haven't already and we haven't
         // told them about link previews yet
         let text = inputTextView.text!
-        let areLinkPreviewsEnabled: Bool = Storage.shared[.areLinkPreviewsEnabled]
+        let areLinkPreviewsEnabled: Bool = dependencies[singleton: .storage, key: .areLinkPreviewsEnabled]
         
         if
             !LinkPreview.allPreviewUrls(forMessageBodyText: text).isEmpty &&
             !areLinkPreviewsEnabled &&
-            !UserDefaults.standard[.hasSeenLinkPreviewSuggestion]
+            !dependencies[defaults: .standard, key: .hasSeenLinkPreviewSuggestion]
         {
             delegate?.showLinkPreviewSuggestionModal()
-            UserDefaults.standard[.hasSeenLinkPreviewSuggestion] = true
+            dependencies[defaults: .standard, key: .hasSeenLinkPreviewSuggestion] = true
             return
         }
         // Check that link previews are enabled
@@ -306,7 +309,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     func autoGenerateLinkPreview() {
         // Check that a valid URL is present
-        guard let linkPreviewURL = LinkPreview.previewUrl(for: text, selectedRange: inputTextView.selectedRange) else {
+        guard let linkPreviewURL = LinkPreview.previewUrl(for: text, selectedRange: inputTextView.selectedRange, using: dependencies) else {
             return
         }
         
@@ -319,7 +322,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         
         // Set the state to loading
         linkPreviewInfo = (url: linkPreviewURL, draft: nil)
-        linkPreviewView.update(with: LinkPreview.LoadingState(), isOutgoing: false)
+        linkPreviewView.update(with: LinkPreview.LoadingState(), isOutgoing: false, using: dependencies)
 
         // Add the link preview view
         additionalContentContainer.addSubview(linkPreviewView)
@@ -329,7 +332,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         linkPreviewView.pin(.bottom, to: .bottom, of: additionalContentContainer, withInset: -4)
         
         // Build the link preview
-        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL)
+        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL, using: dependencies)
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .sink(
@@ -343,11 +346,15 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
                             self?.additionalContentContainer.subviews.forEach { $0.removeFromSuperview() }
                     }
                 },
-                receiveValue: { [weak self] draft in
+                receiveValue: { [weak self, dependencies] draft in
                     guard self?.linkPreviewInfo?.url == linkPreviewURL else { return } // Obsolete
                     
                     self?.linkPreviewInfo = (url: linkPreviewURL, draft: draft)
-                    self?.linkPreviewView.update(with: LinkPreview.DraftState(linkPreviewDraft: draft), isOutgoing: false)
+                    self?.linkPreviewView.update(
+                        with: LinkPreview.DraftState(linkPreviewDraft: draft),
+                        isOutgoing: false,
+                        using: dependencies
+                    )
                 }
             )
             .store(in: &disposables)
@@ -420,7 +427,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         // because if something goes wrong it'll trigger `hideVoiceMessageUI` and we don't want it to
         // end up in a state with the input content hidden
         showVoiceMessageUI()
-        delegate?.startVoiceMessageRecording(using: dependencies)
+        delegate?.startVoiceMessageRecording()
     }
 
     func handleInputViewButtonLongPressMoved(_ inputViewButton: InputViewButton, with touch: UITouch?) {

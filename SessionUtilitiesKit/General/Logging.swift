@@ -5,6 +5,29 @@
 import Foundation
 import CocoaLumberjackSwift
 
+// MARK: - Log.Level Convenience
+
+public extension Log.Category {
+    static let `default`: Log.Category = .create("default", defaultLevel: .warn)
+}
+
+// MARK: - FeatureStorage
+
+public extension FeatureStorage {
+    static func logLevel(cat: Log.Category) -> FeatureConfig<Log.Level> {
+        return Dependencies.create(
+            identifier: cat.identifier,
+            groupIdentifier: "logging",
+            defaultOption: cat.defaultLevel
+        )
+    }
+    
+    static let allLogLevels: FeatureConfig<AllLoggingCategories> = Dependencies.create(
+        identifier: "allLogLevels",
+        groupIdentifier: "logging"
+    )
+}
+
 // MARK: - Log
 
 public enum Log {
@@ -17,7 +40,7 @@ public enum Log {
         line: UInt
     )
     
-    public enum Level: Comparable {
+    public enum Level: Comparable, CaseIterable {
         case verbose
         case debug
         case info
@@ -86,7 +109,7 @@ public enum Log {
         logger.wrappedValue?.loadExtensionLogsAndResumeLogging()
     }
     
-    public static func logFilePath() -> String? {
+    public static func logFilePath(using dependencies: Dependencies) -> String? {
         guard
             let logger: Logger = logger.wrappedValue
         else { return nil }
@@ -100,7 +123,9 @@ public enum Log {
         // that might be relevant for debugging
         guard
             logFiles.count > 1,
-            let attributes: [FileAttributeKey: Any] = try? FileManager.default.attributesOfItem(atPath: logFiles[0]),
+            let attributes: [FileAttributeKey: Any] = try? dependencies[singleton: .fileManager].attributesOfItem(
+                atPath: logFiles[0]
+            ),
             let fileSize: UInt64 = attributes[.size] as? UInt64,
             fileSize < (100 * 1024)
         else { return logFiles[0] }
@@ -112,7 +137,7 @@ public enum Log {
             .path
         
         do {
-            try FileManager.default.copyItem(
+            try dependencies[singleton: .fileManager].copyItem(
                 atPath: logFiles[1],
                 toPath: tempFilePath
             )
@@ -319,7 +344,7 @@ public enum Log {
     }
     
     public static func custom(
-        _ level: Log.Level,
+        _ level: Level,
         _ categories: [Category],
         _ message: String,
         file: StaticString = #file,
@@ -338,6 +363,7 @@ public enum Log {
 // MARK: - Logger
 
 public class Logger {
+    private let dependencies: Dependencies
     private let primaryPrefix: String
     private let forceNSLog: Bool
     private let level: Atomic<Log.Level>
@@ -350,8 +376,10 @@ public class Logger {
         primaryPrefix: String,
         level: Log.Level,
         customDirectory: String? = nil,
-        forceNSLog: Bool = false
+        forceNSLog: Bool = false,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.primaryPrefix = primaryPrefix
         self.level = Atomic(level)
         self.forceNSLog = forceNSLog
@@ -393,7 +421,7 @@ public class Logger {
         // to a local directory (so they can be exported via XCode) - the below code reads any
         // logs from the shared directly and attempts to add them to the main app logs to make
         // debugging user issues in extensions easier
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        DispatchQueue.global(qos: .utility).async { [weak self, dependencies] in
             guard let currentLogFileInfo: DDLogFileInfo = self?.fileLogger.currentLogFileInfo else {
                 self?.completeResumeLogging(error: "Unable to retrieve current log file.")
                 return
@@ -401,18 +429,21 @@ public class Logger {
             
             // We only want to append extension logs to the main app logs (so just early out if this isn't
             // the main app)
-            guard Singleton.hasAppContext && Singleton.appContext.isMainApp else {
+            guard dependencies[singleton: .appContext].isMainApp else {
                 self?.completeResumeLogging()
                 return
             }
             
             DDLog.loggingQueue.async {
+                let sharedDataDirPath: String = dependencies[singleton: .fileManager].appSharedDataDirectoryPath
                 let extensionInfo: [(dir: String, type: ExtensionType)] = [
-                    ("\(FileManager.default.appSharedDataDirectoryPath)/Logs/NotificationExtension", .notification),
-                    ("\(FileManager.default.appSharedDataDirectoryPath)/Logs/ShareExtension", .share)
+                    ("\(sharedDataDirPath)/Logs/NotificationExtension", .notification),
+                    ("\(sharedDataDirPath)/Logs/ShareExtension", .share)
                 ]
                 let extensionLogs: [(path: String, type: ExtensionType)] = extensionInfo.flatMap { dir, type -> [(path: String, type: ExtensionType)] in
-                    guard let files: [String] = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
+                    guard let files: [String] = try? dependencies[singleton: .fileManager].contentsOfDirectory(atPath: dir) else {
+                        return []
+                    }
                     
                     return files.map { ("\(dir)/\($0)", type) }
                 }
@@ -458,7 +489,7 @@ public class Logger {
                                 else { fileHandle.write(logData) }
                                 
                                 // Extension logs have been writen to the app logs, remove them now
-                                try? FileManager.default.removeItem(atPath: path)
+                                try? dependencies[singleton: .fileManager].removeItem(atPath: path)
                             }
                             
                             // Write the type end separator if needed
@@ -549,12 +580,7 @@ public class Logger {
         
         if systemLogger == nil {
             systemLogger = systemLoggers.mutate {
-                if #available(iOS 14.0, *) {
-                    $0[mainCategory] = SystemLogger(category: mainCategory)
-                }
-                else {
-                    $0[mainCategory] = LegacySystemLogger(forceNSLog: forceNSLog)
-                }
+                $0[mainCategory] = SystemLogger(category: mainCategory)
                 return $0[mainCategory]
             }
         }
@@ -571,21 +597,6 @@ private protocol SystemLoggerType {
     func log(_ level: Log.Level, _ log: String)
 }
 
-private class LegacySystemLogger: SystemLoggerType {
-    private let forceNSLog: Bool
-    
-    init(forceNSLog: Bool) {
-        self.forceNSLog = forceNSLog
-    }
-    
-    public func log(_ level: Log.Level, _ log: String) {
-        guard !forceNSLog else { return NSLog(log) }
-        
-        print(log)
-    }
-}
-
-@available(iOSApplicationExtension 14.0, *)
 private class SystemLogger: SystemLoggerType {
     private static let subsystem: String = Bundle.main.bundleIdentifier!
     private let logger: os.Logger
@@ -638,18 +649,69 @@ private extension DispatchQueue {
     }
 }
 
-// FIXME: Remove this once everything has been updated to use the new `Log.x()` methods.
-public func SNLog(_ message: String, forceNSLog: Bool = false) {
-    Log.info(message)
+// MARK: - Log.Level FeatureOption
+
+extension Log.Level: FeatureOption {
+    // MARK: - Initialization
+    
+    public var rawValue: Int {
+        switch self {
+            case .verbose: return 1
+            case .debug: return 2
+            case .info: return 3
+            case .warn: return 4
+            case .error: return 5
+            case .critical: return 6
+            case .off: return -1        // `0` is a protected value so can't use it
+            case .default: return -2    // `0` is a protected value so can't use it
+        }
+    }
+    
+    public init?(rawValue: Int) {
+        switch rawValue {
+            case -2: self = .default    // `0` is a protected value so can't use it
+            case 1: self = .verbose
+            case 2: self = .debug
+            case 3: self = .info
+            case 4: self = .warn
+            case 5: self = .error
+            case 6: self = .critical
+            default: self = .off
+        }
+    }
+    
+    // MARK: - Feature Option
+    
+    public static var defaultOption: Log.Level = .off
+    
+    public var title: String {
+        switch self {
+            case .verbose: return "Verbose"
+            case .debug: return "Debug"
+            case .info: return "Info"
+            case .warn: return "Warning"
+            case .error: return "Error"
+            case .critical: return "Critical"
+            case .off: return "Off"
+            case .default: return "Default"
+        }
+    }
+    
+    public var subtitle: String? {
+        switch self {
+            case .verbose: return "Show all logging."
+            case .debug, .info, .warn, .error: return "Show logs classed as \(title) or higher."
+            case .critical: return "Show logs classes as Critical."
+            case .off: return "Show no logs."
+            case .default: return "Use the default logging level."
+        }
+    }
 }
 
 // MARK: - AllLoggingCategories
 
-public struct AllLoggingCategories {
-    public static var defaultLevels: [Log.Category: Log.Level] {
-        return AllLoggingCategories.registeredCategoryDefaults.wrappedValue
-            .reduce(into: [:]) { result, cat in result[cat] = cat.defaultLevel }
-    }
+public struct AllLoggingCategories: FeatureOption {
+    public static let allCases: [AllLoggingCategories] = []
     private static let registeredCategoryDefaults: Atomic<Set<Log.Category>> = Atomic([])
     
     // MARK: - Initialization
@@ -672,4 +734,25 @@ public struct AllLoggingCategories {
         
         registeredCategoryDefaults.mutate { $0.insert(category) }
     }
+    
+    public func currentValues(using dependencies: Dependencies) -> [Log.Category: Log.Level] {
+        return AllLoggingCategories.registeredCategoryDefaults.wrappedValue
+            .reduce(into: [:]) { result, cat in
+                guard cat != Log.Category.default else { return }
+                
+                result[cat] = dependencies[feature: .logLevel(cat: cat)]
+            }
+    }
+    
+    // MARK: - Feature Option
+    
+    public static var defaultOption: AllLoggingCategories = AllLoggingCategories(rawValue: -1)
+    
+    public var title: String = "AllLoggingCategories"
+    public let subtitle: String? = nil
+}
+
+// FIXME: Remove this once everything has been updated to use the new `Log.x()` methods.
+public func SNLog(_ message: String, forceNSLog: Bool = false) {
+    Log.info(message)
 }

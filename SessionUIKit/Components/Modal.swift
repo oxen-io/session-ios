@@ -1,7 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import SessionUtilitiesKit
 
 open class Modal: UIViewController, UIGestureRecognizerDelegate {
     private static let cornerRadius: CGFloat = 11
@@ -52,7 +51,10 @@ open class Modal: UIViewController, UIGestureRecognizerDelegate {
     }()
     
     public lazy var cancelButton: UIButton = {
-        let result: UIButton = Modal.createButton(title: "cancel".localized(), titleColor: .textPrimary)
+        let result: UIButton = Modal.createButton(
+            title: "cancel".localizedSNUIKit(),
+            titleColor: .textPrimary
+        )
         result.addTarget(self, action: #selector(cancel), for: .touchUpInside)
                 
         return result

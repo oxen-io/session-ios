@@ -6,6 +6,7 @@ import SessionUIKit
 import SessionUtilitiesKit
 
 final class MiniCallView: UIView, RTCVideoViewDelegate {
+    private let dependencies: Dependencies
     var callVC: CallVC
     
     // MARK: UI
@@ -60,7 +61,8 @@ final class MiniCallView: UIView, RTCVideoViewDelegate {
     
     public static var current: MiniCallView?
     
-    init(from callVC: CallVC) {
+    init(from callVC: CallVC, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.callVC = callVC
         
         super.init(frame: CGRect.zero)
@@ -153,18 +155,25 @@ final class MiniCallView: UIView, RTCVideoViewDelegate {
     
     @objc private func handleTap(_ gestureRecognizer: UITapGestureRecognizer) {
         dismiss()
-        guard
-            Singleton.hasAppContext,
-            let presentingVC = Singleton.appContext.frontmostViewController else { preconditionFailure() } // FIXME: Handle more gracefully
+        
+        guard let presentingVC: UIViewController = dependencies[singleton: .appContext].frontMostViewController else {
+            Log.critical(.calls, "Failed to retrieve front view controller when returning from the MiniCallView")
+            dependencies[singleton: .callManager].endCall(callVC.call) { [callVC, dependencies] error in
+                if let _ = error {
+                    callVC.call.endSessionCall()
+                    dependencies[singleton: .callManager].reportCurrentCallEnded(reason: nil)
+                }
+            }
+            return
+        }
+        
         presentingVC.present(callVC, animated: true, completion: nil)
     }
     
     public func show() {
         self.alpha = 0.0
-        guard
-            Singleton.hasAppContext,
-            let window: UIWindow = Singleton.appContext.mainWindow
-        else { return }
+        
+        guard let window: UIWindow = dependencies[singleton: .appContext].mainWindow else { return }
         
         window.addSubview(self)
         left = self.pin(.left, to: .left, of: window)
