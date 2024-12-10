@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import SessionSnodeKit
 import SessionUtilitiesKit
 
 public extension PushNotificationAPI {
@@ -38,13 +39,13 @@ public extension PushNotificationAPI {
         
         // MARK: - Convenience
         
-        var server: String {
+        func server(using dependencies: Dependencies) -> String {
             switch self {
                 case .legacyNotify, .legacyRegister, .legacyUnregister,
                     .legacyGroupsOnlySubscribe, .legacyGroupSubscribe, .legacyGroupUnsubscribe:
                     return PushNotificationAPI.legacyServer
                     
-                default: return PushNotificationAPI.server
+                default: return PushNotificationAPI.server.value(using: dependencies)
             }
         }
         

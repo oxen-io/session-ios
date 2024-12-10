@@ -59,7 +59,7 @@ class PrimaryColorSelectionView: UIView {
     // MARK: - Layout
     
     private func setupUI(color: Theme.PrimaryColor) {
-        // Set the appropriate colours
+        // Set the appropriate colors
         selectionView.themeBackgroundColorForced = .primary(color)
         
         // Add the UI

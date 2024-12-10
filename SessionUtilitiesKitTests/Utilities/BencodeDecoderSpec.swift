@@ -9,12 +9,16 @@ import Nimble
 
 class BencodeDecoderSpec: QuickSpec {
     override class func spec() {
+        // MARK: Configuration
+        
+        @TestState var dependencies: TestDependencies! = TestDependencies()
+        
         // MARK: - BencodeDecoder
         describe("BencodeDecoder") {
             // MARK: ---- should decode a basic string
             it("should decode a basic string") {
                 let basicStringData: Data = "5:howdy".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode(String.self, from: basicStringData)
+                let result = try? BencodeDecoder(using: dependencies).decode(String.self, from: basicStringData)
                 
                 expect(result).to(equal("howdy"))
             }
@@ -22,7 +26,7 @@ class BencodeDecoderSpec: QuickSpec {
             // MARK: ---- should decode a basic integer
             it("should decode a basic integer") {
                 let basicIntegerData: Data = "i3e".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode(Int.self, from: basicIntegerData)
+                let result = try? BencodeDecoder(using: dependencies).decode(Int.self, from: basicIntegerData)
                 
                 expect(result).to(equal(3))
             }
@@ -30,7 +34,7 @@ class BencodeDecoderSpec: QuickSpec {
             // MARK: ---- should decode a list of integers
             it("should decode a list of integers") {
                 let basicIntListData: Data = "li1ei2ee".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode([Int].self, from: basicIntListData)
+                let result = try? BencodeDecoder(using: dependencies).decode([Int].self, from: basicIntListData)
                 
                 expect(result).to(equal([1, 2]))
             }
@@ -38,7 +42,7 @@ class BencodeDecoderSpec: QuickSpec {
             // MARK: ---- should decode a basic dict
             it("should decode a basic dict") {
                 let basicDictData: Data = "d4:spaml1:a1:bee".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode([String: [String]].self, from: basicDictData)
+                let result = try? BencodeDecoder(using: dependencies).decode([String: [String]].self, from: basicDictData)
                 
                 expect(result).to(equal(["spam": ["a", "b"]]))
             }
@@ -46,7 +50,7 @@ class BencodeDecoderSpec: QuickSpec {
             // MARK: ---- decodes a decodable type
             it("decodes a decodable type") {
                 let data: Data = "d8:intValuei100e11:stringValue4:Test".data(using: .utf8)!
-                let result: TestType? = try? BencodeDecoder().decode(TestType.self, from: data)
+                let result: TestType? = try? BencodeDecoder(using: dependencies).decode(TestType.self, from: data)
                 
                 expect(result).to(equal(TestType(intValue: 100, stringValue: "Test")))
             }
@@ -56,7 +60,7 @@ class BencodeDecoderSpec: QuickSpec {
                 let data: Data = "l4:Teste".data(using: .utf8)!
 
                 expect {
-                    try BencodeDecoder().decode(Int.self, from: data)
+                    try BencodeDecoder(using: dependencies).decode(Int.self, from: data)
                 }.to(throwError(DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: "failed to decode String"))))
             }
             
@@ -66,7 +70,7 @@ class BencodeDecoderSpec: QuickSpec {
                     .data(using: .utf8)!
                 
                 expect {
-                    try BencodeDecoder().decode(TestType.self, from: data)
+                    try BencodeDecoder(using: dependencies).decode(TestType.self, from: data)
                 }.to(throwError(DecodingError.keyNotFound(TestType.CodingKeys.intValue, DecodingError.Context(codingPath: [], debugDescription: "key not found: intValue"))))
             }
             
@@ -76,7 +80,7 @@ class BencodeDecoderSpec: QuickSpec {
                     .data(using: .utf8)!
                 
                 expect {
-                    try BencodeDecoder().decode(TestType.self, from: data)
+                    try BencodeDecoder(using: dependencies).decode(TestType.self, from: data)
                 }.to(throwError(DecodingError.keyNotFound(TestType.CodingKeys.intValue, DecodingError.Context(codingPath: [], debugDescription: "key not found: intValue"))))
             }
             
@@ -86,7 +90,7 @@ class BencodeDecoderSpec: QuickSpec {
                     .data(using: .utf8)!
                 
                 expect {
-                    try BencodeDecoder().decode(TestType3.self, from: data)
+                    try BencodeDecoder(using: dependencies).decode(TestType3.self, from: data)
                 }.toNot(throwError())
             }
             
@@ -96,14 +100,14 @@ class BencodeDecoderSpec: QuickSpec {
                     .data(using: .utf8)!
                 
                 expect {
-                    try BencodeDecoder().decode(TestType2.self, from: data)
+                    try BencodeDecoder(using: dependencies).decode(TestType2.self, from: data)
                 }.to(throwError(DecodingError.typeMismatch(Bool.self, DecodingError.Context(codingPath: [], debugDescription: "Bencode doesn't support Bool values, use an Int and custom Encode/Decode functions isntead"))))
             }
             
             // MARK: ---- does not end up in an infinite loop when decoding Int64 types
             it("does not end up in an infinite loop when decoding Int64 types") {
                 let basicIntListData: Data = "li1ei2ee".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode([Int64].self, from: basicIntListData)
+                let result = try? BencodeDecoder(using: dependencies).decode([Int64].self, from: basicIntListData)
                 
                 expect(result).to(equal([1, 2]))
             }
@@ -111,7 +115,7 @@ class BencodeDecoderSpec: QuickSpec {
             // MARK: ---- does not end up in an infinite loop when decoding Double types
             it("does not end up in an infinite loop when decoding Double types") {
                 let basicIntListData: Data = "li1ei2ee".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode([Double].self, from: basicIntListData)
+                let result = try? BencodeDecoder(using: dependencies).decode([Double].self, from: basicIntListData)
                 
                 expect(result).to(equal([1, 2]))
             }
@@ -119,7 +123,7 @@ class BencodeDecoderSpec: QuickSpec {
             // MARK: ---- does not end up in an infinite loop when decoding Float types
             it("does not end up in an infinite loop when decoding Float types") {
                 let basicIntListData: Data = "li1ei2ee".data(using: .utf8)!
-                let result = try? BencodeDecoder().decode([Float].self, from: basicIntListData)
+                let result = try? BencodeDecoder(using: dependencies).decode([Float].self, from: basicIntListData)
                 
                 expect(result).to(equal([1, 2]))
             }

@@ -3,7 +3,7 @@
 // stringlint:disable
 
 import Foundation
-import SessionUtilitiesKit
+import SessionSnodeKit
 
 extension OpenGroupAPI {
     public enum Endpoint: EndpointType {

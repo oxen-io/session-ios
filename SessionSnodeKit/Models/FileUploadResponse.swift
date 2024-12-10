@@ -2,6 +2,10 @@
 
 public struct FileUploadResponse: Codable {
     public let id: String
+    
+    public init(id: String) {
+        self.id = id
+    }
 }
 
 // MARK: - Codable

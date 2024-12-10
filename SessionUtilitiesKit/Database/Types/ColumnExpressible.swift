@@ -14,3 +14,10 @@ public extension ColumnExpressible where Columns: CaseIterable {
         return Self.Columns.allCases.count
     }
 }
+
+
+public extension ColumnExpression {
+    static func deprecatedColumn(_ name: String) -> Column {
+        return Column(name)
+    }
+}

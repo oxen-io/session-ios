@@ -2,19 +2,11 @@
 
 import UIKit
 import CryptoKit
-import SessionUtilitiesKit
 
 public class PlaceholderIcon {
-    private static let placeholderCache: Atomic<NSCache<NSString, UIImage>> = {
-        let result = NSCache<NSString, UIImage>()
-        result.countLimit = 50
-        
-        return Atomic(result)
-    }()
-    
     private let seed: Int
     
-    // Colour palette
+    // Color palette
     private var colors: [UIColor] = Theme.PrimaryColor.allCases.map { $0.color }
     
     // MARK: - Initialization
@@ -24,16 +16,18 @@ public class PlaceholderIcon {
         if let colors = colors { self.colors = colors }
     }
     
+    // stringlint:ignore_contents
     convenience init(seed: String, colors: [UIColor]? = nil) {
         // Ensure we have a correct hash
         var hash = seed
         
         if (hash.matches("^[0-9A-Fa-f]+$") && hash.count >= 12) {
-            hash = Data(SHA512.hash(data: Data(Array(seed.utf8))).makeIterator()).toHexString()
+            // This is the same as the `SessionUtilitiesKit` `toHexString` function
+            hash = Data(SHA512.hash(data: Data(Array(seed.utf8))).makeIterator())
+                .map { String(format: "%02x", $0) }.joined()
         }
         
-        guard let number = Int(hash.substring(to: 12), radix: 16) else {
-            SNLog("Failed to generate number from seed string: \(seed).")
+        guard let number = Int(String(hash.prefix(12)), radix: 16) else {
             self.init(seed: 0, colors: colors)
             return
         }
@@ -47,15 +41,19 @@ public class PlaceholderIcon {
     public static func generate(seed: String, text: String, size: CGFloat) -> UIImage {
         let icon = PlaceholderIcon(seed: seed)
         
-        var content: String = (text.hasSuffix("\(String(seed.suffix(4))))") ?
-            (text.split(separator: "(")
-                .first
-                .map { String($0) })
-                .defaulting(to: text) :
-                text
-        )
+        var content: String = {
+            guard text.hasSuffix("\(String(seed.suffix(4))))") else {
+                guard let result: String = text.split(separator: "(").first.map({ String($0) }) else {
+                    return text
+                }
+                
+                return result
+            }
+            
+            return text
+        }()
 
-        if content.count > 2 && (try? SessionId.Prefix(from: content)) != nil {
+        if ValidSessionIdPrefixes.hasValidPrefix(content) {
             content.removeFirst(2)
         }
         
@@ -63,27 +61,21 @@ public class PlaceholderIcon {
             .split(separator: " ")
             .compactMap { word in word.first.map { String($0) } }
             .joined()
-        let cacheKey: String = "\(content)-\(Int(floor(size)))"
         
-        if let cachedIcon: UIImage = placeholderCache.wrappedValue.object(forKey: cacheKey as NSString) {
-            return cachedIcon
-        }
-        
-        let layer = icon.generateLayer(
-            with: size,
-            text: (initials.count >= 2 ?
-                initials.substring(to: 2).uppercased() :
-                content.substring(to: 2).uppercased()
+        return SNUIKit.placeholderIconCacher(cacheKey: "\(content)-\(Int(floor(size)))") {
+            let layer = icon.generateLayer(
+                with: size,
+                text: (initials.count >= 2 ?
+                    String(initials.prefix(2)).uppercased() :
+                    String(content.prefix(2)).uppercased()
+                )
             )
-        )
-        
-        let rect = CGRect(origin: CGPoint.zero, size: layer.frame.size)
-        let renderer = UIGraphicsImageRenderer(size: rect.size)
-        let result = renderer.image { layer.render(in: $0.cgContext) }
-        
-        placeholderCache.mutate { $0.setObject(result, forKey: cacheKey as NSString) }
-        
-        return result
+            
+            let rect = CGRect(origin: CGPoint.zero, size: layer.frame.size)
+            let renderer = UIGraphicsImageRenderer(size: rect.size)
+            
+            return renderer.image { layer.render(in: $0.cgContext) }
+        }
     }
     
     // MARK: - Internal
@@ -126,5 +118,18 @@ public class PlaceholderIcon {
 private extension String {
     func matches(_ regex: String) -> Bool {
         return self.range(of: regex, options: .regularExpression, range: nil, locale: nil) != nil
+    }
+}
+
+/// These enums should always match the `SessionUtilitiesKit.SessionId.Prefix` cases
+private enum ValidSessionIdPrefixes: String, CaseIterable {
+    case standard = "05"
+    case blinded15 = "15"
+    case blinded25 = "25"
+    case unblinded = "00"
+    case group = "03"
+    
+    static func hasValidPrefix(_ value: String) -> Bool {
+        return value.count >= 2 && allCases.map({ $0.rawValue }).contains(String(value.prefix(2)))
     }
 }

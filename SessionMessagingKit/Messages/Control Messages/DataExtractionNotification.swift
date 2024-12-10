@@ -31,10 +31,10 @@ public final class DataExtractionNotification: ControlMessage {
     
     public init(
         kind: Kind,
-        sentTimestamp: UInt64? = nil
+        sentTimestampMs: UInt64? = nil
     ) {
         super.init(
-            sentTimestamp: sentTimestamp
+            sentTimestampMs: sentTimestampMs
         )
         
         self.kind = kind
@@ -42,8 +42,8 @@ public final class DataExtractionNotification: ControlMessage {
 
     // MARK: - Validation
     
-    public override var isValid: Bool {
-        guard super.isValid, let kind = kind else { return false }
+    public override func isValid(using dependencies: Dependencies) -> Bool {
+        guard super.isValid(using: dependencies), let kind = kind else { return false }
         
         switch kind {
             case .screenshot: return true
@@ -71,7 +71,7 @@ public final class DataExtractionNotification: ControlMessage {
 
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> DataExtractionNotification? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String, using dependencies: Dependencies) -> DataExtractionNotification? {
         guard let dataExtractionNotification = proto.dataExtractionNotification else { return nil }
         let kind: Kind
         switch dataExtractionNotification.type {

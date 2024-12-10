@@ -7,17 +7,21 @@ import SessionMessagingKit
 
 /// This is _NOT_ a singleton and will be instantiated each time that the SAE is used.
 final class ShareAppExtensionContext: AppContext {
-    var _temporaryDirectory: String?
+    private let dependencies: Dependencies
     var rootViewController: UIViewController
     var reportedApplicationState: UIApplication.State
     
     let appLaunchTime: Date = Date()
     let isShareExtension: Bool = true
+    var frontMostViewController: UIViewController? { rootViewController.findFrontMostViewController(ignoringAlerts: true) }
     
     var mainWindow: UIWindow?
     var wasWokenUpByPushNotification: Bool = false
     
-    private static var _isRTL: Bool = {
+    var statusBarHeight: CGFloat { return 20 }
+    var openSystemSettingsAction: UIAlertAction?
+    
+    static func determineDeviceRTL() -> Bool {
         // Borrowed from PureLayout's AppExtension compatible RTL support.
         // App Extensions may not access -[UIApplication sharedApplication]; fall back
         // to checking the bundle's preferred localization character direction
@@ -26,16 +30,12 @@ final class ShareAppExtensionContext: AppContext {
                 forLanguage: (Bundle.main.preferredLocalizations.first ?? "")
             ) == Locale.LanguageDirection.rightToLeft
         )
-    }()
-
-    var isRTL: Bool { return ShareAppExtensionContext._isRTL }
-    
-    var statusBarHeight: CGFloat { return 20 }
-    var openSystemSettingsAction: UIAlertAction?
+    }
     
     // MARK: - Initialization
 
-    init(rootViewController: UIViewController) {
+    init(rootViewController: UIViewController, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.rootViewController = rootViewController
         self.reportedApplicationState = .active
         
@@ -114,16 +114,4 @@ final class ShareAppExtensionContext: AppContext {
             object: nil
         )
     }
-    
-    // MARK: - AppContext Functions
-    
-    func frontmostViewController() -> UIViewController? {
-        return rootViewController.findFrontmostViewController(ignoringAlerts: true)
-    }
-    
-    func setStatusBarHidden(_ isHidden: Bool, animated isAnimated: Bool) {
-        Log.info("Ignoring request to show/hide status bar since we're in an app extension")
-    }
-    
-    func setNetworkActivityIndicatorVisible(_ value: Bool) {}
 }

@@ -7,6 +7,8 @@ class VersionFooterView: UIView {
     private static let footerHeight: CGFloat = 75
     private static let logoHeight: CGFloat = 24
     
+    private let multiTapCallback: (() -> Void)?
+    
     // MARK: - UI
     
     private lazy var logoImageView: UIImageView = {
@@ -38,23 +40,25 @@ class VersionFooterView: UIView {
         let version: String = ((infoDict?["CFBundleShortVersionString"] as? String) ?? "0.0.0")
         let buildNumber: String? = (infoDict?["CFBundleVersion"] as? String)
         let commitInfo: String? = (infoDict?["GitCommitHash"] as? String)
-        let buildInfo: String = [buildNumber, commitInfo]
+        let buildInfo: String? = [buildNumber, commitInfo]
             .compactMap { $0 }
             .joined(separator: " - ")
+            .nullIfEmpty
+            .map { "(\($0))" }
         // stringlint:ignore_stop
         result.text = [
             "Version \(version)",
-            (!buildInfo.isEmpty ? " (" : ""),
-            buildInfo,
-            (!buildInfo.isEmpty ? ")" : ""),
-        ].joined()
+            buildInfo
+        ].compactMap { $0 }.joined(separator: " ")
         
         return result
     }()
     
     // MARK: - Initialization
     
-    init() {
+    init(numTaps: Int = 0, multiTapCallback: (() -> Void)? = nil) {
+        self.multiTapCallback = multiTapCallback
+        
         // Note: Need to explicitly set the height for a table footer view
         // or it will have no height
         super.init(
@@ -66,7 +70,7 @@ class VersionFooterView: UIView {
             )
         )
         
-        setupViewHierarchy()
+        setupViewHierarchy(numTaps: numTaps)
     }
     
     required init?(coder: NSCoder) {
@@ -75,7 +79,7 @@ class VersionFooterView: UIView {
     
     // MARK: - Content
     
-    private func setupViewHierarchy() {
+    private func setupViewHierarchy(numTaps: Int) {
         addSubview(logoImageView)
         addSubview(versionLabel)
         
@@ -84,5 +88,18 @@ class VersionFooterView: UIView {
         versionLabel.pin(.top, to: .bottom, of: logoImageView, withInset: Values.mediumSpacing)
         versionLabel.pin(.left, to: .left, of: self)
         versionLabel.pin(.right, to: .right, of: self)
+        
+        if numTaps > 0 {
+            let tapGestureRecognizer: UITapGestureRecognizer = UITapGestureRecognizer(
+                target: self,
+                action: #selector(onMultiTap)
+            )
+            tapGestureRecognizer.numberOfTapsRequired = numTaps
+            addGestureRecognizer(tapGestureRecognizer)
+        }
+    }
+    
+    @objc private func onMultiTap() {
+        self.multiTapCallback?()
     }
 }

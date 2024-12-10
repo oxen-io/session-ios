@@ -79,7 +79,7 @@ class ThemeSelectionView: UIView {
     private func setupUI(theme: Theme) {
         self.themeBackgroundColor = .appearance_sectionBackground
         
-        // Set the appropriate colours
+        // Set the appropriate colors
         previewView.themeBackgroundColorForced = .theme(theme, color: .backgroundPrimary)
         previewView.themeBorderColorForced = .theme(theme, color: .borderSeparator)
         previewIncomingMessageView.themeBackgroundColorForced = .theme(theme, color: .messageBubble_incomingBackground)

@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import GRDB
@@ -128,9 +130,27 @@ public struct Job: Codable, Equatable, Hashable, Identifiable, FetchableRecord, 
         /// This is a job that runs once whenever a message is marked as read because of syncing from user config and
         /// needs to get expiration from network
         case getExpiration
-        
+
         /// This is a job that runs at most once every 24 hours in order to check if there is a new update available on GitHub
         case checkForAppUpdates = 3011
+        
+        /// This is a job which downloads a display picture for a user, group or community (it's separate from the
+        /// `attachmentDownloadJob` as these files are likely to be much smaller so we don't want them to be
+        /// blocked by larger attachment downloads
+        case displayPictureDownload
+        
+        /// This is a job which sends an invitation to a member of a group asynchronously so the admin doesn't need to
+        /// wait during group creation
+        case groupInviteMember
+        
+        /// This is a job which sends a promotion to a member of a group asynchronously so the admin doesn't need to
+        /// wait during promotions
+        case groupPromoteMember
+        
+        /// This is a job which checks for any pending group member removals and performs the tasks required to remove
+        /// them if any exist - only one job can run at a time (if there is already a running job then any subsequent job will
+        /// be deferred until it completes)
+        case processPendingGroupMemberRemovals
     }
     
     public enum Behaviour: Int, Codable, DatabaseValueConvertible, CaseIterable {
@@ -390,6 +410,26 @@ public struct Job: Codable, Equatable, Hashable, Identifiable, FetchableRecord, 
                 
                 return hasher.finalize()
         }
+    }
+    
+    private static func createUniqueHash(
+        shouldBeUnique: Bool,
+        variant: Variant,
+        threadId: String?,
+        interactionId: Int64?,
+        detailsData: Data?
+    ) -> Int? {
+        // Only generate a unique hash if the Job should actually be unique (we don't want to prevent
+        // all duplicate jobs, just the ones explicitly marked as unique)
+        guard shouldBeUnique else { return nil }
+        
+        var hasher: Hasher = Hasher()
+        variant.hash(into: &hasher)
+        threadId?.hash(into: &hasher)
+        interactionId?.hash(into: &hasher)
+        detailsData?.hash(into: &hasher)
+        
+        return hasher.finalize()
     }
     
     // MARK: - Custom Database Interaction

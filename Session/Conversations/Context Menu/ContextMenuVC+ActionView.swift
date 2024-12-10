@@ -10,6 +10,7 @@ extension ContextMenuVC {
         private static let iconSize: CGFloat = 16
         private static let iconImageViewSize: CGFloat = 24
         
+        private let dependencies: Dependencies
         private let action: Action
         private let dismiss: () -> Void
         private var didTouchDownInside: Bool = false
@@ -17,12 +18,21 @@ extension ContextMenuVC {
         
         // MARK: - UI
         
-        private lazy var iconImageView: UIImageView = {
+        private lazy var iconContainerView: UIImageView = {
             let result: UIImageView = UIImageView()
-            result.contentMode = .center
             result.themeTintColor = action.themeColor
             result.set(.width, to: ActionView.iconImageViewSize)
             result.set(.height, to: ActionView.iconImageViewSize)
+            
+            return result
+        }()
+        
+        private lazy var iconImageView: UIImageView = {
+            let result: UIImageView = UIImageView()
+            result.contentMode = .scaleAspectFit
+            result.themeTintColor = action.themeColor
+            result.set(.width, to: ActionView.iconSize)
+            result.set(.height, to: ActionView.iconSize)
             
             return result
         }()
@@ -58,7 +68,8 @@ extension ContextMenuVC {
 
         // MARK: - Lifecycle
         
-        init(for action: Action, dismiss: @escaping () -> Void) {
+        init(for action: Action, using dependencies: Dependencies, dismiss: @escaping () -> Void) {
+            self.dependencies = dependencies
             self.action = action
             self.dismiss = dismiss
             
@@ -78,14 +89,15 @@ extension ContextMenuVC {
         private func setUpViewHierarchy() {
             themeBackgroundColor = .clear
             
-            iconImageView.image = action.icon?
-                .resized(to: CGSize(width: ActionView.iconSize, height: ActionView.iconSize))?
-                .withRenderingMode(.alwaysTemplate)
+            iconImageView.image = action.icon?.withRenderingMode(.alwaysTemplate)
+            iconContainerView.addSubview(iconImageView)
+            iconImageView.center(in: iconContainerView)
+            
             titleLabel.text = action.title
             setUpSubtitle()
             
             // Stack view
-            let stackView: UIStackView = UIStackView(arrangedSubviews: [ iconImageView, labelContainer ])
+            let stackView: UIStackView = UIStackView(arrangedSubviews: [ iconContainerView, labelContainer ])
             stackView.axis = .horizontal
             stackView.spacing = Values.smallSpacing
             stackView.alignment = .center
@@ -119,13 +131,13 @@ extension ContextMenuVC {
             subtitleLabel.isHidden = false
             subtitleWidthConstraint.isActive = true
             // To prevent a negative timer
-            let timeToExpireInSeconds: TimeInterval =  max(0, (expiresStartedAtMs + expiresInSeconds * 1000 - Double(SnodeAPI.currentOffsetTimestampMs())) / 1000)
+            let timeToExpireInSeconds: TimeInterval =  max(0, (expiresStartedAtMs + expiresInSeconds * 1000 - dependencies[cache: .snodeAPI].currentOffsetTimestampMs()) / 1000)
             subtitleLabel.text = "disappearingMessagesCountdownBigMobile"
                 .put(key: "time_large", value: timeToExpireInSeconds.formatted(format: .twoUnits))
                 .localized()
             
-            timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 1, repeats: true, block: { [weak self] _ in
-                let timeToExpireInSeconds: TimeInterval =  (expiresStartedAtMs + expiresInSeconds * 1000 - Double(SnodeAPI.currentOffsetTimestampMs())) / 1000
+            timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 1, repeats: true, using: dependencies, block: { [weak self, dependencies] _ in
+                let timeToExpireInSeconds: TimeInterval =  (expiresStartedAtMs + expiresInSeconds * 1000 - dependencies[cache: .snodeAPI].currentOffsetTimestampMs()) / 1000
                 if timeToExpireInSeconds <= 0 {
                     self?.dismissWithTimerInvalidationIfNeeded()
                 } else {

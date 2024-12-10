@@ -10,7 +10,7 @@ enum _015_BlockCommunityMessageRequests: Migration {
     static let identifier: String = "BlockCommunityMessageRequests"
     static let needsConfigSync: Bool = false
     static let minExpectedRunDuration: TimeInterval = 0.01
-    static var requirements: [MigrationRequirement] = [.libSessionStateLoaded]
+    static var requirements: [MigrationRequirement] = [.sessionIdCached, .libSessionStateLoaded]
     static let fetchedTables: [(TableRecord & FetchableRecord).Type] = [
         Identity.self, Setting.self
     ]
@@ -26,14 +26,15 @@ enum _015_BlockCommunityMessageRequests: Migration {
         
         // If the user exists and the 'checkForCommunityMessageRequests' hasn't already been set then default it to "false"
         if
-            Identity.userExists(db),
+            Identity.userExists(db, using: dependencies),
             (try Setting.exists(db, id: Setting.BoolKey.checkForCommunityMessageRequests.rawValue)) == false
         {
-            let rawBlindedMessageRequestValue: Int32 = try dependencies.caches[.libSession]
-                .config(for: .userProfile, publicKey: getUserHexEncodedPublicKey(db))
-                .wrappedValue
-                .map { conf -> Int32 in try LibSession.rawBlindedMessageRequestValue(in: conf) }
-                .defaulting(to: -1)
+            let userSessionId: SessionId = dependencies[cache: .general].sessionId
+            let rawBlindedMessageRequestValue: Int32 = try dependencies.mutate(cache: .libSession) { cache in
+                try LibSession.rawBlindedMessageRequestValue(
+                    in: cache.config(for: .userProfile, sessionId: userSessionId)
+                )
+            }
             
             // Use the value in the config if we happen to have one, otherwise use the default
             db[.checkForCommunityMessageRequests] = (rawBlindedMessageRequestValue < 0 ?
@@ -42,6 +43,6 @@ enum _015_BlockCommunityMessageRequests: Migration {
             )
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

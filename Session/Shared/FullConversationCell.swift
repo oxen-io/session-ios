@@ -267,13 +267,14 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
     // MARK: - Content
     
     // MARK: --Search Results
-    public func updateForDefaultContacts(with cellViewModel: SessionThreadViewModel) {
+    public func updateForDefaultContacts(with cellViewModel: SessionThreadViewModel, using dependencies: Dependencies) {
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
             threadVariant: cellViewModel.threadVariant,
-            customImageData: cellViewModel.openGroupProfilePictureData,
+            displayPictureFilename: cellViewModel.displayPictureFilename,
             profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile
+            additionalProfile: cellViewModel.additionalProfile,
+            using: dependencies
         )
         
         isPinnedIcon.isHidden = true
@@ -294,13 +295,18 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         }
     }
     
-    public func updateForMessageSearchResult(with cellViewModel: SessionThreadViewModel, searchText: String) {
+    public func updateForMessageSearchResult(
+        with cellViewModel: SessionThreadViewModel,
+        searchText: String,
+        using dependencies: Dependencies
+    ) {
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
             threadVariant: cellViewModel.threadVariant,
-            customImageData: cellViewModel.openGroupProfilePictureData,
+            displayPictureFilename: cellViewModel.displayPictureFilename,
             profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile
+            additionalProfile: cellViewModel.additionalProfile,
+            using: dependencies
         )
         
         isPinnedIcon.isHidden = true
@@ -330,29 +336,36 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
                     authorDisplayName: cellViewModel.authorName(for: .contact),
                     attachmentDescriptionInfo: cellViewModel.interactionAttachmentDescriptionInfo,
                     attachmentCount: cellViewModel.interactionAttachmentCount,
-                    isOpenGroupInvitation: (cellViewModel.interactionIsOpenGroupInvitation == true)
+                    isOpenGroupInvitation: (cellViewModel.interactionIsOpenGroupInvitation == true),
+                    using: dependencies
                 ),
-                authorName: (cellViewModel.authorId != cellViewModel.currentUserPublicKey ?
+                authorName: (cellViewModel.authorId != cellViewModel.currentUserSessionId ?
                     cellViewModel.authorName(for: .contact) :
                     nil
                 ),
-                currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
+                currentUserSessionId: cellViewModel.currentUserSessionId,
+                currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+                currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId,
                 searchText: searchText.lowercased(),
                 fontSize: Values.smallFontSize,
-                textColor: textColor
+                textColor: textColor,
+                using: dependencies
             )
         }
     }
     
-    public func updateForContactAndGroupSearchResult(with cellViewModel: SessionThreadViewModel, searchText: String) {
+    public func updateForContactAndGroupSearchResult(
+        with cellViewModel: SessionThreadViewModel,
+        searchText: String,
+        using dependencies: Dependencies
+    ) {
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
             threadVariant: cellViewModel.threadVariant,
-            customImageData: cellViewModel.openGroupProfilePictureData,
+            displayPictureFilename: cellViewModel.displayPictureFilename,
             profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile
+            additionalProfile: cellViewModel.additionalProfile,
+            using: dependencies
         )
         
         isPinnedIcon.isHidden = true
@@ -366,12 +379,13 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
             
             displayNameLabel?.attributedText = self?.getHighlightedSnippet(
                 content: cellViewModel.displayName,
-                currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
+                currentUserSessionId: cellViewModel.currentUserSessionId,
+                currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+                currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId,
                 searchText: searchText.lowercased(),
                 fontSize: Values.mediumFontSize,
-                textColor: textColor
+                textColor: textColor,
+                using: dependencies
             )
         }
         
@@ -386,12 +400,13 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
                     if cellViewModel.threadVariant == .legacyGroup || cellViewModel.threadVariant == .group {
                         snippetLabel?.attributedText = self?.getHighlightedSnippet(
                             content: (cellViewModel.threadMemberNames ?? ""),
-                            currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                            currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                            currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey,
+                            currentUserSessionId: cellViewModel.currentUserSessionId,
+                            currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+                            currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId,
                             searchText: searchText.lowercased(),
                             fontSize: Values.smallFontSize,
-                            textColor: textColor
+                            textColor: textColor,
+                            using: dependencies
                         )
                     }
                 }
@@ -400,7 +415,7 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
 
     // MARK: --Standard
     
-    public func update(with cellViewModel: SessionThreadViewModel) {
+    public func update(with cellViewModel: SessionThreadViewModel, using dependencies: Dependencies) {
         let unreadCount: UInt = (cellViewModel.threadUnreadCount ?? 0)
         let threadIsUnread: Bool = (
             unreadCount > 0 ||
@@ -442,9 +457,10 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         profilePictureView.update(
             publicKey: cellViewModel.threadId,
             threadVariant: cellViewModel.threadVariant,
-            customImageData: cellViewModel.openGroupProfilePictureData,
+            displayPictureFilename: cellViewModel.displayPictureFilename,
             profile: cellViewModel.profile,
-            additionalProfile: cellViewModel.additionalProfile
+            additionalProfile: cellViewModel.additionalProfile,
+            using: dependencies
         )
         displayNameLabel.text = cellViewModel.displayName
         timestampLabel.text = cellViewModel.lastInteractionDate.formattedForDisplay
@@ -456,7 +472,7 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         }
         else {
             displayNameLabel.themeTextColor = {
-                guard cellViewModel.interactionVariant != .infoClosedGroupCurrentUserLeaving else {
+                guard cellViewModel.interactionVariant != .infoGroupCurrentUserLeaving else {
                     return .textSecondary
                 }
                 
@@ -466,26 +482,29 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
             typingIndicatorView.stopAnimation()
             
             ThemeManager.onThemeChange(observer: snippetLabel) { [weak self, weak snippetLabel] theme, _ in
-                if cellViewModel.interactionVariant == .infoClosedGroupCurrentUserLeaving {
+                if cellViewModel.interactionVariant == .infoGroupCurrentUserLeaving {
                     guard let textColor: UIColor = theme.color(for: .textSecondary) else { return }
                     
                     snippetLabel?.attributedText = self?.getSnippet(
                         cellViewModel: cellViewModel,
-                        textColor: textColor
+                        textColor: textColor,
+                        using: dependencies
                     )
-                } else if cellViewModel.interactionVariant == .infoClosedGroupCurrentUserErrorLeaving {
+                } else if cellViewModel.interactionVariant == .infoGroupCurrentUserErrorLeaving {
                     guard let textColor: UIColor = theme.color(for: .danger) else { return }
                     
                     snippetLabel?.attributedText = self?.getSnippet(
                         cellViewModel: cellViewModel,
-                        textColor: textColor
+                        textColor: textColor,
+                        using: dependencies
                     )
                 } else {
                     guard let textColor: UIColor = theme.color(for: .textPrimary) else { return }
                     
                     snippetLabel?.attributedText = self?.getSnippet(
                         cellViewModel: cellViewModel,
-                        textColor: textColor
+                        textColor: textColor,
+                        using: dependencies
                     )
                 }
             }
@@ -568,10 +587,26 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
 
     private func getSnippet(
         cellViewModel: SessionThreadViewModel,
-        textColor: UIColor
-    ) -> NSMutableAttributedString {
+        textColor: UIColor,
+        using dependencies: Dependencies
+    ) -> NSAttributedString {
+        guard cellViewModel.groupIsDestroyed != true else {
+            return NSAttributedString(
+                string: "groupDeletedMemberDescription"
+                    .put(key: "group_name", value: cellViewModel.displayName)
+                    .localizedDeformatted()
+            )
+        }
+        guard cellViewModel.wasKickedFromGroup != true else {
+            return NSAttributedString(
+                string: "groupRemovedYou"
+                    .put(key: "group_name", value: cellViewModel.displayName)
+                    .localizedDeformatted()
+            )
+        }
+        
         // If we don't have an interaction then do nothing
-        guard cellViewModel.interactionId != nil else { return NSMutableAttributedString() }
+        guard cellViewModel.interactionId != nil else { return NSAttributedString() }
         
         let result = NSMutableAttributedString()
         
@@ -616,29 +651,34 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         }
         
         let previewText: String = {
-            if cellViewModel.interactionVariant == .infoClosedGroupCurrentUserErrorLeaving {
-                return "groupLeaveErrorFailed"
-                    .put(key: "group_name", value: cellViewModel.displayName)
-                    .localized()
+            switch cellViewModel.interactionVariant {
+                case .infoGroupCurrentUserErrorLeaving:
+                    return "groupLeaveErrorFailed"
+                        .put(key: "group_name", value: cellViewModel.displayName)
+                        .localized()
+                
+                default:
+                    return Interaction.previewText(
+                        variant: (cellViewModel.interactionVariant ?? .standardIncoming),
+                        body: cellViewModel.interactionBody,
+                        threadContactDisplayName: cellViewModel.threadContactName(),
+                        authorDisplayName: cellViewModel.authorName(for: cellViewModel.threadVariant),
+                        attachmentDescriptionInfo: cellViewModel.interactionAttachmentDescriptionInfo,
+                        attachmentCount: cellViewModel.interactionAttachmentCount,
+                        isOpenGroupInvitation: (cellViewModel.interactionIsOpenGroupInvitation == true),
+                        using: dependencies
+                    )
             }
-            return Interaction.previewText(
-                variant: (cellViewModel.interactionVariant ?? .standardIncoming),
-                body: cellViewModel.interactionBody,
-                threadContactDisplayName: cellViewModel.threadContactName(),
-                authorDisplayName: cellViewModel.authorName(for: cellViewModel.threadVariant),
-                attachmentDescriptionInfo: cellViewModel.interactionAttachmentDescriptionInfo,
-                attachmentCount: cellViewModel.interactionAttachmentCount,
-                isOpenGroupInvitation: (cellViewModel.interactionIsOpenGroupInvitation == true)
-            )
         }()
         
         result.append(NSAttributedString(
             string: MentionUtilities.highlightMentionsNoAttributes(
                 in: previewText,
                 threadVariant: cellViewModel.threadVariant,
-                currentUserPublicKey: cellViewModel.currentUserPublicKey,
-                currentUserBlinded15PublicKey: cellViewModel.currentUserBlinded15PublicKey,
-                currentUserBlinded25PublicKey: cellViewModel.currentUserBlinded25PublicKey
+                currentUserSessionId: cellViewModel.currentUserSessionId,
+                currentUserBlinded15SessionId: cellViewModel.currentUserBlinded15SessionId,
+                currentUserBlinded25SessionId: cellViewModel.currentUserBlinded25SessionId,
+                using: dependencies
             ),
             attributes: [ .foregroundColor: textColor ]
         ))
@@ -649,12 +689,13 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
     private func getHighlightedSnippet(
         content: String,
         authorName: String? = nil,
-        currentUserPublicKey: String,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?,
+        currentUserSessionId: String,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?,
         searchText: String,
         fontSize: CGFloat,
-        textColor: UIColor
+        textColor: UIColor,
+        using dependencies: Dependencies
     ) -> NSAttributedString {
         guard !content.isEmpty, content != "noteToSelf".localized() else {
             if let authorName: String = authorName, !authorName.isEmpty {
@@ -680,9 +721,10 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         let mentionReplacedContent: String = MentionUtilities.highlightMentionsNoAttributes(
             in: content,
             threadVariant: .contact,
-            currentUserPublicKey: currentUserPublicKey,
-            currentUserBlinded15PublicKey: currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: currentUserBlinded25PublicKey
+            currentUserSessionId: currentUserSessionId,
+            currentUserBlinded15SessionId: currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: currentUserBlinded25SessionId,
+            using: dependencies
         )
         let result: NSMutableAttributedString = NSMutableAttributedString(
             string: mentionReplacedContent,
@@ -698,16 +740,16 @@ public final class FullConversationCell: UITableViewCell, SwipeActionOptimisticC
         
         SessionThreadViewModel.searchTermParts(searchText)
             .map { part -> String in
-                guard part.hasPrefix("\"") && part.hasSuffix("\"") else { return part }
+                guard part.hasPrefix("\"") && part.hasSuffix("\"") else { return part } // stringlint:ignore
                 
-                return part.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                return part.trimmingCharacters(in: CharacterSet(charactersIn: "\""))    // stringlint:ignore
             }
             .forEach { part in
                 // Highlight all ranges of the text (Note: The search logic only finds results that start
                 // with the term so we use the regex below to ensure we only highlight those cases)
                 normalizedSnippet
                     .ranges(
-                        of: (Singleton.hasAppContext && Singleton.appContext.isRTL ?
+                        of: (Dependencies.isRTL ?
                              "(\(part.lowercased()))(^|[^a-zA-Z0-9])" : // stringlint:ignore
                              "(^|[^a-zA-Z0-9])(\(part.lowercased()))"   // stringlint:ignore
                         ),

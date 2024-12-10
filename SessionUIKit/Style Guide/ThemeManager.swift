@@ -3,23 +3,6 @@
 // stringlint:disable
 
 import UIKit
-import GRDB
-import SessionUtilitiesKit
-
-// MARK: - Preferences
-
-public extension Setting.EnumKey {
-    /// Controls what theme should be used
-    static let theme: Setting.EnumKey = "selectedTheme"
-    
-    /// Controls what primary color should be used for the theme
-    static let themePrimaryColor: Setting.EnumKey = "selectedThemePrimaryColor"
-}
-
-public extension Setting.BoolKey {
-    /// A flag indicating whether the app should match system day/night settings
-    static let themeMatchSystemDayNightCycle: Setting.BoolKey = "themeMatchSystemDayNightCycle"
-}
 
 // MARK: - ThemeManager
 
@@ -32,87 +15,52 @@ public enum ThemeManager {
     /// Unfortunately if we don't do this the `ThemeApplier` is immediately deallocated and we can't use it to update the theme
     private static var uiRegistry: NSMapTable<AnyObject, ThemeApplier> = NSMapTable.weakToStrongObjects()
     
-    private static var _initialTheme: Theme?
-    private static var _initialPrimaryColor: Theme.PrimaryColor?
-    private static var _initialMatchSystemNightModeSetting: Bool?
+    private static var _theme: Theme = .classicDark                 // Default to `classicDark`
+    private static var _primaryColor: Theme.PrimaryColor = .green   // Default to `green`
+    private static var _matchSystemNightModeSetting: Bool = false   // Default to `false`
     
-    public static var currentTheme: Theme = {
-        (_initialTheme ?? Storage.shared[.theme].defaulting(to: Theme.classicDark))
-    }() {
-        didSet {
-            // Only update if it was changed
-            guard oldValue != currentTheme else { return }
-            
-            Storage.shared.writeAsync { db in
-                db[.theme] = currentTheme
+    public static var currentTheme: Theme { _theme }
+    public static var primaryColor: Theme.PrimaryColor { _primaryColor }
+    public static var matchSystemNightModeSetting: Bool { _matchSystemNightModeSetting }
+    
+    // MARK: - Functions
+    
+    public static func updateThemeState(
+        theme: Theme? = nil,
+        primaryColor: Theme.PrimaryColor? = nil,
+        matchSystemNightModeSetting: Bool? = nil
+    ) {
+        let targetTheme: Theme = (theme ?? _theme)
+        let targetPrimaryColor: Theme.PrimaryColor = {
+            switch (primaryColor, Theme.PrimaryColor(color: targetTheme.color(for: .defaultPrimary))) {
+                case (.some(let primaryColor), _): return primaryColor
+                case (.none, .some(let defaultPrimaryColor)): return defaultPrimaryColor
+                default: return _primaryColor
             }
-            
-            // Only trigger the UI update if the primary colour wasn't changed (otherwise we'd be doing
-            // an extra UI update
-            if let defaultPrimaryColor: Theme.PrimaryColor = Theme.PrimaryColor(color: currentTheme.color(for: .defaultPrimary)) {
-                guard primaryColor == defaultPrimaryColor else {
-                    ThemeManager.primaryColor = defaultPrimaryColor
-                    return
-                }
-            }
-            
+        }()
+        let targetMatchSystemNightModeSetting: Bool = (matchSystemNightModeSetting ?? _matchSystemNightModeSetting)
+        let themeChanged: Bool = (_theme != targetTheme || _primaryColor != targetPrimaryColor)
+        _theme = targetTheme
+        _primaryColor = targetPrimaryColor
+        
+        if !hasSetInitialSystemTrait || themeChanged {
             updateAllUI()
         }
-    }
-    
-    public static var primaryColor: Theme.PrimaryColor = {
-        (_initialPrimaryColor ?? Storage.shared[.themePrimaryColor].defaulting(to: Theme.PrimaryColor.green))
-    }() {
-        didSet {
-            // Only update if it was changed
-            guard oldValue != primaryColor else { return }
-            
-            Storage.shared.writeAsync { db in
-                db[.themePrimaryColor] = primaryColor
-            }
-            
-            updateAllUI()
-        }
-    }
-    
-    public static var matchSystemNightModeSetting: Bool = {
-        (_initialMatchSystemNightModeSetting ?? Storage.shared[.themeMatchSystemDayNightCycle])
-    }() {
-        didSet {
-            // Only update if it was changed
-            guard oldValue != matchSystemNightModeSetting else { return }
-            
-            Storage.shared.writeAsync { db in
-                db[.themeMatchSystemDayNightCycle] = matchSystemNightModeSetting
-            }
-            
-            // Note: We have to trigger this directly or the 'TraitObservingWindow' won't actually
-            // trigger the trait change if the app launched with this setting switched off
+        
+        if _matchSystemNightModeSetting != targetMatchSystemNightModeSetting {
+            _matchSystemNightModeSetting = targetMatchSystemNightModeSetting
             
             // Note: We need to set this to 'unspecified' to force the UI to properly update as the
             // 'TraitObservingWindow' won't actually trigger the trait change otherwise
             DispatchQueue.main.async {
-                self.mainWindow?.overrideUserInterfaceStyle = .unspecified
+                SNUIKit.mainWindow?.overrideUserInterfaceStyle = .unspecified
             }
         }
-    }
-    
-    // When this gets set we need to update the UI to ensure the global appearance stuff is set
-    // correctly on launch
-    public static weak var mainWindow: UIWindow? {
-        didSet { updateAllUI() }
-    }
-    
-    // MARK: - Functions
-    
-    public static func setInitialThemeState(
-        theme: Theme,
-        primaryColor: Theme.PrimaryColor,
-        matchSystemNightModeSetting: Bool
-    ) {
-        _initialTheme = theme
-        _initialPrimaryColor = primaryColor
-        _initialMatchSystemNightModeSetting = matchSystemNightModeSetting
+        
+        // If the theme was changed then trigger the callback for the theme settings change (so it gets persisted)
+        guard themeChanged || _matchSystemNightModeSetting != targetMatchSystemNightModeSetting else { return }
+        
+        SNUIKit.themeSettingsChanged(targetTheme, targetPrimaryColor, targetMatchSystemNightModeSetting)
     }
     
     public static func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -121,22 +69,17 @@ public enum ThemeManager {
         // Only trigger updates if the style changed and the device is set to match the system style
         guard
             currentUserInterfaceStyle != ThemeManager.currentTheme.interfaceStyle,
-            ThemeManager.matchSystemNightModeSetting
+            _matchSystemNightModeSetting
         else { return }
         
         // Swap to the appropriate light/dark mode
         switch (currentUserInterfaceStyle, ThemeManager.currentTheme) {
-            case (.light, .classicDark): ThemeManager.currentTheme = .classicLight
-            case (.light, .oceanDark): ThemeManager.currentTheme = .oceanLight
-            case (.dark, .classicLight): ThemeManager.currentTheme = .classicDark
-            case (.dark, .oceanLight): ThemeManager.currentTheme = .oceanDark
+            case (.light, .classicDark): updateThemeState(theme: .classicLight)
+            case (.light, .oceanDark): updateThemeState(theme: .oceanLight)
+            case (.dark, .classicLight): updateThemeState(theme: .classicDark)
+            case (.dark, .oceanLight): updateThemeState(theme: .oceanDark)
             default: break
         }
-    }
-    
-    public static func applySavedTheme() {
-        ThemeManager.primaryColor = Storage.shared[.themePrimaryColor].defaulting(to: Theme.PrimaryColor.green)
-        ThemeManager.currentTheme = Storage.shared[.theme].defaulting(to: Theme.classicDark)
     }
     
     public static func applyNavigationStyling() {
@@ -146,9 +89,9 @@ public enum ThemeManager {
         
         let textPrimary: UIColor = (ThemeManager.currentTheme.color(for: .textPrimary) ?? .white)
         
-        // Set the `mainWindow.tintColor` for system screens to use the right colour for text
-        ThemeManager.mainWindow?.tintColor = textPrimary
-        ThemeManager.mainWindow?.rootViewController?.setNeedsStatusBarAppearanceUpdate()
+        // Set the `mainWindow.tintColor` for system screens to use the right color for text
+        SNUIKit.mainWindow?.tintColor = textPrimary
+        SNUIKit.mainWindow?.rootViewController?.setNeedsStatusBarAppearanceUpdate()
         
         // Update toolbars to use the right colours
         UIToolbar.appearance().barTintColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
@@ -223,7 +166,7 @@ public enum ThemeManager {
             )
         }
         
-        updateIfNeeded(viewController: ThemeManager.mainWindow?.rootViewController)
+        updateIfNeeded(viewController: SNUIKit.mainWindow?.rootViewController)
     }
     
     public static func applyNavigationStylingIfNeeded(to viewController: UIViewController) {
@@ -267,7 +210,7 @@ public enum ThemeManager {
             return DispatchQueue.main.async { applyWindowStyling() }
         }
         
-        mainWindow?.overrideUserInterfaceStyle = {
+        SNUIKit.mainWindow?.overrideUserInterfaceStyle = {
             guard !ThemeManager.matchSystemNightModeSetting else { return .unspecified }
             
             switch ThemeManager.currentTheme.interfaceStyle {
@@ -276,7 +219,7 @@ public enum ThemeManager {
                 @unknown default: return .dark
             }
         }()
-        mainWindow?.backgroundColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
+        SNUIKit.mainWindow?.backgroundColor = ThemeManager.currentTheme.color(for: .backgroundPrimary)
     }
     
     public static func onThemeChange(observer: AnyObject, callback: @escaping (Theme, Theme.PrimaryColor) -> ()) {
@@ -381,7 +324,7 @@ public enum ThemeManager {
     }
     
     /// Using a `UIColor(dynamicProvider:)` unfortunately doesn't seem to work properly for some controls (eg. UISwitch) so
-    /// since we are already explicitly updating all UI when changing colours & states we just force-resolve the primary colour to avoid
+    /// since we are already explicitly updating all UI when changing colors & states we just force-resolve the primary color to avoid
     /// running into these glitches
     internal static func resolvedColor(_ color: UIColor?) -> UIColor? {
         return color?.resolvedColor(with: UITraitCollection())
@@ -421,7 +364,7 @@ internal class ThemeApplier {
             .filter { $0.info != info }
         
         // Automatically apply the theme immediately (if the database has been setup)
-        if Storage.hasCreatedValidInstance {
+        if SNUIKit.config?.isStorageValid == true {
             self.apply(theme: ThemeManager.currentTheme, isInitialApplication: true)
         }
     }

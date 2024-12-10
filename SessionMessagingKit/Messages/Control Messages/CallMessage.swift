@@ -111,7 +111,7 @@ public final class CallMessage: ControlMessage {
         self.kind = kind
         self.sdps = sdps
         
-        super.init(sentTimestamp: sentTimestampMs)
+        super.init(sentTimestampMs: sentTimestampMs)
     }
 
     // MARK: - Codable
@@ -138,7 +138,7 @@ public final class CallMessage: ControlMessage {
     
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> CallMessage? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String, using dependencies: Dependencies) -> CallMessage? {
         guard let callMessageProto = proto.callMessage else { return nil }
         
         let kind: Kind
@@ -258,7 +258,7 @@ public extension CallMessage {
                         .put(key: "name", value: threadContactDisplayName)
                         .localized()
                 
-                // TODO: We should do better here
+                // TODO: [CALLS] We should do better here
                 case .unknown: return ""
             }
         }

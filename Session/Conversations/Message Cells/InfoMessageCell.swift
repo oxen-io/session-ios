@@ -3,6 +3,7 @@
 import UIKit
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 final class InfoMessageCell: MessageCell {
     private static let iconSize: CGFloat = 12
@@ -93,12 +94,14 @@ final class InfoMessageCell: MessageCell {
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
         guard cellViewModel.variant.isInfoMessage else { return }
         
         self.accessibilityIdentifier = "Control message"
         self.isAccessibilityElement = true
+        self.dependencies = dependencies
         self.viewModel = cellViewModel
         
         self.actionLabel.isHidden = true
@@ -127,14 +130,18 @@ final class InfoMessageCell: MessageCell {
             self.actionLabel.text = "disappearingMessagesFollowSetting".localized()
         }
         
-        self.label.themeTextColor = (cellViewModel.variant == .infoClosedGroupCurrentUserErrorLeaving) ? .danger : .textSecondary
+        self.label.themeTextColor = (cellViewModel.variant == .infoGroupCurrentUserErrorLeaving ?
+            .danger :
+            .textSecondary
+        )
 
         let shouldShowIcon: Bool = (icon != nil) || ((cellViewModel.expiresInSeconds ?? 0) > 0)
         
-        iconContainerViewWidthConstraint.constant = shouldShowIcon ? InfoMessageCell.iconSize : 0
-        iconContainerViewHeightConstraint.constant = shouldShowIcon ? InfoMessageCell.iconSize : 0
+        iconContainerViewWidthConstraint.constant = (shouldShowIcon ? InfoMessageCell.iconSize : 0)
+        iconContainerViewHeightConstraint.constant = (shouldShowIcon ? InfoMessageCell.iconSize : 0)
         
         guard shouldShowIcon else { return }
+        
         // Timer
         if
             let expiresStartedAtMs: Double = cellViewModel.expiresStartedAtMs,
@@ -144,7 +151,8 @@ final class InfoMessageCell: MessageCell {
             
             timerView.configure(
                 expirationTimestampMs: expirationTimestampMs,
-                initialDurationSeconds: expiresInSeconds
+                initialDurationSeconds: expiresInSeconds,
+                using: dependencies
             )
             timerView.themeTintColor = .textSecondary
             timerView.isHidden = false

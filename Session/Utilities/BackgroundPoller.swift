@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import Foundation
 import Combine
@@ -7,22 +9,26 @@ import SessionSnodeKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
+// MARK: - Log.Category
+
+public extension Log.Category {
+    static let backgroundPoller: Log.Category = .create("BackgroundPoller", defaultLevel: .info)
+}
+
+// MARK: - BackgroundPoller
+
 public final class BackgroundPoller {
-    let currentUserPoller: CurrentUserPoller = CurrentUserPoller()
-    var groupPollers: [Poller] = []
-    var communityPollers: [OpenGroupAPI.Poller] = []
-    
     public func poll(using dependencies: Dependencies) -> AnyPublisher<Void, Never> {
         let pollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
         
-        return dependencies.storage
-            .readPublisher(using: dependencies) { db -> (Set<String>, Set<String>) in
+        return dependencies[singleton: .storage]
+            .readPublisher { db -> (Set<String>, Set<String>) in
                 (
                     try ClosedGroup
                         .select(.threadId)
                         .joining(
                             required: ClosedGroup.members
-                                .filter(GroupMember.Columns.profileId == getUserHexEncodedPublicKey(db))
+                                .filter(GroupMember.Columns.profileId == dependencies[cache: .general].sessionId.hexString)
                         )
                         .asRequest(of: String.self)
                         .fetchSet(db),
@@ -36,7 +42,7 @@ public final class BackgroundPoller {
                         .filter(
                             OpenGroup.Columns.roomToken != "" &&
                             OpenGroup.Columns.isActive &&
-                            OpenGroup.Columns.pollFailureCount < OpenGroupAPI.Poller.maxRoomFailureCountForBackgroundPoll
+                            OpenGroup.Columns.pollFailureCount < CommunityPoller.maxRoomFailureCountForBackgroundPoll
                         )
                         .distinct()
                         .asRequest(of: String.self)
@@ -46,22 +52,41 @@ public final class BackgroundPoller {
             .catch { _ in Just(([], [])).eraseToAnyPublisher() }
             .handleEvents(
                 receiveOutput: { groupIds, servers in
-                    Log.info("[BackgroundPoller] Fetching Users: 1, Groups: \(groupIds.count), Communities: \(servers.count).")
+                    Log.info(.backgroundPoller, "Fetching Users: 1, Groups: \(groupIds.count), Communities: \(servers.count).")
                 }
             )
-            .map { [weak self] groupIds, servers -> ([(Poller, String)], [(OpenGroupAPI.Poller, String)]) in
-                let groupPollerInfo: [(Poller, String)] = groupIds.map { (ClosedGroupPoller(), $0) }
-                let communityPollerInfo: [(OpenGroupAPI.Poller, String)] = servers.map { (OpenGroupAPI.Poller(for: $0), $0) }
-                self?.groupPollers = groupPollerInfo.map { poller, _ in poller }
-                self?.communityPollers = communityPollerInfo.map { poller, _ in poller }
+            .map { groupIds, servers -> ([GroupPoller], [CommunityPoller]) in
+                let groupPollers: [GroupPoller] = groupIds.map { groupId in
+                    GroupPoller(
+                        pollerName: "Background Group poller for: \(groupId)",   // stringlint:ignore
+                        pollerQueue: DispatchQueue.main,
+                        pollerDestination: .swarm(groupId),
+                        pollerDrainBehaviour: .alwaysRandom,
+                        namespaces: GroupPoller.namespaces(swarmPublicKey: groupId),
+                        shouldStoreMessages: true,
+                        logStartAndStopCalls: false,
+                        using: dependencies
+                    )
+                }
+                let communityPollers: [CommunityPoller] = servers.map { server in
+                    CommunityPoller(
+                        pollerName: "Background Community poller for: \(server)",   // stringlint:ignore
+                        pollerQueue: DispatchQueue.main,
+                        pollerDestination: .server(server),
+                        failureCount: 0,
+                        shouldStoreMessages: true,
+                        logStartAndStopCalls: false,
+                        using: dependencies
+                    )
+                }
                 
-                return (groupPollerInfo, communityPollerInfo)
+                return (groupPollers, communityPollers)
             }
-            .flatMap { groupPollerInfo, communityPollerInfo in
+            .flatMap { groupPollers, communityPollers in
                 Publishers.MergeMany(
                     [BackgroundPoller.pollUserMessages(using: dependencies)]
-                        .appending(contentsOf: BackgroundPoller.poll(pollerInfo: groupPollerInfo, using: dependencies))
-                        .appending(contentsOf: BackgroundPoller.poll(pollerInfo: communityPollerInfo, using: dependencies))
+                        .appending(contentsOf: BackgroundPoller.poll(pollers: groupPollers, using: dependencies))
+                        .appending(contentsOf: BackgroundPoller.poll(pollerInfo: communityPollers, using: dependencies))
                 )
             }
             .collect()
@@ -70,7 +95,7 @@ public final class BackgroundPoller {
                 receiveOutput: { _ in
                     let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
                     let duration: TimeUnit = .seconds(endTime - pollStart)
-                    Log.info("[BackgroundPoller] Finished polling after \(duration, unit: .s).")
+                    Log.info(.backgroundPoller, "Finished polling after \(duration, unit: .s).")
                 }
             )
             .eraseToAnyPublisher()
@@ -79,100 +104,96 @@ public final class BackgroundPoller {
     private static func pollUserMessages(
         using dependencies: Dependencies
     ) -> AnyPublisher<Void, Never> {
-        let userPublicKey: String = getUserHexEncodedPublicKey(using: dependencies)
-        
-        let poller: Poller = CurrentUserPoller()
-        let pollerName: String = poller.pollerName(for: userPublicKey)
-        let pollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
-        
-        return poller.pollFromBackground(
+        let poller: CurrentUserPoller = CurrentUserPoller(
+            pollerName: "Background Main Poller",
+            pollerQueue: DispatchQueue.main,
+            pollerDestination: .swarm(dependencies[cache: .general].sessionId.hexString),
+            pollerDrainBehaviour: .limitedReuse(count: 6),
             namespaces: CurrentUserPoller.namespaces,
-            for: userPublicKey,
-            drainBehaviour: .alwaysRandom,
+            shouldStoreMessages: true,
+            logStartAndStopCalls: false,
             using: dependencies
         )
-        .handleEvents(
-            receiveOutput: { _, _, validMessageCount, _ in
-                let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
-                let duration: TimeUnit = .seconds(endTime - pollStart)
-                Log.info("[BackgroundPoller] \(pollerName) received \(validMessageCount) valid message(s) after \(duration, unit: .s).")
-            },
-            receiveCompletion: { result in
-                switch result {
-                    case .finished: break
-                    case .failure(let error):
-                        let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
-                        let duration: TimeUnit = .seconds(endTime - pollStart)
-                        Log.error("[BackgroundPoller] \(pollerName) failed after \(duration, unit: .s) due to error: \(error).")
-                }
-            }
-        )
-        .map { _ in () }
-        .catch { _ in Just(()).eraseToAnyPublisher() }
-        .eraseToAnyPublisher()
-    }
-    
-    private static func poll(
-        pollerInfo: [(poller: Poller, groupPublicKey: String)],
-        using dependencies: Dependencies
-    ) -> [AnyPublisher<Void, Never>] {
-        // Fetch all closed groups (excluding any don't contain the current user as a
-        // GroupMemeber as the user is no longer a member of those)
-        return pollerInfo.map { poller, groupPublicKey in
-            let pollerName: String = poller.pollerName(for: groupPublicKey)
-            let pollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
-            
-            return poller.pollFromBackground(
-                namespaces: ClosedGroupPoller.namespaces,
-                for: groupPublicKey,
-                drainBehaviour: .alwaysRandom,
-                using: dependencies
-            )
+        let pollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
+        
+        return poller
+            .pollFromBackground()
             .handleEvents(
-                receiveOutput: { _, _, validMessageCount, _ in
+                receiveOutput: { [pollerName = poller.pollerName] _, _, validMessageCount, _ in
                     let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
                     let duration: TimeUnit = .seconds(endTime - pollStart)
-                    Log.info("[BackgroundPoller] \(pollerName) received \(validMessageCount) valid message(s) after \(duration, unit: .s).")
+                    Log.info(.backgroundPoller, "\(pollerName) received \(validMessageCount) valid message(s) after \(duration, unit: .s).")
                 },
-                receiveCompletion: { result in
+                receiveCompletion: { [pollerName = poller.pollerName] result in
                     switch result {
                         case .finished: break
                         case .failure(let error):
                             let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
                             let duration: TimeUnit = .seconds(endTime - pollStart)
-                            Log.error("[BackgroundPoller] \(pollerName) failed after \(duration, unit: .s) due to error: \(error).")
+                            Log.error(.backgroundPoller, "\(pollerName) failed after \(duration, unit: .s) due to error: \(error).")
                     }
                 }
             )
             .map { _ in () }
             .catch { _ in Just(()).eraseToAnyPublisher() }
             .eraseToAnyPublisher()
-        }
     }
     
     private static func poll(
-        pollerInfo: [(poller: OpenGroupAPI.Poller, server: String)],
+        pollers: [GroupPoller],
         using dependencies: Dependencies
     ) -> [AnyPublisher<Void, Never>] {
-        return pollerInfo.map { poller, server -> AnyPublisher<Void, Never> in
-            let pollerName: String = "Community poller for server: \(server)"   // stringlint:ignore
+        // Fetch all closed groups (excluding any don't contain the current user as a
+        // GroupMemeber as the user is no longer a member of those)
+        return pollers.map { poller in
             let pollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
             
             return poller
-                .pollFromBackground(using: dependencies)
+                .pollFromBackground()
                 .handleEvents(
-                    receiveOutput: { _ in
+                    receiveOutput: { [pollerName = poller.pollerName] _, _, validMessageCount, _ in
                         let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
                         let duration: TimeUnit = .seconds(endTime - pollStart)
-                        Log.info("[BackgroundPoller] \(pollerName) succeeded after \(duration, unit: .s).")
+                        Log.info(.backgroundPoller, "\(pollerName) received \(validMessageCount) valid message(s) after \(duration, unit: .s).")
                     },
-                    receiveCompletion: { result in
+                    receiveCompletion: { [pollerName = poller.pollerName] result in
                         switch result {
                             case .finished: break
                             case .failure(let error):
                                 let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
                                 let duration: TimeUnit = .seconds(endTime - pollStart)
-                                Log.error("[BackgroundPoller] \(pollerName) failed after \(duration, unit: .s) due to error: \(error).")
+                                Log.error(.backgroundPoller, "\(pollerName) failed after \(duration, unit: .s) due to error: \(error).")
+                        }
+                    }
+                )
+                .map { _ in () }
+                .catch { _ in Just(()).eraseToAnyPublisher() }
+                .eraseToAnyPublisher()
+        }
+    }
+    
+    private static func poll(
+        pollerInfo: [CommunityPoller],
+        using dependencies: Dependencies
+    ) -> [AnyPublisher<Void, Never>] {
+        return pollerInfo.map { poller -> AnyPublisher<Void, Never> in
+            let pollStart: TimeInterval = dependencies.dateNow.timeIntervalSince1970
+            
+            return poller
+                .pollFromBackground()
+                .handleEvents(
+                    receiveOutput: { [pollerName = poller.pollerName] _ in
+                        let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
+                        let duration: TimeUnit = .seconds(endTime - pollStart)
+                        Log.info(.backgroundPoller, "\(pollerName) succeeded after \(duration, unit: .s).")
+                    },
+                    receiveCompletion: { [pollerName = poller.pollerName] result in
+                        switch result {
+                            case .finished: break
+                            case .failure(let error):
+                                let endTime: TimeInterval = dependencies.dateNow.timeIntervalSince1970
+                                let duration: TimeUnit = .seconds(endTime - pollStart)
+                                Log.error(.backgroundPoller, "\(pollerName) failed after \(duration, unit: .s) due to error: \(error).")
                         }
                     }
                 )

@@ -6,6 +6,7 @@ import GRDB
 import DifferenceKit
 import SessionUIKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 public class MediaTileViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
@@ -18,6 +19,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     static let footerBarHeight: CGFloat = 40
     static let loadMoreHeaderHeight: CGFloat = 100
     
+    private let dependencies: Dependencies
     public let viewModel: MediaGalleryViewModel
     private var hasLoadedInitialData: Bool = false
     private var didFinishInitialLayout: Bool = false
@@ -36,9 +38,10 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     
     // MARK: - Initialization
 
-    init(viewModel: MediaGalleryViewModel) {
+    init(viewModel: MediaGalleryViewModel, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.viewModel = viewModel
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
 
         super.init(nibName: nil, bundle: nil)
     }
@@ -126,7 +129,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
 
         // Add a custom back button if this is the only view controller
         if self.navigationController?.viewControllers.first == self {
-            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton))
+            let backButton = UIViewController.createOWSBackButton(target: self, selector: #selector(didPressDismissButton), using: dependencies)
             self.navigationItem.leftBarButtonItem = backButton
         }
         
@@ -310,7 +313,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
     ) {
         // Ensure the first load runs without animations (if we don't do this the cells will animate
         // in from a frame of CGRect.zero)
-        guard hasLoadedInitialData else {
+        guard hasLoadedInitialData && viewModel.dependencies[feature: .animationsEnabled] else {
             self.viewModel.updateGalleryData(updatedGalleryData)
             self.updateSelectButton(updatedData: updatedGalleryData, inBatchSelectMode: isInBatchSelectMode)
             
@@ -451,7 +454,8 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
         let cell: PhotoGridViewCell = collectionView.dequeue(type: PhotoGridViewCell.self, for: indexPath)
         cell.configure(
             item: GalleryGridCellItem(
-                galleryItem: section.elements[indexPath.row]
+                galleryItem: section.elements[indexPath.row],
+                using: dependencies
             )
         )
 
@@ -544,7 +548,8 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
                 threadVariant: self.viewModel.threadVariant,
                 interactionId: galleryItem.interactionId,
                 selectedAttachmentId: galleryItem.attachment.id,
-                options: [ .sliderEnabled ]
+                options: [ .sliderEnabled ],
+                using: dependencies
             )
             
             guard let detailViewController: UIViewController = detailViewController else { return }
@@ -684,8 +689,8 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
             .putNumber(indexPaths.count)
             .localized()
 
-        let deleteAction = UIAlertAction(title: confirmationTitle, style: .destructive) { [weak self] _ in
-            Storage.shared.writeAsync { db in
+        let deleteAction = UIAlertAction(title: confirmationTitle, style: .destructive) { [weak self, dependencies = viewModel.dependencies] _ in
+            dependencies[singleton: .storage].writeAsync { db in
                 let interactionIds: Set<Int64> = items
                     .map { $0.interactionId }
                     .asSet()
@@ -695,7 +700,7 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
                     .deleteAll(db)
                 
                 // Add the garbage collection job to delete orphaned attachment files
-                JobRunner.add(
+                dependencies[singleton: .jobRunner].add(
                     db,
                     job: Job(
                         variant: .garbageCollection,
@@ -703,7 +708,8 @@ public class MediaTileViewController: UIViewController, UICollectionViewDataSour
                         details: GarbageCollectionJob.Details(
                             typesToCollect: [.orphanedAttachmentFiles]
                         )
-                    )
+                    ),
+                    canStartJob: true
                 )
                 
                 // Delete any interactions which had all of their attachments removed
@@ -838,9 +844,11 @@ private class MediaGalleryStaticHeader: UICollectionViewCell {
 }
 
 class GalleryGridCellItem: PhotoGridItem {
+    private let dependencies: Dependencies
     let galleryItem: MediaGalleryViewModel.Item
 
-    init(galleryItem: MediaGalleryViewModel.Item) {
+    init(galleryItem: MediaGalleryViewModel.Item, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.galleryItem = galleryItem
     }
 
@@ -857,7 +865,7 @@ class GalleryGridCellItem: PhotoGridItem {
     }
 
     func asyncThumbnail(completion: @escaping (UIImage?) -> Void) {
-        galleryItem.thumbnailImage(async: completion)
+        galleryItem.thumbnailImage(using: dependencies, async: completion)
     }
 }
 
@@ -874,7 +882,8 @@ extension MediaTileViewController: UIViewControllerTransitioningDelegate {
         guard let focusedIndexPath: IndexPath = self.viewModel.focusedIndexPath else { return nil }
 
         return MediaDismissAnimationController(
-            galleryItem: self.viewModel.galleryData[focusedIndexPath.section].elements[focusedIndexPath.item]
+            galleryItem: self.viewModel.galleryData[focusedIndexPath.section].elements[focusedIndexPath.item],
+            using: dependencies
         )
     }
 
@@ -889,7 +898,8 @@ extension MediaTileViewController: UIViewControllerTransitioningDelegate {
 
         return MediaZoomAnimationController(
             galleryItem: self.viewModel.galleryData[focusedIndexPath.section].elements[focusedIndexPath.item],
-            shouldBounce: false
+            shouldBounce: false,
+            using: dependencies
         )
     }
 }
@@ -898,7 +908,7 @@ extension MediaTileViewController: UIViewControllerTransitioningDelegate {
 
 extension MediaTileViewController: MediaPresentationContextProvider {
     func mediaPresentationContext(mediaItem: Media, in coordinateSpace: UICoordinateSpace) -> MediaPresentationContext? {
-        guard case let .gallery(galleryItem) = mediaItem else { return nil }
+        guard case let .gallery(galleryItem, _) = mediaItem else { return nil }
 
         // Note: According to Apple's docs the 'indexPathsForVisibleRows' method returns an
         // unsorted array which means we can't use it to determine the desired 'visibleCell'

@@ -61,12 +61,12 @@ public struct Contact: Codable, Identifiable, Equatable, FetchableRecord, Persis
         lastKnownClientVersion: FeatureVersion? = nil,
         didApproveMe: Bool = false,
         hasBeenBlocked: Bool = false,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) {
         self.id = id
         self.isTrusted = (
             isTrusted ||
-            id == getUserHexEncodedPublicKey(db, using: dependencies)  // Always trust ourselves
+            id == dependencies[cache: .general].sessionId.hexString  // Always trust ourselves
         )
         self.isApproved = isApproved
         self.isBlocked = isBlocked
@@ -83,7 +83,22 @@ public extension Contact {
     ///
     /// **Note:** This method intentionally does **not** save the newly created Contact,
     /// it will need to be explicitly saved after calling
-    static func fetchOrCreate(_ db: Database, id: ID) -> Contact {
-        return ((try? fetchOne(db, id: id)) ?? Contact(db, id: id))
+    static func fetchOrCreate(_ db: Database, id: ID, using dependencies: Dependencies) -> Contact {
+        return ((try? fetchOne(db, id: id)) ?? Contact(db, id: id, using: dependencies))
+    }
+}
+
+// MARK: - Convenience
+
+extension Contact: ProfileAssociated {
+    public var profileId: String { id }
+    
+    public static func compare(lhs: WithProfile<Contact>, rhs: WithProfile<Contact>) -> Bool {
+        let lhsDisplayName: String = (lhs.profile?.displayName(for: .contact))
+            .defaulting(to: Profile.truncated(id: lhs.profileId, threadVariant: .contact))
+        let rhsDisplayName: String = (rhs.profile?.displayName(for: .contact))
+            .defaulting(to: Profile.truncated(id: rhs.profileId, threadVariant: .contact))
+        
+        return (lhsDisplayName.lowercased() < rhsDisplayName.lowercased())
     }
 }

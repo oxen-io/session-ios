@@ -78,7 +78,7 @@ extension UpdateExpiryAllResponse: ValidatableResponse {
                 .appending(contentsOf: "\(validationData)".data(using: .ascii)?.bytes)
                 .appending(contentsOf: next.value.updated.joined().bytes)
             
-            let isValid: Bool = dependencies.crypto.verify(
+            let isValid: Bool = dependencies[singleton: .crypto].verify(
                 .signature(
                     message: verificationBytes,
                     publicKey: Data(hex: next.key).bytes,

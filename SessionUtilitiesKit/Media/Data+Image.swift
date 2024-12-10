@@ -107,13 +107,13 @@ public extension Data {
     
     // MARK: - Initialization
     
-    init?(validImageDataAt path: String, type: UTType? = nil) throws {
+    init?(validImageDataAt path: String, type: UTType? = nil, using dependencies: Dependencies) throws {
         let fileUrl: URL = URL(fileURLWithPath: path)
         
         guard
             let type: UTType = type,
-            let fileSize: UInt64 = FileSystem.fileSize(of: path),
-            fileSize <= FileSystem.maxFileSize,
+            let fileSize: UInt64 = dependencies[singleton: .fileManager].fileSize(of: path),
+            fileSize <= SNUtilitiesKit.maxFileSize,
             (type.isImage || type.isAnimated)
         else { return nil }
         
@@ -159,8 +159,10 @@ public extension Data {
         }
     }
     
-    static func isValidImage(at path: String, type: UTType? = nil) -> Bool {
-        guard let data: Data = try? Data(validImageDataAt: path, type: type) else { return false }
+    static func isValidImage(at path: String, type: UTType? = nil, using dependencies: Dependencies) -> Bool {
+        guard let data: Data = try? Data(validImageDataAt: path, type: type, using: dependencies) else {
+            return false
+        }
         
         return data.hasValidImageDimensions(isAnimated: type?.isAnimated == true)
     }
@@ -220,12 +222,12 @@ public extension Data {
         return ImageDimensions(pixelSize: CGSize(width: width, height: height), depthBytes: depthBytes)
     }
     
-    static func imageSize(for path: String, type: UTType?) -> CGSize {
+    static func imageSize(for path: String, type: UTType?, using dependencies: Dependencies) -> CGSize {
         let fileUrl: URL = URL(fileURLWithPath: path)
         let isAnimated: Bool = (type?.isAnimated ?? false)
         
         guard
-            let data: Data = try? Data(validImageDataAt: path, type: type),
+            let data: Data = try? Data(validImageDataAt: path, type: type, using: dependencies),
             let pixelSize: CGSize = imageSize(at: path, with: data, type: type, isAnimated: isAnimated)
         else { return .zero }
         

@@ -29,9 +29,9 @@ public extension Crypto.Generator {
             }
             
             guard
-                var iv: [UInt8] = dependencies.crypto.generate(.randomBytes(aesCBCIvLength)),
-                var encryptionKey: [UInt8] = dependencies.crypto.generate(.randomBytes(aesKeySize)),
-                var hmacKey: [UInt8] = dependencies.crypto.generate(.randomBytes(hmac256KeyLength))
+                var iv: [UInt8] = dependencies[singleton: .crypto].generate(.randomBytes(aesCBCIvLength)),
+                var encryptionKey: [UInt8] = dependencies[singleton: .crypto].generate(.randomBytes(aesKeySize)),
+                var hmacKey: [UInt8] = dependencies[singleton: .crypto].generate(.randomBytes(hmac256KeyLength))
             else {
                 Log.error("[Crypto] Failed to generate random data.")
                 throw CryptoError.encryptionFailed

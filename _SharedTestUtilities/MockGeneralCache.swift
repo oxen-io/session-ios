@@ -1,20 +1,30 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
-import Foundation
+import UIKit
 import SessionUtilitiesKit
 
 class MockGeneralCache: Mock<GeneralCacheType>, GeneralCacheType {
-    var encodedPublicKey: String? {
-        get { return accept() as? String }
-        set { accept(args: [newValue]) }
+    var sessionId: SessionId {
+        get { return mock() }
+        set { mockNoReturn(args: [newValue]) }
     }
     
     var recentReactionTimestamps: [Int64] {
-        get { return (accept() as? [Int64] ?? []) }
-        set { accept(args: [newValue]) }
+        get { return (mock() ?? []) }
+        set { mockNoReturn(args: [newValue]) }
     }
     
-    func clearCachedUserPublicKey() {
-        accept()
+    var placeholderCache: NSCache<NSString, UIImage> {
+        get { return (mock() ?? NSCache()) }
+        set { mockNoReturn(args: [newValue]) }
+    }
+    
+    var contextualActionLookupMap: [Int: [String: [Int: Any]]] {
+        get { return (mock() ?? [:]) }
+        set { mockNoReturn(args: [newValue]) }
+    }
+    
+    func setCachedSessionId(sessionId: SessionId) {
+        mockNoReturn(args: [sessionId])
     }
 }

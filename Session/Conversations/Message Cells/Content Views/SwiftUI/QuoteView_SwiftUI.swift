@@ -13,9 +13,9 @@ struct QuoteView_SwiftUI: View {
         var authorId: String
         var quotedText: String?
         var threadVariant: SessionThread.Variant
-        var currentUserPublicKey: String?
-        var currentUserBlinded15PublicKey: String?
-        var currentUserBlinded25PublicKey: String?
+        var currentUserSessionId: String?
+        var currentUserBlinded15SessionId: String?
+        var currentUserBlinded25SessionId: String?
         var direction: Direction
         var attachment: Attachment?
     }
@@ -29,14 +29,15 @@ struct QuoteView_SwiftUI: View {
     private static let cancelButtonSize: CGFloat = 33
     private static let cornerRadius: CGFloat = 4
     
+    private let dependencies: Dependencies
     private var info: Info
     private var onCancel: (() -> ())?
     
     private var isCurrentUser: Bool {
         return [
-            info.currentUserPublicKey,
-            info.currentUserBlinded15PublicKey,
-            info.currentUserBlinded25PublicKey
+            info.currentUserSessionId,
+            info.currentUserBlinded15SessionId,
+            info.currentUserBlinded25SessionId
         ]
         .compactMap { $0 }
         .asSet()
@@ -59,22 +60,27 @@ struct QuoteView_SwiftUI: View {
             // When we can't find the quoted message we want to hide the author label
             return Profile.displayNameNoFallback(
                 id: info.authorId,
-                threadVariant: info.threadVariant
+                threadVariant: info.threadVariant,
+                using: dependencies
             )
         }
         
         return Profile.displayName(
             id: info.authorId,
-            threadVariant: info.threadVariant
+            threadVariant: info.threadVariant,
+            using: dependencies
         )
     }
     
-    public init(info: Info, onCancel: (() -> ())? = nil) {
+    public init(info: Info, using dependencies: Dependencies, onCancel: (() -> ())? = nil) {
+        self.dependencies = dependencies
         self.info = info
         self.onCancel = onCancel
+        
         if let attachment = info.attachment, attachment.isVisualMedia {
             attachment.thumbnail(
                 size: .small,
+                using: dependencies,
                 success: { [self] image, _ in
                     self.thumbnail = image
                 },
@@ -97,26 +103,34 @@ struct QuoteView_SwiftUI: View {
                     
                     let fallbackImageName: String = (attachment.isAudio ? "attachment_audio" : "actionsheet_document_black")
                     return UIImage(named: fallbackImageName)?
-                        .resized(to: CGSize(width: Self.iconSize, height: Self.iconSize))?
                         .withRenderingMode(.alwaysTemplate)
                 }() {
-                    Image(uiImage: image)
-                        .foregroundColor(themeColor: {
-                            switch info.mode {
-                                case .regular: return (info.direction == .outgoing ?
-                                        .messageBubble_outgoingText :
-                                        .messageBubble_incomingText
-                                    )
-                                case .draft: return .textPrimary
-                            }
-                        }())
+                    ZStack() {
+                        RoundedRectangle(
+                            cornerRadius: Self.cornerRadius
+                        )
+                        .fill(themeColor: .messageBubble_overlay)
                         .frame(
                             width: Self.thumbnailSize,
-                            height: Self.thumbnailSize,
-                            alignment: .center
+                            height: Self.thumbnailSize
                         )
-                        .backgroundColor(themeColor: .messageBubble_overlay)
-                        .cornerRadius(Self.cornerRadius)
+                        
+                        Image(uiImage: image)
+                            .foregroundColor(themeColor: {
+                                switch info.mode {
+                                    case .regular: return (info.direction == .outgoing ?
+                                        .messageBubble_outgoingText :
+                                            .messageBubble_incomingText
+                                    )
+                                    case .draft: return .textPrimary
+                                }
+                            }())
+                            .frame(
+                                width: Self.iconSize,
+                                height: Self.iconSize,
+                                alignment: .center
+                            )
+                    }
                 }
             } else {
                 // Line view
@@ -159,9 +173,9 @@ struct QuoteView_SwiftUI: View {
                         MentionUtilities.highlightMentions(
                             in: quotedText,
                             threadVariant: info.threadVariant,
-                            currentUserPublicKey: info.currentUserPublicKey,
-                            currentUserBlinded15PublicKey: info.currentUserBlinded15PublicKey,
-                            currentUserBlinded25PublicKey: info.currentUserBlinded25PublicKey,
+                            currentUserSessionId: info.currentUserSessionId,
+                            currentUserBlinded15SessionId: info.currentUserBlinded15SessionId,
+                            currentUserBlinded25SessionId: info.currentUserBlinded25SessionId,
                             location: {
                                 switch (info.mode, info.direction) {
                                     case (.draft, _): return .quoteDraft
@@ -175,7 +189,8 @@ struct QuoteView_SwiftUI: View {
                             attributes: [
                                 .foregroundColor: textColor,
                                 .font: UIFont.systemFont(ofSize: Values.smallFontSize)
-                            ]
+                            ],
+                            using: dependencies
                         )
                     )
                     .lineLimit(2)
@@ -215,16 +230,35 @@ struct QuoteView_SwiftUI_Previews: PreviewProvider {
     static var previews: some View {
         ZStack {
             ThemeManager.currentTheme.colorSwiftUI(for: .backgroundPrimary).ignoresSafeArea()
-            
-            QuoteView_SwiftUI(
-                info: QuoteView_SwiftUI.Info(
-                    mode: .draft,
-                    authorId: "",
-                    threadVariant: .contact,
-                    direction: .outgoing
+            VStack(spacing: 20) {
+                QuoteView_SwiftUI(
+                    info: QuoteView_SwiftUI.Info(
+                        mode: .draft,
+                        authorId: "",
+                        threadVariant: .contact,
+                        direction: .outgoing
+                    ),
+                    using: Dependencies.createEmpty()
                 )
-            )
-            .frame(height: 40)
+                .frame(height: 40)
+                
+                QuoteView_SwiftUI(
+                    info: QuoteView_SwiftUI.Info(
+                        mode: .regular,
+                        authorId: "",
+                        threadVariant: .contact,
+                        direction: .incoming,
+                        attachment: Attachment(
+                            variant: .standard,
+                            state: .downloaded,
+                            contentType: "audio/wav",
+                            byteCount: 0
+                        )
+                    ),
+                    using: Dependencies.createEmpty()
+                )
+                .previewLayout(.sizeThatFits)
+            }
         }
     }
 }

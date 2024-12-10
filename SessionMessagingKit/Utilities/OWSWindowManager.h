@@ -18,8 +18,6 @@ extern NSString *const IsScreenBlockActiveDidChangeNotification;
 
 const CGFloat OWSWindowManagerCallBannerHeight(void);
 
-extern const UIWindowLevel UIWindowLevel_Background;
-
 @interface OWSWindowManager : NSObject
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -27,7 +25,7 @@ extern const UIWindowLevel UIWindowLevel_Background;
 
 + (instancetype)sharedManager;
 
-- (void)setupWithRootWindow:(UIWindow *)rootWindow screenBlockingWindow:(UIWindow *)screenBlockingWindow;
+- (void)setupWithRootWindow:(UIWindow *)rootWindow screenBlockingWindow:(UIWindow *)screenBlockingWindow backgroundWindowLevel:(UIWindowLevel)backgroundWindowLevel;
 
 @property (nonatomic, readonly) UIWindow *rootWindow;
 @property (nonatomic) BOOL isScreenBlockActive;

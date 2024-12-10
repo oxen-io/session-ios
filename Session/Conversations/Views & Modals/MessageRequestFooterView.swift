@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 class MessageRequestFooterView: UIView {
@@ -62,7 +63,7 @@ class MessageRequestFooterView: UIView {
         result.translatesAutoresizingMaskIntoConstraints = false
         result.clipsToBounds = true
         result.titleLabel?.font = UIFont.boldSystemFont(ofSize: 16)
-        result.setTitle("deleteAfterGroupPR1BlockUser".localized(), for: .normal)
+        result.setTitle("block".localized(), for: .normal)
         result.setThemeTitleColor(.danger, for: .normal)
         result.addTarget(self, action: #selector(block), for: .touchUpInside)
 
@@ -85,7 +86,7 @@ class MessageRequestFooterView: UIView {
         result.accessibilityLabel = "Delete message request"
         result.isAccessibilityElement = true
         result.translatesAutoresizingMaskIntoConstraints = false
-        result.setTitle("decline".localized(), for: .normal)
+        result.setTitle("delete".localized(), for: .normal)
         result.addTarget(self, action: #selector(decline), for: .touchUpInside)
 
         return result
@@ -98,6 +99,7 @@ class MessageRequestFooterView: UIView {
         canWrite: Bool,
         threadIsMessageRequest: Bool,
         threadRequiresApproval: Bool,
+        closedGroupAdminProfile: Profile?,
         onBlock: @escaping () -> (),
         onAccept: @escaping () -> (),
         onDecline: @escaping () -> ()
@@ -113,7 +115,8 @@ class MessageRequestFooterView: UIView {
             threadVariant: threadVariant,
             canWrite: canWrite,
             threadIsMessageRequest: threadIsMessageRequest,
-            threadRequiresApproval: threadRequiresApproval
+            threadRequiresApproval: threadRequiresApproval,
+            closedGroupAdminProfile: closedGroupAdminProfile
         )
         setupLayout()
     }
@@ -154,17 +157,22 @@ class MessageRequestFooterView: UIView {
         threadVariant: SessionThread.Variant,
         canWrite: Bool,
         threadIsMessageRequest: Bool,
-        threadRequiresApproval: Bool
+        threadRequiresApproval: Bool,
+        closedGroupAdminProfile: Profile?
     ) {
         self.isHidden = (!canWrite || (!threadIsMessageRequest && !threadRequiresApproval))
-        self.blockButton.isHidden = (
-            threadVariant != .contact ||
-            threadRequiresApproval
-        )
-        self.descriptionLabel.text = (threadRequiresApproval ?
-            "messageRequestPendingDescription".localized() :
-            "messageRequestsAcceptDescription".localized()
-        )
+        
+        switch threadVariant {
+            case .contact: self.blockButton.isHidden = threadRequiresApproval
+            case .group: self.blockButton.isHidden = (closedGroupAdminProfile != nil)
+            default: self.blockButton.isHidden = true
+        }
+        switch (threadVariant, threadRequiresApproval) {
+            case (.contact, false): self.descriptionLabel.text = "messageRequestsAcceptDescription".localized()
+            case (.contact, true): self.descriptionLabel.text = "messageRequestPendingDescription".localized()
+            case (.group, _): self.descriptionLabel.text = "messageRequestGroupInviteDescription".localized()
+            default: break
+        }
         self.actionStackView.isHidden = threadRequiresApproval
         self.messageRequestDescriptionLabelBottomConstraint?.constant = (threadRequiresApproval ? -4 : -20)
     }

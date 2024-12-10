@@ -7,6 +7,7 @@ import SessionUtilitiesKit
 
 struct RecoveryPasswordScreen: View {
     @EnvironmentObject var host: HostWrapper
+    private let dependencies: Dependencies
     
     @State private var copied: Bool = false
     @State private var showQRCode: Bool = false
@@ -17,12 +18,14 @@ struct RecoveryPasswordScreen: View {
     static private let backgroundCornerRadius: CGFloat = 17
     static private let buttonWidth: CGFloat = UIDevice.current.isIPad ? Values.iPadButtonWidth : 130
     
-    public init() throws {
-        self.mnemonic = try Identity.mnemonic()
-        self.hexEncodedSeed = Identity.fetchHexEncodedSeed()
+    public init(using dependencies: Dependencies) throws {
+        self.dependencies = dependencies
+        self.mnemonic = try Identity.mnemonic(using: dependencies)
+        self.hexEncodedSeed = try Mnemonic.decode(mnemonic: self.mnemonic)
     }
     
-    public init(hardcode: String) {
+    public init(hardcode: String, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.mnemonic = hardcode
         self.hexEncodedSeed = try? Mnemonic.decode(mnemonic: hardcode)
     }
@@ -239,7 +242,7 @@ struct RecoveryPasswordScreen: View {
         }
         .backgroundColor(themeColor: .backgroundPrimary)
         .onAppear {
-            Storage.shared.writeAsync { db in db[.hasViewedSeed] = true }
+            dependencies[singleton: .storage].writeAsync { db in db[.hasViewedSeed] = true }
         }
     }
     
@@ -271,7 +274,9 @@ struct RecoveryPasswordScreen: View {
                             cancelStyle: .danger,
                             onCancel: { modal in
                                 modal.dismiss(animated: true) {
-                                    Storage.shared.writeAsync { db in db[.hideRecoveryPasswordPermanently] = true }
+                                    dependencies[singleton: .storage].writeAsync { db in
+                                        db[.hideRecoveryPasswordPermanently] = true
+                                    }
                                     self.host.controller?.navigationController?.popViewController(animated: true)
                                 }
                             }
@@ -288,6 +293,9 @@ struct RecoveryPasswordScreen: View {
 
 struct RecoveryPasswordView_Previews: PreviewProvider {
     static var previews: some View {
-        RecoveryPasswordScreen(hardcode: "Voyage  urban  toyed  maverick peculiar  tuxedo penguin  tree grass  building  listen  speak withdraw  terminal  plane")
+        RecoveryPasswordScreen(
+            hardcode: "Voyage  urban  toyed  maverick peculiar  tuxedo penguin  tree grass  building  listen  speak withdraw  terminal  plane",
+            using: Dependencies.createEmpty()
+        )
     }
 }

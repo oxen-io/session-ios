@@ -40,6 +40,6 @@ enum _008_EmojiReacts: Migration {
             t.uniqueKey([.interactionId, .emoji, .authorId])
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

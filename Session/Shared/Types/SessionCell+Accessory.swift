@@ -6,497 +6,689 @@ import SessionUIKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
-extension SessionCell {
-    public enum Accessory: Hashable, Equatable {
-        case icon(
-            UIImage?,
-            size: IconSize,
-            customTint: ThemeValue?,
-            shouldFill: Bool,
-            accessibility: Accessibility?
-        )
-        case iconAsync(
-            size: IconSize,
-            customTint: ThemeValue?,
-            shouldFill: Bool,
-            accessibility: Accessibility?,
-            setter: (UIImageView) -> Void
-        )
-        case toggle(
-            DataSource,
-            accessibility: Accessibility?
-        )
-        case dropDown(
-            DataSource,
-            accessibility: Accessibility?
-        )
-        case radio(
-            size: RadioSize,
-            isSelected: () -> Bool,
-            storedSelection: Bool,
-            accessibility: Accessibility?
-        )
+public extension SessionCell {
+    enum AccessoryConfig {}
+    
+    class Accessory: Hashable, Equatable {
+        public let accessibility: Accessibility?
+        public var shouldFitToEdge: Bool { false }
+        public var currentBoolValue: Bool { false }
         
-        case highlightingBackgroundLabel(
+        fileprivate init(accessibility: Accessibility?) {
+            self.accessibility = accessibility
+        }
+        
+        public func hash(into hasher: inout Hasher) {}
+        fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool { return false }
+        
+        public static func == (lhs: SessionCell.Accessory, rhs: SessionCell.Accessory) -> Bool {
+            return lhs.isEqual(to: rhs)
+        }
+    }
+}
+
+// MARK: - DSL
+
+public extension SessionCell.Accessory {
+    static func icon(
+        _ image: UIImage?,
+        size: IconSize = .medium,
+        customTint: ThemeValue? = nil,
+        shouldFill: Bool = false,
+        accessibility: Accessibility? = nil
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.Icon(
+            image: image,
+            iconSize: size,
+            customTint: customTint,
+            shouldFill: shouldFill,
+            accessibility: accessibility
+        )
+    }
+    
+    static func iconAsync(
+        size: IconSize = .medium,
+        customTint: ThemeValue? = nil,
+        shouldFill: Bool = false,
+        accessibility: Accessibility? = nil,
+        setter: @escaping (UIImageView) -> Void
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.IconAsync(
+            iconSize: size,
+            customTint: customTint,
+            shouldFill: shouldFill,
+            setter: setter,
+            accessibility: accessibility
+        )
+    }
+    
+    static func toggle(
+        _ value: Bool,
+        oldValue: Bool?,
+        accessibility: Accessibility = Accessibility(identifier: "Switch")
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.Toggle(
+            value: value,
+            oldValue: (oldValue ?? value),
+            accessibility: accessibility
+        )
+    }
+    
+    static func dropDown(
+        _ dynamicString: @escaping () -> String?,
+        accessibility: Accessibility? = nil
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.DropDown(
+            dynamicString: dynamicString,
+            accessibility: accessibility
+        )
+    }
+    
+    static func radio(
+        _ size: SessionCell.AccessoryConfig.Radio.Size = .medium,
+        isSelected: Bool? = nil,
+        liveIsSelected: (() -> Bool)? = nil,
+        wasSavedSelection: Bool = false,
+        accessibility: Accessibility = Accessibility(identifier: "Radio")
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.Radio(
+            size: size,
+            initialIsSelected: ((isSelected ?? liveIsSelected?()) ?? false),
+            liveIsSelected: (liveIsSelected ?? { (isSelected ?? false) }),
+            wasSavedSelection: wasSavedSelection,
+            accessibility: accessibility
+        )
+    }
+    
+    static func highlightingBackgroundLabel(
+        title: String,
+        accessibility: Accessibility? = nil
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.HighlightingBackgroundLabel(
+            title: title,
+            accessibility: accessibility
+        )
+    }
+    
+    static func highlightingBackgroundLabelAndRadio(
+        title: String,
+        radioSize: SessionCell.AccessoryConfig.HighlightingBackgroundLabelAndRadio.Size = .medium,
+        isSelected: Bool? = nil,
+        liveIsSelected: (() -> Bool)? = nil,
+        wasSavedSelection: Bool = false,
+        labelAccessibility: Accessibility? = nil,
+        radioAccessibility: Accessibility? = nil
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.HighlightingBackgroundLabelAndRadio(
+            title: title,
+            radioSize: radioSize,
+            initialIsSelected: ((isSelected ?? liveIsSelected?()) ?? false),
+            liveIsSelected: (liveIsSelected ?? { (isSelected ?? false) }),
+            wasSavedSelection: wasSavedSelection,
+            labelAccessibility: labelAccessibility,
+            radioAccessibility: radioAccessibility
+        )
+    }
+    
+    static func profile(
+        id: String,
+        size: ProfilePictureView.Size = .list,
+        threadVariant: SessionThread.Variant = .contact,
+        displayPictureFilename: String? = nil,
+        profile: Profile? = nil,
+        profileIcon: ProfilePictureView.ProfileIcon = .none,
+        additionalProfile: Profile? = nil,
+        additionalProfileIcon: ProfilePictureView.ProfileIcon = .none,
+        accessibility: Accessibility? = nil
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.DisplayPicture(
+            id: id,
+            size: size,
+            threadVariant: threadVariant,
+            displayPictureFilename: displayPictureFilename,
+            profile: profile,
+            profileIcon: profileIcon,
+            additionalProfile: additionalProfile,
+            additionalProfileIcon: additionalProfileIcon,
+            accessibility: accessibility
+        )
+    }
+    
+    static func search(
+        placeholder: String,
+        accessibility: Accessibility? = nil,
+        searchTermChanged: @escaping (String?) -> Void
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.Search(
+            placeholder: placeholder,
+            searchTermChanged: searchTermChanged,
+            accessibility: accessibility
+        )
+    }
+    
+    static func button(
+        style: SessionButton.Style,
+        title: String,
+        accessibility: Accessibility? = nil,
+        run: @escaping (SessionButton?) -> Void
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.Button(
+            style: style,
+            title: title,
+            run: run,
+            accessibility: accessibility
+        )
+    }
+    
+    static func customView(
+        uniqueId: AnyHashable,
+        accessibility: Accessibility? = nil,
+        viewGenerator: @escaping () -> UIView
+    ) -> SessionCell.Accessory {
+        return SessionCell.AccessoryConfig.CustomView(
+            uniqueId: uniqueId,
+            viewGenerator: viewGenerator,
+            accessibility: accessibility
+        )
+    }
+}
+
+// MARK: Structs
+
+public extension SessionCell.AccessoryConfig {
+    // MARK: - Icon
+    
+    class Icon: SessionCell.Accessory {
+        public let image: UIImage?
+        public let iconSize: IconSize
+        public let customTint: ThemeValue?
+        public let shouldFill: Bool
+        
+        fileprivate init(
+            image: UIImage?,
+            iconSize: IconSize,
+            customTint: ThemeValue?,
+            shouldFill: Bool,
+            accessibility: Accessibility?
+        ) {
+            self.image = image
+            self.iconSize = iconSize
+            self.customTint = customTint
+            self.shouldFill = shouldFill
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            image.hash(into: &hasher)
+            iconSize.hash(into: &hasher)
+            customTint.hash(into: &hasher)
+            shouldFill.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: Icon = other as? Icon else { return false }
+            
+            return (
+                image == rhs.image &&
+                iconSize == rhs.iconSize &&
+                customTint == rhs.customTint &&
+                shouldFill == rhs.shouldFill &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    // MARK: - IconAsync
+    
+    class IconAsync: SessionCell.Accessory {
+        public let iconSize: IconSize
+        public let customTint: ThemeValue?
+        public let shouldFill: Bool
+        public let setter: (UIImageView) -> Void
+        
+        fileprivate init(
+            iconSize: IconSize,
+            customTint: ThemeValue?,
+            shouldFill: Bool,
+            setter: @escaping (UIImageView) -> Void,
+            accessibility: Accessibility?
+        ) {
+            self.iconSize = iconSize
+            self.customTint = customTint
+            self.shouldFill = shouldFill
+            self.setter = setter
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            iconSize.hash(into: &hasher)
+            customTint.hash(into: &hasher)
+            shouldFill.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: IconAsync = other as? IconAsync else { return false }
+            
+            return (
+                iconSize == rhs.iconSize &&
+                customTint == rhs.customTint &&
+                shouldFill == rhs.shouldFill &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    // MARK: - Toggle
+    
+    class Toggle: SessionCell.Accessory {
+        public let value: Bool
+        public let oldValue: Bool
+        
+        override public var currentBoolValue: Bool { value }
+        
+        fileprivate init(
+            value: Bool,
+            oldValue: Bool,
+            accessibility: Accessibility?
+        ) {
+            self.value = value
+            self.oldValue = oldValue
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            value.hash(into: &hasher)
+            oldValue.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: Toggle = other as? Toggle else { return false }
+            
+            return (
+                value == rhs.value &&
+                oldValue == rhs.oldValue &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    // MARK: - DropDown
+    
+    class DropDown: SessionCell.Accessory {
+        public let dynamicString: () -> String?
+        
+        fileprivate init(
+            dynamicString: @escaping () -> String?,
+            accessibility: Accessibility?
+        ) {
+            self.dynamicString = dynamicString
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            dynamicString().hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: DropDown = other as? DropDown else { return false }
+            
+            return (
+                dynamicString() == rhs.dynamicString() &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    // MARK: - Radio
+    
+    class Radio: SessionCell.Accessory {
+        public enum Size: Hashable, Equatable {
+            case small
+            case medium
+            
+            var borderSize: CGFloat {
+                switch self {
+                    case .small: return 20
+                    case .medium: return 26
+                }
+            }
+            
+            var selectionSize: CGFloat {
+                switch self {
+                    case .small: return 15
+                    case .medium: return 20
+                }
+            }
+        }
+        
+        public let size: Size
+        public let initialIsSelected: Bool
+        public let liveIsSelected: () -> Bool
+        public let wasSavedSelection: Bool
+        
+        override public var currentBoolValue: Bool { liveIsSelected() }
+        
+        fileprivate init(
+            size: Size,
+            initialIsSelected: Bool,
+            liveIsSelected: @escaping () -> Bool,
+            wasSavedSelection: Bool,
+            accessibility: Accessibility?
+        ) {
+            self.size = size
+            self.initialIsSelected = initialIsSelected
+            self.liveIsSelected = liveIsSelected
+            self.wasSavedSelection = wasSavedSelection
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            size.hash(into: &hasher)
+            initialIsSelected.hash(into: &hasher)
+            wasSavedSelection.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: Radio = other as? Radio else { return false }
+            
+            return (
+                size == rhs.size &&
+                initialIsSelected == rhs.initialIsSelected &&
+                wasSavedSelection == rhs.wasSavedSelection &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    // MARK: - HighlightingBackgroundLabel
+    
+    class HighlightingBackgroundLabel: SessionCell.Accessory {
+        public let title: String
+        
+        init(
             title: String,
             accessibility: Accessibility?
-        )
-        case profile(
+        ) {
+            self.title = title
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            title.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: HighlightingBackgroundLabel = other as? HighlightingBackgroundLabel else {
+                return false
+            }
+            
+            return (
+                title == rhs.title &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    // MARK: - HighlightingBackgroundLabelAndRadio
+    
+    class HighlightingBackgroundLabelAndRadio: SessionCell.Accessory {
+        public enum Size: Hashable, Equatable {
+            case small
+            case medium
+            
+            var borderSize: CGFloat {
+                switch self {
+                    case .small: return 20
+                    case .medium: return 26
+                }
+            }
+            
+            var selectionSize: CGFloat {
+                switch self {
+                    case .small: return 15
+                    case .medium: return 20
+                }
+            }
+        }
+        
+        public let title: String
+        public let size: Size
+        public let initialIsSelected: Bool
+        public let liveIsSelected: () -> Bool
+        public let wasSavedSelection: Bool
+        public let labelAccessibility: Accessibility?
+        
+        override public var currentBoolValue: Bool { liveIsSelected() }
+        
+        fileprivate init(
+            title: String,
+            radioSize: Size,
+            initialIsSelected: Bool,
+            liveIsSelected: @escaping () -> Bool,
+            wasSavedSelection: Bool,
+            labelAccessibility: Accessibility?,
+            radioAccessibility: Accessibility?
+        ) {
+            self.title = title
+            self.size = radioSize
+            self.initialIsSelected = initialIsSelected
+            self.liveIsSelected = liveIsSelected
+            self.wasSavedSelection = wasSavedSelection
+            self.labelAccessibility = labelAccessibility
+            
+            super.init(accessibility: radioAccessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            title.hash(into: &hasher)
+            size.hash(into: &hasher)
+            initialIsSelected.hash(into: &hasher)
+            wasSavedSelection.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+            labelAccessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: HighlightingBackgroundLabelAndRadio = other as? HighlightingBackgroundLabelAndRadio else { return false }
+            
+            return (
+                title == rhs.title &&
+                size == rhs.size &&
+                initialIsSelected == rhs.initialIsSelected &&
+                wasSavedSelection == rhs.wasSavedSelection &&
+                accessibility == rhs.accessibility &&
+                labelAccessibility == rhs.labelAccessibility
+            )
+        }
+    }
+    
+    // MARK: - DisplayPicture
+    
+    class DisplayPicture: SessionCell.Accessory {
+        public let id: String
+        public let size: ProfilePictureView.Size
+        public let threadVariant: SessionThread.Variant
+        public let displayPictureFilename: String?
+        public let profile: Profile?
+        public let profileIcon: ProfilePictureView.ProfileIcon
+        public let additionalProfile: Profile?
+        public let additionalProfileIcon: ProfilePictureView.ProfileIcon
+        
+        fileprivate init(
             id: String,
             size: ProfilePictureView.Size,
             threadVariant: SessionThread.Variant,
-            customImageData: Data?,
+            displayPictureFilename: String?,
             profile: Profile?,
             profileIcon: ProfilePictureView.ProfileIcon,
             additionalProfile: Profile?,
             additionalProfileIcon: ProfilePictureView.ProfileIcon,
             accessibility: Accessibility?
-        )
+        ) {
+            self.id = id
+            self.size = size
+            self.threadVariant = threadVariant
+            self.displayPictureFilename = displayPictureFilename
+            self.profile = profile
+            self.profileIcon = profileIcon
+            self.additionalProfile = additionalProfile
+            self.additionalProfileIcon = additionalProfileIcon
+            
+            super.init(accessibility: accessibility)
+        }
         
-        case search(
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            id.hash(into: &hasher)
+            size.hash(into: &hasher)
+            threadVariant.hash(into: &hasher)
+            displayPictureFilename.hash(into: &hasher)
+            profile.hash(into: &hasher)
+            profileIcon.hash(into: &hasher)
+            additionalProfile.hash(into: &hasher)
+            additionalProfileIcon.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            guard let rhs: DisplayPicture = other as? DisplayPicture else { return false }
+            
+            return (
+                id == rhs.id &&
+                size == rhs.size &&
+                threadVariant == rhs.threadVariant &&
+                displayPictureFilename == rhs.displayPictureFilename &&
+                profile == rhs.profile &&
+                profileIcon == rhs.profileIcon &&
+                additionalProfile == rhs.additionalProfile &&
+                additionalProfileIcon == rhs.additionalProfileIcon &&
+                accessibility == rhs.accessibility
+            )
+        }
+    }
+    
+    class Search: SessionCell.Accessory {
+        public let placeholder: String
+        public let searchTermChanged: (String?) -> Void
+        
+        fileprivate init(
             placeholder: String,
-            accessibility: Accessibility?,
-            searchTermChanged: (String?) -> Void
-        )
-        case button(
+            searchTermChanged: @escaping (String?) -> Void,
+            accessibility: Accessibility?
+        ) {
+            self.placeholder = placeholder
+            self.searchTermChanged = searchTermChanged
+            
+            super.init(accessibility: accessibility)
+        }
+        
+        // MARK: - Conformance
+        
+        override public func hash(into hasher: inout Hasher) {
+            placeholder.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+        }
+        
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            return (
+                other is Search &&
+                placeholder == (other as? Search)?.placeholder &&
+                accessibility == (other as? Search)?.accessibility
+            )
+        }
+    }
+    
+    class Button: SessionCell.Accessory {
+        public let style: SessionButton.Style
+        public let title: String
+        public let run: (SessionButton?) -> Void
+        
+        fileprivate init(
             style: SessionButton.Style,
             title: String,
-            accessibility: Accessibility?,
-            run: (SessionButton?) -> Void
-        )
-        case customView(
-            hashValue: AnyHashable,
-            viewGenerator: () -> UIView
-        )
-        
-        // MARK: - Convenience Vatiables
-        
-        var shouldFitToEdge: Bool {
-            switch self {
-                case .icon(_, _, _, let shouldFill, _), .iconAsync(_, _, let shouldFill, _, _):
-                    return shouldFill
-                default: return false
-            }
-        }
-        
-        var currentBoolValue: Bool {
-            switch self {
-                case .toggle(let dataSource, _), .dropDown(let dataSource, _): return dataSource.currentBoolValue
-                case .radio(_, let isSelected, _, _): return isSelected()
-                default: return false
-            }
+            run: @escaping (SessionButton?) -> Void,
+            accessibility: Accessibility?
+        ) {
+            self.style = style
+            self.title = title
+            self.run = run
+            
+            super.init(accessibility: accessibility)
         }
         
         // MARK: - Conformance
         
-        public func hash(into hasher: inout Hasher) {
-            switch self {
-                case .icon(let image, let size, let customTint, let shouldFill, let accessibility):
-                    image.hash(into: &hasher)
-                    size.hash(into: &hasher)
-                    customTint.hash(into: &hasher)
-                    shouldFill.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .iconAsync(let size, let customTint, let shouldFill, let accessibility, _):
-                    size.hash(into: &hasher)
-                    customTint.hash(into: &hasher)
-                    shouldFill.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .toggle(let dataSource, let accessibility):
-                    dataSource.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                
-                case .dropDown(let dataSource, let accessibility):
-                    dataSource.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .radio(let size, let isSelected, let storedSelection, let accessibility):
-                    size.hash(into: &hasher)
-                    isSelected().hash(into: &hasher)
-                    storedSelection.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                
-                case .highlightingBackgroundLabel(let title, let accessibility):
-                    title.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .profile(
-                    let profileId,
-                    let size,
-                    let threadVariant,
-                    let customImageData,
-                    let profile,
-                    let profileIcon,
-                    let additionalProfile,
-                    let additionalProfileIcon,
-                    let accessibility
-                ):
-                    profileId.hash(into: &hasher)
-                    size.hash(into: &hasher)
-                    threadVariant.hash(into: &hasher)
-                    customImageData.hash(into: &hasher)
-                    profile.hash(into: &hasher)
-                    profileIcon.hash(into: &hasher)
-                    additionalProfile.hash(into: &hasher)
-                    additionalProfileIcon.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .search(let placeholder, let accessibility, _):
-                    placeholder.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .button(let style, let title, let accessibility, _):
-                    style.hash(into: &hasher)
-                    title.hash(into: &hasher)
-                    accessibility.hash(into: &hasher)
-                    
-                case .customView(let hashValue, _):
-                    hashValue.hash(into: &hasher)
-            }
+        override public func hash(into hasher: inout Hasher) {
+            style.hash(into: &hasher)
+            title.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
         }
         
-        public static func == (lhs: Accessory, rhs: Accessory) -> Bool {
-            switch (lhs, rhs) {
-                case (.icon(let lhsImage, let lhsSize, let lhsCustomTint, let lhsShouldFill, let lhsAccessibility), .icon(let rhsImage, let rhsSize, let rhsCustomTint, let rhsShouldFill, let rhsAccessibility)):
-                    return (
-                        lhsImage == rhsImage &&
-                        lhsSize == rhsSize &&
-                        lhsCustomTint == rhsCustomTint &&
-                        lhsShouldFill == rhsShouldFill &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.iconAsync(let lhsSize, let lhsCustomTint, let lhsShouldFill, let lhsAccessibility, _), .iconAsync(let rhsSize, let rhsCustomTint, let rhsShouldFill, let rhsAccessibility, _)):
-                    return (
-                        lhsSize == rhsSize &&
-                        lhsCustomTint == rhsCustomTint &&
-                        lhsShouldFill == rhsShouldFill &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                
-                case (.toggle(let lhsDataSource, let lhsAccessibility), .toggle(let rhsDataSource, let rhsAccessibility)):
-                    return (
-                        lhsDataSource == rhsDataSource &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.dropDown(let lhsDataSource, let lhsAccessibility), .dropDown(let rhsDataSource, let rhsAccessibility)):
-                    return (
-                        lhsDataSource == rhsDataSource &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.radio(let lhsSize, let lhsIsSelected, let lhsStoredSelection, let lhsAccessibility), .radio(let rhsSize, let rhsIsSelected, let rhsStoredSelection, let rhsAccessibility)):
-                    return (
-                        lhsSize == rhsSize &&
-                        lhsIsSelected() == rhsIsSelected() &&
-                        lhsStoredSelection == rhsStoredSelection &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.highlightingBackgroundLabel(let lhsTitle, let lhsAccessibility), .highlightingBackgroundLabel(let rhsTitle, let rhsAccessibility)):
-                    return (
-                        lhsTitle == rhsTitle &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (
-                    .profile(
-                        let lhsProfileId,
-                        let lhsSize,
-                        let lhsThreadVariant,
-                        let lhsCustomImageData,
-                        let lhsProfile,
-                        let lhsProfileIcon,
-                        let lhsAdditionalProfile,
-                        let lhsAdditionalProfileIcon,
-                        let lhsAccessibility
-                    ),
-                    .profile(
-                        let rhsProfileId,
-                        let rhsSize,
-                        let rhsThreadVariant,
-                        let rhsCustomImageData,
-                        let rhsProfile,
-                        let rhsProfileIcon,
-                        let rhsAdditionalProfile,
-                        let rhsAdditionalProfileIcon,
-                        let rhsAccessibility
-                    )
-                ):
-                    return (
-                        lhsProfileId == rhsProfileId &&
-                        lhsSize == rhsSize &&
-                        lhsThreadVariant == rhsThreadVariant &&
-                        lhsCustomImageData == rhsCustomImageData &&
-                        lhsProfile == rhsProfile &&
-                        lhsProfileIcon == rhsProfileIcon &&
-                        lhsAdditionalProfile == rhsAdditionalProfile &&
-                        lhsAdditionalProfileIcon == rhsAdditionalProfileIcon &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.search(let lhsPlaceholder, let lhsAccessibility, _), .search(let rhsPlaceholder, let rhsAccessibility, _)):
-                    return (
-                        lhsPlaceholder == rhsPlaceholder &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.button(let lhsStyle, let lhsTitle, let lhsAccessibility, _), .button(let rhsStyle, let rhsTitle, let rhsAccessibility, _)):
-                    return (
-                        lhsStyle == rhsStyle &&
-                        lhsTitle == rhsTitle &&
-                        lhsAccessibility == rhsAccessibility
-                    )
-                    
-                case (.customView(let lhsHashValue, _), .customView(let rhsHashValue, _)):
-                    return (
-                        lhsHashValue.hashValue == rhsHashValue.hashValue
-                    )
-                
-                default: return false
-            }
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            return (
+                other is Button &&
+                style == (other as? Button)?.style &&
+                title == (other as? Button)?.title &&
+                accessibility == (other as? Button)?.accessibility
+            )
         }
     }
-}
-
-// MARK: - Convenience Types
-
-/// These are here because XCode doesn't realy like default values within enums so auto-complete and syntax
-/// highlighting don't work properly
-extension SessionCell.Accessory {
-    // MARK: - .icon Variants
     
-    public static func icon(_ image: UIImage?) -> SessionCell.Accessory {
-        return .icon(image, size: .medium, customTint: nil, shouldFill: false, accessibility: nil)
-    }
-    
-    public static func icon(_ image: UIImage?, customTint: ThemeValue) -> SessionCell.Accessory {
-        return .icon(image, size: .medium, customTint: customTint, shouldFill: false, accessibility: nil)
-    }
-    
-    public static func icon(_ image: UIImage?, size: IconSize) -> SessionCell.Accessory {
-        return .icon(image, size: size, customTint: nil, shouldFill: false, accessibility: nil)
-    }
-    
-    public static func icon(_ image: UIImage?, size: IconSize, customTint: ThemeValue) -> SessionCell.Accessory {
-        return .icon(image, size: size, customTint: customTint, shouldFill: false, accessibility: nil)
-    }
-    
-    public static func icon(_ image: UIImage?, shouldFill: Bool) -> SessionCell.Accessory {
-        return .icon(image, size: .medium, customTint: nil, shouldFill: shouldFill, accessibility: nil)
-    }
-    
-    public static func icon(_ image: UIImage?, accessibility: Accessibility) -> SessionCell.Accessory {
-        return .icon(image, size: .medium, customTint: nil, shouldFill: false, accessibility: accessibility)
-    }
-    
-    // MARK: - .iconAsync Variants
-    
-    public static func iconAsync(_ setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
-        return .iconAsync(size: .medium, customTint: nil, shouldFill: false, accessibility: nil, setter: setter)
-    }
-    
-    public static func iconAsync(customTint: ThemeValue, _ setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
-        return .iconAsync(size: .medium, customTint: customTint, shouldFill: false, accessibility: nil, setter: setter)
-    }
-    
-    public static func iconAsync(size: IconSize, setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
-        return .iconAsync(size: size, customTint: nil, shouldFill: false, accessibility: nil, setter: setter)
-    }
-    
-    public static func iconAsync(shouldFill: Bool, setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
-        return .iconAsync(size: .medium, customTint: nil, shouldFill: shouldFill, accessibility: nil, setter: setter)
-    }
-    
-    public static func iconAsync(size: IconSize, customTint: ThemeValue, setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
-        return .iconAsync(size: size, customTint: customTint, shouldFill: false, accessibility: nil, setter: setter)
-    }
-    
-    public static func iconAsync(size: IconSize, shouldFill: Bool, setter: @escaping (UIImageView) -> Void) -> SessionCell.Accessory {
-        return .iconAsync(size: size, customTint: nil, shouldFill: shouldFill, accessibility: nil, setter: setter)
-    }
-    
-    // MARK: - .toggle Variants
-    
-    public static func toggle(_ dataSource: DataSource) -> SessionCell.Accessory {
-        return .toggle(dataSource, accessibility: Accessibility(identifier: "Switch"))
-    }
-    
-    // MARK: - .dropDown Variants
-    
-    public static func dropDown(_ dataSource: DataSource) -> SessionCell.Accessory {
-        return .dropDown(dataSource, accessibility: nil)
-    }
-    
-    // MARK: - .radio Variants
-    
-    public static func radio(isSelected: @escaping () -> Bool) -> SessionCell.Accessory {
-        return .radio(
-            size: .medium,
-            isSelected: isSelected,
-            storedSelection: false,
-            accessibility: Accessibility(identifier: "Radio")
-        )
-    }
-    
-    public static func radio(isSelected: @escaping () -> Bool, accessibility: Accessibility) -> SessionCell.Accessory {
-        return .radio(
-            size: .medium,
-            isSelected: isSelected,
-            storedSelection: false,
-            accessibility: accessibility
-        )
-    }
-    
-    public static func radio(isSelected: @escaping () -> Bool, storedSelection: Bool) -> SessionCell.Accessory {
-        return .radio(
-            size: .medium,
-            isSelected: isSelected,
-            storedSelection: storedSelection,
-            accessibility: Accessibility(identifier: "Radio")
-        )
-    }
-    
-    // MARK: - .highlightingBackgroundLabel Variants
-    
-    public static func highlightingBackgroundLabel(title: String) -> SessionCell.Accessory {
-        return .highlightingBackgroundLabel(title: title, accessibility: nil)
-    }
-    
-    // MARK: - .profile Variants
-    
-    public static func profile(id: String, profile: Profile?) -> SessionCell.Accessory {
-        return .profile(
-            id: id,
-            size: .list,
-            threadVariant: .contact,
-            customImageData: nil,
-            profile: profile,
-            profileIcon: .none,
-            additionalProfile: nil,
-            additionalProfileIcon: .none,
-            accessibility: nil
-        )
-    }
-    
-    public static func profile(id: String, size: ProfilePictureView.Size, profile: Profile?) -> SessionCell.Accessory {
-        return .profile(
-            id: id,
-            size: size,
-            threadVariant: .contact,
-            customImageData: nil,
-            profile: profile,
-            profileIcon: .none,
-            additionalProfile: nil,
-            additionalProfileIcon: .none,
-            accessibility: nil
-        )
-    }
-    
-    // MARK: - .search Variants
-    
-    public static func search(placeholder: String, searchTermChanged: @escaping (String?) -> Void) -> SessionCell.Accessory {
-        return .search(placeholder: placeholder, accessibility: nil, searchTermChanged: searchTermChanged)
-    }
-    
-    // MARK: - .button Variants
-    
-    public static func button(style: SessionButton.Style, title: String, run: @escaping (SessionButton?) -> Void) -> SessionCell.Accessory {
-        return .button(style: style, title: title, accessibility: nil, run: run)
-    }
-}
-
-// MARK: - SessionCell.Accessory.DataSource
-
-extension SessionCell.Accessory {
-    public enum DataSource: Hashable, Equatable {
-        case boolValue(key: String, value: Bool, oldValue: Bool)
-        case dynamicString(() -> String?)
+    class CustomView: SessionCell.Accessory {
+        public let uniqueId: AnyHashable
+        public let viewGenerator: () -> UIView
         
-        static func boolValue(_ value: Bool, oldValue: Bool) -> DataSource {
-            return .boolValue(key: "", value: value, oldValue: oldValue)
-        }
-        
-        static func boolValue(key: Setting.BoolKey, value: Bool, oldValue: Bool) -> DataSource {
-            return .boolValue(key: key.rawValue, value: value, oldValue: oldValue)
-        }
-        
-        // MARK: - Convenience
-        
-        public var currentBoolValue: Bool {
-            switch self {
-                case .boolValue(_, let value, _): return value
-                case .dynamicString: return false
-            }
-        }
-        
-        public var oldBoolValue: Bool {
-            switch self {
-                case .boolValue(_, _, let oldValue): return oldValue
-                default: return false
-            }
-        }
-        
-        public var currentStringValue: String? {
-            switch self {
-                case .dynamicString(let value): return value()
-                default: return nil
-            }
+        fileprivate init(
+            uniqueId: AnyHashable,
+            viewGenerator: @escaping () -> UIView,
+            accessibility: Accessibility?
+        ) {
+            self.uniqueId = uniqueId
+            self.viewGenerator = viewGenerator
+            
+            super.init(accessibility: accessibility)
         }
         
         // MARK: - Conformance
         
-        public func hash(into hasher: inout Hasher) {
-            switch self {
-                case .boolValue(let key, let value, let oldValue):
-                    key.hash(into: &hasher)
-                    value.hash(into: &hasher)
-                    oldValue.hash(into: &hasher)
-                    
-                case .dynamicString(let generator): generator().hash(into: &hasher)
-            }
+        override public func hash(into hasher: inout Hasher) {
+            uniqueId.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
         }
         
-        public static func == (lhs: DataSource, rhs: DataSource) -> Bool {
-            switch (lhs, rhs) {
-                case (.boolValue(let lhsKey, let lhsValue, let lhsOldValue), .boolValue(let rhsKey, let rhsValue, let rhsOldValue)):
-                    return (
-                        lhsKey == rhsKey &&
-                        lhsValue == rhsValue &&
-                        lhsOldValue == rhsOldValue
-                    )
-                    
-                case (.dynamicString(let lhsGenerator), .dynamicString(let rhsGenerator)):
-                    return (lhsGenerator() == rhsGenerator())
-                    
-                default: return false
-            }
-        }
-    }
-}
-
-// MARK: - SessionCell.Accessory.RadioSize
-
-extension SessionCell.Accessory {
-    public enum RadioSize {
-        case small
-        case medium
-        
-        var borderSize: CGFloat {
-            switch self {
-                case .small: return 20
-                case .medium: return 26
-            }
-        }
-        
-        var selectionSize: CGFloat {
-            switch self {
-                case .small: return 15
-                case .medium: return 20
-            }
+        override fileprivate func isEqual(to other: SessionCell.Accessory) -> Bool {
+            return (
+                other is CustomView &&
+                uniqueId == (other as? CustomView)?.uniqueId &&
+                accessibility == (other as? CustomView)?.accessibility
+            )
         }
     }
 }

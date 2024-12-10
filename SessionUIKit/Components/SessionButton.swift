@@ -52,7 +52,13 @@ public final class SessionButton: UIButton {
         }
     }
     
-    private let style: Style
+    public var style: Style {
+        didSet {
+            guard style != oldValue else { return }
+            
+            setup(style: style)
+        }
+    }
     
     public override var isEnabled: Bool {
         didSet {
@@ -204,11 +210,5 @@ public final class SessionButton: UIButton {
                 case .filled, .borderless, .destructiveBorderless: return nil
             }
         }()
-    }
-    
-    // MARK: - Functions
-    
-    public func setStyle(_ style: Style) {
-        setup(style: style)
     }
 }

@@ -29,12 +29,14 @@ public enum Format {
             case oneMegabyte...Double.greatestFiniteMagnitude:
                 return (Format.fileSizeFormatter
                     .string(from: NSNumber(floatLiteral: (fileSizeDouble / oneMegabyte)))?
-                    .appending("MB") ?? "attachmentsNa".localized())
+                    .appending("MB") ??     // stringlint:ignore
+                    "attachmentsNa".localizedSNUIKit())
             
             default:
                 return (Format.fileSizeFormatter
                     .string(from: NSNumber(floatLiteral: max(0.1, (fileSizeDouble / oneKilobyte))))?
-                    .appending("KB") ?? "attachmentsNa".localized())
+                    .appending("KB") ??     // stringlint:ignore
+                    "attachmentsNa".localizedSNUIKit())
         }
     }
     

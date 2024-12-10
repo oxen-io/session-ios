@@ -1,0 +1,103 @@
+{
+  "configurations" : [
+    {
+      "id" : "BD538508-9687-4AA8-AC4A-53C8D56ABF4F",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "D221A088169C9E5E00537ABF",
+          "name" : "Session"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "7BC01A3A241F40AB00BC7C55",
+          "name" : "SessionNotificationServiceExtension"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "453518671FC635DD00210559",
+          "name" : "SessionShareExtension"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "C3C2A6EF25539DE700C340D1",
+          "name" : "SessionMessagingKit"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "C3C2A59E255385C100C340D1",
+          "name" : "SessionSnodeKit"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "C331FF1A2558F9D300070591",
+          "name" : "SessionUIKit"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "C3C2A678255388CC00C340D1",
+          "name" : "SessionUtilitiesKit"
+        },
+        {
+          "containerPath" : "container:Session.xcodeproj",
+          "identifier" : "C33FD9AA255A548A00E217F9",
+          "name" : "SignalUtilitiesKit"
+        }
+      ]
+    },
+    "environmentVariableEntries" : [
+      {
+        "key" : "runningTests_dontStartApp",
+        "value" : "YES"
+      }
+    ],
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:Session.xcodeproj",
+      "identifier" : "D221A088169C9E5E00537ABF",
+      "name" : "Session"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FD71160828D00BAE00B47552",
+        "name" : "SessionTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FDC4388D27B9FFC700C60D73",
+        "name" : "SessionMessagingKitTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FDB5DAF92A981C42002C8721",
+        "name" : "SessionSnodeKitTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FD83B9AE27CF200A005E1583",
+        "name" : "SessionUtilitiesKitTests"
+      }
+    }
+  ],
+  "version" : 1
+}

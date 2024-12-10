@@ -43,22 +43,22 @@ public struct SnodeReceivedMessageInfo: Codable, FetchableRecord, MutablePersist
 // MARK: - Convenience
 
 public extension SnodeReceivedMessageInfo {
-    private static func key(for snode: LibSession.Snode, publicKey: String, namespace: SnodeAPI.Namespace) -> String {
+    private static func key(for snode: LibSession.Snode, swarmPublicKey: String, namespace: SnodeAPI.Namespace) -> String {
         guard namespace != .default else {
-            return "\(snode.address).\(publicKey)"
+            return "\(snode.address).\(swarmPublicKey)"
         }
         
-        return "\(snode.address).\(publicKey).\(namespace.rawValue)"
+        return "\(snode.address).\(swarmPublicKey).\(namespace.rawValue)"
     }
     
     init(
         snode: LibSession.Snode,
-        publicKey: String,
+        swarmPublicKey: String,
         namespace: SnodeAPI.Namespace,
         hash: String,
         expirationDateMs: Int64?
     ) {
-        self.key = SnodeReceivedMessageInfo.key(for: snode, publicKey: publicKey, namespace: namespace)
+        self.key = SnodeReceivedMessageInfo.key(for: snode, swarmPublicKey: swarmPublicKey, namespace: namespace)
         self.hash = hash
         self.expirationDateMs = (expirationDateMs ?? 0)
     }
@@ -72,16 +72,18 @@ public extension SnodeReceivedMessageInfo {
         _ db: Database,
         for snode: LibSession.Snode,
         namespace: SnodeAPI.Namespace,
-        associatedWith publicKey: String,
+        swarmPublicKey: String,
         using dependencies: Dependencies
     ) throws -> SnodeReceivedMessageInfo? {
+        let currentOffsetTimestampMs: Int64 = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
+
         return try SnodeReceivedMessageInfo
             .filter(
                 SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == nil ||
                 SnodeReceivedMessageInfo.Columns.wasDeletedOrInvalid == false
             )
-            .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, publicKey: publicKey, namespace: namespace))
-            .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs > SnodeAPI.currentOffsetTimestampMs())
+            .filter(SnodeReceivedMessageInfo.Columns.key == key(for: snode, swarmPublicKey: swarmPublicKey, namespace: namespace))
+            .filter(SnodeReceivedMessageInfo.Columns.expirationDateMs > currentOffsetTimestampMs)
             .order(Column.rowID.desc)
             .fetchOne(db)
     }

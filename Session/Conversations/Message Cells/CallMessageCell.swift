@@ -128,7 +128,8 @@ final class CallMessageCell: MessageCell {
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
         guard
             cellViewModel.variant == .infoCall,
@@ -139,6 +140,7 @@ final class CallMessageCell: MessageCell {
             )
         else { return }
         
+        self.dependencies = dependencies
         self.accessibilityIdentifier = "Control message"
         self.isAccessibilityElement = true
         self.viewModel = cellViewModel
@@ -166,7 +168,7 @@ final class CallMessageCell: MessageCell {
         let shouldShowInfoIcon: Bool = (
             (
                 messageInfo.state == .permissionDenied &&
-                !Storage.shared[.areCallsEnabled]
+                !dependencies[singleton: .storage, key: .areCallsEnabled]
             ) || (
                 messageInfo.state == .permissionDeniedMicrophone &&
                 AVAudioSession.sharedInstance().recordPermission != .granted
@@ -186,7 +188,8 @@ final class CallMessageCell: MessageCell {
             
             timerView.configure(
                 expirationTimestampMs: expirationTimestampMs,
-                initialDurationSeconds: expiresInSeconds
+                initialDurationSeconds: expiresInSeconds,
+                using: dependencies
             )
             timerView.themeTintColor = .textSecondary
             timerViewContainer.isHidden = false
@@ -214,10 +217,11 @@ final class CallMessageCell: MessageCell {
     
     @objc private func handleTap(_ gestureRecognizer: UITapGestureRecognizer) {
         guard
+            let dependencies: Dependencies = self.dependencies,
             let cellViewModel: MessageViewModel = self.viewModel,
             cellViewModel.variant == .infoCall,
             let infoMessageData: Data = (cellViewModel.rawBody ?? "").data(using: .utf8),
-            let messageInfo: CallMessage.MessageInfo = try? JSONDecoder().decode(
+            let messageInfo: CallMessage.MessageInfo = try? JSONDecoder(using: dependencies).decode(
                 CallMessage.MessageInfo.self,
                 from: infoMessageData
             )
@@ -227,7 +231,7 @@ final class CallMessageCell: MessageCell {
         guard
             (
                 messageInfo.state == .permissionDenied &&
-                !Storage.shared[.areCallsEnabled]
+                !dependencies[singleton: .storage, key: .areCallsEnabled]
             ) || (
                 messageInfo.state == .permissionDeniedMicrophone &&
                 AVAudioSession.sharedInstance().recordPermission != .granted

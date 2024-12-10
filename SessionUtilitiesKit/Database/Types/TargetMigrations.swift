@@ -21,10 +21,11 @@ public struct TargetMigrations: Comparable {
     public enum Identifier: String, CaseIterable, Comparable {
         // WARNING: The string version of these cases are used as migration identifiers so
         // changing them will result in the migrations running again
+        case session
         case utilitiesKit
         case snodeKit
         case messagingKit
-        case uiKit
+        case _deprecatedUIKit = "uiKit"
         case test
         
         public static func < (lhs: Self, rhs: Self) -> Bool {

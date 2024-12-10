@@ -6,6 +6,14 @@ import SessionUIKit
 import SessionUtilitiesKit
 import SessionSnodeKit
 
+// MARK: - Log.Category
+
+public extension Log.Category {
+    static let messageReceiver: Log.Category = .create("MessageReceiver", defaultLevel: .info)
+}
+
+// MARK: - MessageReceiver
+
 public enum MessageReceiver {
     private static var lastEncryptionKeyPairRequest: [String: Date] = [:]
     
@@ -15,12 +23,12 @@ public enum MessageReceiver {
         origin: Message.Origin,
         using dependencies: Dependencies
     ) throws -> ProcessedMessage {
-        let userSessionId: String = getUserHexEncodedPublicKey(db, using: dependencies)
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
         var plaintext: Data
         var customProto: SNProtoContent? = nil
         var customMessage: Message? = nil
         let sender: String
-        let sentTimestamp: UInt64
+        let sentTimestampMs: UInt64
         let serverHash: String?
         let openGroupServerMessageId: UInt64?
         let openGroupWhisper: Bool
@@ -43,7 +51,7 @@ public enum MessageReceiver {
             case (_, .community(let openGroupId, let messageSender, let timestamp, let messageServerId, let messageWhisper, let messageWhisperMods, let messageWhisperTo)):
                 plaintext = data.removePadding()   // Remove the padding
                 sender = messageSender
-                sentTimestamp = UInt64(floor(timestamp * 1000)) // Convert to ms for database consistency
+                sentTimestampMs = UInt64(floor(timestamp * 1000)) // Convert to ms for database consistency
                 serverHash = nil
                 openGroupServerMessageId = UInt64(messageServerId)
                 openGroupWhisper = messageWhisper
@@ -58,7 +66,7 @@ public enum MessageReceiver {
                 }
                 
             case (_, .openGroupInbox(let timestamp, let messageServerId, let serverPublicKey, let senderId, let recipientId)):
-                (plaintext, sender) = try dependencies.crypto.tryGenerate(
+                (plaintext, sender) = try dependencies[singleton: .crypto].tryGenerate(
                     .plaintextWithSessionBlindingProtocol(
                         db,
                         ciphertext: data,
@@ -70,7 +78,7 @@ public enum MessageReceiver {
                 )
                 
                 plaintext = plaintext.removePadding()   // Remove the padding
-                sentTimestamp = UInt64(floor(timestamp * 1000)) // Convert to ms for database consistency
+                sentTimestampMs = UInt64(floor(timestamp * 1000)) // Convert to ms for database consistency
                 serverHash = nil
                 openGroupServerMessageId = UInt64(messageServerId)
                 openGroupWhisper = false
@@ -86,11 +94,11 @@ public enum MessageReceiver {
                             let envelope: SNProtoEnvelope = try? MessageWrapper.unwrap(data: data),
                             let ciphertext: Data = envelope.content
                         else {
-                            SNLog("Failed to unwrap data for message from 'default' namespace.")
+                            Log.warn(.messageReceiver, "Failed to unwrap data for message from 'default' namespace.")
                             throw MessageReceiverError.invalidMessage
                         }
                         
-                        (plaintext, sender) = try dependencies.crypto.tryGenerate(
+                        (plaintext, sender) = try dependencies[singleton: .crypto].tryGenerate(
                             .plaintextWithSessionProtocol(
                                 db,
                                 ciphertext: ciphertext,
@@ -98,7 +106,7 @@ public enum MessageReceiver {
                             )
                         )
                         plaintext = plaintext.removePadding()   // Remove the padding
-                        sentTimestamp = envelope.timestamp
+                        sentTimestampMs = envelope.timestamp
                         serverHash = swarmServerHash
                         openGroupServerMessageId = nil
                         openGroupWhisper = false
@@ -113,13 +121,57 @@ public enum MessageReceiver {
                             }
                         }
                         
+                    case .groupMessages:
+                        let plaintextEnvelope: Data
+                        (plaintextEnvelope, sender) = try dependencies[singleton: .crypto].tryGenerate(
+                            .plaintextForGroupMessage(
+                                groupSessionId: SessionId(.group, hex: publicKey),
+                                ciphertext: Array(data)
+                            )
+                        )
+                        
+                        guard
+                            let envelope: SNProtoEnvelope = try? MessageWrapper.unwrap(
+                                data: plaintextEnvelope,
+                                includesWebSocketMessage: false
+                            ),
+                            let envelopeContent: Data = envelope.content
+                        else {
+                            Log.warn(.messageReceiver, "Failed to unwrap data for message from 'default' namespace.")
+                            throw MessageReceiverError.invalidMessage
+                        }
+                        plaintext = envelopeContent // Padding already removed for updated groups
+                        sentTimestampMs = envelope.timestamp
+                        serverHash = swarmServerHash
+                        openGroupServerMessageId = nil
+                        openGroupWhisper = false
+                        openGroupWhisperMods = false
+                        openGroupWhisperTo = nil
+                        threadVariant = .group
+                        threadIdGenerator = { _ in publicKey }
+                        
+                    case .revokedRetrievableGroupMessages:
+                        plaintext = Data()  // Requires custom decryption
+                        customProto = try SNProtoContent.builder().build()
+                        customMessage = LibSessionMessage(ciphertext: data)
+                        sender = publicKey  // The "group" sends these messages
+                        sentTimestampMs = 0
+                        serverHash = swarmServerHash
+                        openGroupServerMessageId = nil
+                        openGroupWhisper = false
+                        openGroupWhisperMods = false
+                        openGroupWhisperTo = nil
+                        threadVariant = .group
+                        threadIdGenerator = { _ in publicKey }
+                        
+                    // FIXME: Remove once updated groups has been around for long enough
                     case .legacyClosedGroup:
                         guard
                             let envelope: SNProtoEnvelope = try? MessageWrapper.unwrap(data: data),
                             let ciphertext: Data = envelope.content,
                             let closedGroup: ClosedGroup = try? ClosedGroup.fetchOne(db, id: publicKey)
                         else {
-                            SNLog("Failed to unwrap data for message from 'legacyClosedGroup' namespace.")
+                            Log.warn(.messageReceiver, "Failed to unwrap data for message from 'legacyClosedGroup' namespace.")
                             throw MessageReceiverError.invalidMessage
                         }
                         
@@ -139,7 +191,7 @@ public enum MessageReceiver {
                             }
                             
                             do {
-                                return try dependencies.crypto.tryGenerate(
+                                return try dependencies[singleton: .crypto].tryGenerate(
                                     .plaintextWithSessionProtocolLegacyGroup(
                                         ciphertext: ciphertext,
                                         keyPair: KeyPair(
@@ -157,13 +209,13 @@ public enum MessageReceiver {
                         
                         (plaintext, sender) = try decrypt(keyPairs: encryptionKeyPairs)
                         plaintext = plaintext.removePadding()   // Remove the padding
-                        sentTimestamp = envelope.timestamp
+                        sentTimestampMs = envelope.timestamp
                         
                         /// If we weren't given a `serverHash` then compute one locally using the same logic the swarm would
                         switch swarmServerHash.isEmpty {
                             case false: serverHash = swarmServerHash
                             case true:
-                                serverHash = dependencies.crypto.generate(
+                                serverHash = dependencies[singleton: .crypto].generate(
                                     .messageServerHash(swarmPubkey: publicKey, namespace: namespace, data: data)
                                 ).defaulting(to: "")
                         }
@@ -178,23 +230,23 @@ public enum MessageReceiver {
                     case .configUserProfile, .configContacts, .configConvoInfoVolatile, .configUserGroups:
                         throw MessageReceiverError.invalidConfigMessageHandling
                         
-                    case .configClosedGroupInfo:
+                    case .configGroupInfo, .configGroupMembers, .configGroupKeys:
                         throw MessageReceiverError.invalidConfigMessageHandling
                         
                     case .all, .unknown:
-                        SNLog("Couldn't process message due to invalid namespace.")
+                        Log.warn(.messageReceiver, "Couldn't process message due to invalid namespace.")
                         throw MessageReceiverError.unknownMessage
                 }
         }
         
         let proto: SNProtoContent = try (customProto ?? Result(catching: { try SNProtoContent.parseData(plaintext) })
-           .onFailure { SNLog("Couldn't parse proto due to error: \($0).") }
-           .successOrThrow())
-        let message: Message = try (customMessage ?? Message.createMessageFrom(proto, sender: sender))
+            .onFailure { Log.error(.messageReceiver, "Couldn't parse proto due to error: \($0).") }
+            .successOrThrow())
+        let message: Message = try (customMessage ?? Message.createMessageFrom(proto, sender: sender, using: dependencies))
         message.sender = sender
         message.serverHash = serverHash
-        message.sentTimestamp = sentTimestamp
-        message.receivedTimestamp = UInt64(SnodeAPI.currentOffsetTimestampMs())
+        message.sentTimestampMs = sentTimestampMs
+        message.receivedTimestampMs = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
         message.openGroupServerMessageId = openGroupServerMessageId
         message.openGroupWhisper = openGroupWhisper
         message.openGroupWhisperMods = openGroupWhisperMods
@@ -211,7 +263,7 @@ public enum MessageReceiver {
         }
         
         // Ignore self sends if needed
-        guard message.isSelfSendValid || sender != userSessionId else {
+        guard message.isSelfSendValid || sender != userSessionId.hexString else {
             throw MessageReceiverError.selfSend
         }
         
@@ -222,8 +274,8 @@ public enum MessageReceiver {
         
         // Validate
         guard
-            message.isValid ||
-            (message as? VisibleMessage)?.isValidWithDataMessageAttachments() == true
+            message.isValid(using: dependencies) ||
+            (message as? VisibleMessage)?.isValidWithDataMessageAttachments(using: dependencies) == true
         else {
             throw MessageReceiverError.invalidMessage
         }
@@ -282,7 +334,8 @@ public enum MessageReceiver {
             version: ((!proto.hasExpirationType && !proto.hasExpirationTimer) ?
                 .legacyDisappearingMessages :
                 .newDisappearingMessages
-            )
+            ),
+            using: dependencies
         )
         
         switch message {
@@ -298,11 +351,24 @@ public enum MessageReceiver {
                     db,
                     threadId: threadId,
                     threadVariant: threadVariant,
-                    message: message
+                    message: message,
+                    using: dependencies
                 )
                 
             case let message as ClosedGroupControlMessage:
-                try MessageReceiver.handleClosedGroupControlMessage(
+                try MessageReceiver.handleLegacyClosedGroupControlMessage(
+                    db,
+                    threadId: threadId,
+                    threadVariant: threadVariant,
+                    message: message,
+                    using: dependencies
+                )
+                
+            case is GroupUpdateInviteMessage, is GroupUpdateInfoChangeMessage,
+                is GroupUpdateMemberChangeMessage, is GroupUpdatePromoteMessage, is GroupUpdateMemberLeftMessage,
+                is GroupUpdateMemberLeftNotificationMessage, is GroupUpdateInviteResponseMessage,
+                is GroupUpdateDeleteMemberContentMessage:
+                try MessageReceiver.handleGroupUpdateMessage(
                     db,
                     threadId: threadId,
                     threadVariant: threadVariant,
@@ -327,7 +393,8 @@ public enum MessageReceiver {
                     threadVariant: threadVariant,
                     message: message,
                     serverExpirationTimestamp: serverExpirationTimestamp,
-                    proto: proto
+                    proto: proto,
+                    using: dependencies
                 )
                 
             case let message as UnsendRequest:
@@ -335,7 +402,8 @@ public enum MessageReceiver {
                     db,
                     threadId: threadId,
                     threadVariant: threadVariant,
-                    message: message
+                    message: message,
+                    using: dependencies
                 )
                 
             case let message as CallMessage:
@@ -359,74 +427,113 @@ public enum MessageReceiver {
                     db,
                     threadId: threadId,
                     threadVariant: threadVariant,
-                    message: message, 
+                    message: message,
                     serverExpirationTimestamp: serverExpirationTimestamp,
-                    associatedWithProto: proto
+                    associatedWithProto: proto,
+                    using: dependencies
+                )
+            
+            case let message as LibSessionMessage:
+                try MessageReceiver.handleLibSessionMessage(
+                    db,
+                    threadId: threadId,
+                    threadVariant: threadVariant,
+                    message: message,
+                    using: dependencies
                 )
             
             default: throw MessageReceiverError.unknownMessage
         }
         
         // Perform any required post-handling logic
-        try MessageReceiver.postHandleMessage(db, threadId: threadId, threadVariant: threadVariant, message: message)
+        try MessageReceiver.postHandleMessage(
+            db,
+            threadId: threadId,
+            threadVariant: threadVariant,
+            message: message,
+            using: dependencies
+        )
     }
     
     public static func postHandleMessage(
         _ db: Database,
         threadId: String,
         threadVariant: SessionThread.Variant,
-        message: Message
+        message: Message,
+        using dependencies: Dependencies
     ) throws {
         // When handling any message type which has related UI we want to make sure the thread becomes
         // visible (the only other spot this flag gets set is when sending messages)
-        switch message {
-            case is ReadReceipt: break
-            case is TypingIndicator: break
-            case is UnsendRequest: break
+        let shouldBecomeVisible: Bool = {
+            switch message {
+                case is ReadReceipt: return true
+                case is TypingIndicator: return true
+                case is UnsendRequest: return true
+                    
+                case let message as ClosedGroupControlMessage:
+                    // Only re-show a legacy group conversation if we are going to add a control text message
+                    switch message.kind {
+                        case .new, .encryptionKeyPair, .encryptionKeyPairRequest: return false
+                        default: return true
+                    }
+                    
+                /// These are sent to the one-to-one conversation so they shouldn't make that visible
+                case is GroupUpdateInviteMessage, is GroupUpdatePromoteMessage:
+                    return false
+                    
+                /// These are sent to the group conversation but we have logic so you can only ever "leave" a group, you can't "hide" it
+                /// so that it re-appears when a new message is received so the thread shouldn't become visible for any of them
+                case is GroupUpdateInfoChangeMessage, is GroupUpdateMemberChangeMessage,
+                    is GroupUpdateMemberLeftMessage, is GroupUpdateMemberLeftNotificationMessage,
+                    is GroupUpdateInviteResponseMessage, is GroupUpdateDeleteMemberContentMessage:
+                    return false
                 
-            case let message as ClosedGroupControlMessage:
-                // Only re-show a legacy group conversation if we are going to add a control text message
-                switch message.kind {
-                    case .new, .encryptionKeyPair, .encryptionKeyPairRequest: return
-                    default: break
-                }
-                
-                fallthrough
-                
-            default:
-                // Only update the `shouldBeVisible` flag if the thread is currently not visible
-                // as we don't want to trigger a config update if not needed
-                let isCurrentlyVisible: Bool = try SessionThread
-                    .filter(id: threadId)
-                    .select(.shouldBeVisible)
-                    .asRequest(of: Bool.self)
-                    .fetchOne(db)
-                    .defaulting(to: false)
-                
-                // Start the disappearing messages timer if needed
-                // For disappear after send, this is necessary so the message will disappear even if it is not read
-                if threadVariant != .community {
-                    db.afterNextTransactionNestedOnce(
-                        dedupeId: "PostInsertDisappearingMessagesJob",  // stringlint:ignore
-                        onCommit: { db in
-                            JobRunner.upsert(
-                                db,
-                                job: DisappearingMessagesJob.updateNextRunIfNeeded(db)
-                            )
-                        }
-                    )
-                }
-
-                guard !isCurrentlyVisible else { return }
-                
-                try SessionThread
-                    .filter(id: threadId)
-                    .updateAllAndConfig(
+                /// Currently this is just for handling the `groupKicked` message which is sent to a group so the same rules as above apply
+                case is LibSessionMessage: return false
+                    
+                default: return true
+            }
+        }()
+        
+        // Start the disappearing messages timer if needed
+        // For disappear after send, this is necessary so the message will disappear even if it is not read
+        if threadVariant != .community {
+            db.afterNextTransactionNestedOnce(
+                dedupeId: "PostInsertDisappearingMessagesJob",  // stringlint:ignore
+                using: dependencies,
+                onCommit: { db in
+                    dependencies[singleton: .jobRunner].upsert(
                         db,
-                        SessionThread.Columns.shouldBeVisible.set(to: true),
-                        SessionThread.Columns.pinnedPriority.set(to: LibSession.visiblePriority)
+                        job: DisappearingMessagesJob.updateNextRunIfNeeded(db, using: dependencies),
+                        canStartJob: true
                     )
+                }
+            )
         }
+        
+        // Only check the current visibility state if we should become visible for this message type
+        guard shouldBecomeVisible else { return }
+        
+        // Only update the `shouldBeVisible` flag if the thread is currently not visible
+        // as we don't want to trigger a config update if not needed
+        let isCurrentlyVisible: Bool = try SessionThread
+            .filter(id: threadId)
+            .select(.shouldBeVisible)
+            .asRequest(of: Bool.self)
+            .fetchOne(db)
+            .defaulting(to: false)
+
+        guard !isCurrentlyVisible else { return }
+        
+        try SessionThread
+            .filter(id: threadId)
+            .updateAllAndConfig(
+                db,
+                SessionThread.Columns.shouldBeVisible.set(to: true),
+                SessionThread.Columns.pinnedPriority.set(to: LibSession.visiblePriority),
+                calledFromConfig: nil,
+                using: dependencies
+            )
     }
     
     public static func handleOpenGroupReactions(
@@ -461,14 +568,61 @@ public enum MessageReceiver {
         threadVariant: SessionThread.Variant,
         using dependencies: Dependencies
     ) throws {
+        let userSessionId: SessionId = dependencies[cache: .general].sessionId
+        
         switch message {
             case is ReadReceipt: return // No visible artifact created so better to keep for more reliable read states
             case is UnsendRequest: return // We should always process the removal of messages just in case
             default: break
         }
         
-        // Determine the state of the conversation and the validity of the message
-        let currentUserPublicKey: String = getUserHexEncodedPublicKey(db, using: dependencies)
+        // If the destination is a group conversation that has been destroyed then the message is outdated
+        guard
+            threadVariant != .group ||
+            !LibSession.groupIsDestroyed(
+                groupSessionId: SessionId(.group, hex: threadId),
+                using: dependencies
+            )
+        else { throw MessageReceiverError.outdatedMessage }
+        
+        // Determine if it's a group conversation that received a deletion instruction after this
+        // message was sent (if so then it's outdated)
+        let deletionInstructionSentAfterThisMessage: Bool = {
+            guard threadVariant == .group else { return false }
+            
+            // These group update messages update the group state so should be processed even
+            // if they were old
+            switch message {
+                case is GroupUpdateInviteResponseMessage: return false
+                case is GroupUpdateDeleteMemberContentMessage: return false
+                case is GroupUpdateMemberLeftMessage: return false
+                default: break
+            }
+            
+            // Note: 'sentTimestamp' is in milliseconds so convert it
+            let messageSentTimestamp: TimeInterval = TimeInterval((message.sentTimestampMs ?? 0) / 1000)
+            let deletionInfo: (deleteBefore: TimeInterval, deleteAttachmentsBefore: TimeInterval) = dependencies.mutate(cache: .libSession) { cache in
+                let config: LibSession.Config? = cache.config(for: .groupInfo, sessionId: SessionId(.group, hex: threadId))
+                
+                return (
+                    ((try? LibSession.groupDeleteBefore(in: config)) ?? 0),
+                    ((try? LibSession.groupAttachmentDeleteBefore(in: config)) ?? 0)
+                )
+            }
+            
+            return (
+                deletionInfo.deleteBefore > messageSentTimestamp || (
+                    (message as? VisibleMessage)?.dataMessageHasAttachments == true &&
+                    deletionInfo.deleteAttachmentsBefore > messageSentTimestamp
+                )
+            )
+        }()
+        
+        guard !deletionInstructionSentAfterThisMessage else { throw MessageReceiverError.outdatedMessage }
+        
+        // If the conversation is not visible in the config and the message was sent before the last config
+        // update (minus a buffer period) then we can assume that the user has hidden/deleted the conversation
+        // and it shouldn't be reshown by this (old) message
         let conversationVisibleInConfig: Bool = LibSession.conversationInConfig(
             db,
             threadId: threadId,
@@ -481,17 +635,19 @@ public enum MessageReceiver {
             threadId: threadId,
             targetConfig: {
                 switch threadVariant {
-                    case .contact: return (threadId == currentUserPublicKey ? .userProfile : .contacts)
+                    case .contact: return (threadId == userSessionId.hexString ? .userProfile : .contacts)
                     default: return .userGroups
                 }
             }(),
-            changeTimestampMs: (message.sentTimestamp.map { Int64($0) } ?? SnodeAPI.currentOffsetTimestampMs())
+            changeTimestampMs: message.sentTimestampMs
+                .map { Int64($0) }
+                .defaulting(to: dependencies[cache: .snodeAPI].currentOffsetTimestampMs()),
+            using: dependencies
         )
         
-        // If the thread is visible or the message was sent more recently than the last config message (minus
-        // buffer period) then we should process the message, if not then throw as the message is outdated
-        guard !conversationVisibleInConfig && !canPerformChange else { return }
-        
-        throw MessageReceiverError.outdatedMessage
+        switch (conversationVisibleInConfig, canPerformChange) {
+            case (false, false): throw MessageReceiverError.outdatedMessage
+            default: break  // Message not outdated
+        }
     }
 }

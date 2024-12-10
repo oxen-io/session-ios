@@ -18,6 +18,7 @@ public class MediaView: UIView {
 
     // MARK: -
 
+    private let dependencies: Dependencies
     private let mediaCache: NSCache<NSString, AnyObject>?
     public let attachment: Attachment
     private let isOutgoing: Bool
@@ -52,8 +53,10 @@ public class MediaView: UIView {
         attachment: Attachment,
         isOutgoing: Bool,
         shouldSupressControls: Bool,
-        cornerRadius: CGFloat
+        cornerRadius: CGFloat,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.mediaCache = mediaCache
         self.attachment = attachment
         self.isOutgoing = isOutgoing
@@ -161,7 +164,7 @@ public class MediaView: UIView {
         animatedImageView.pin(to: self)
         _ = addUploadProgressIfNecessary(animatedImageView)
 
-        loadBlock = { [weak self] in
+        loadBlock = { [weak self, dependencies] in
             Log.assertOnMainThread()
             
             if animatedImageView.image != nil {
@@ -174,7 +177,7 @@ public class MediaView: UIView {
                         self?.configure(forError: .invalid)
                         return
                     }
-                    guard let filePath: String = attachment.originalFilePath else {
+                    guard let filePath: String = attachment.originalFilePath(using: dependencies) else {
                         Log.error("[MediaView] Attachment stream missing original file path.")
                         self?.configure(forError: .invalid)
                         return
@@ -218,7 +221,7 @@ public class MediaView: UIView {
         stillImageView.pin(to: self)
         _ = addUploadProgressIfNecessary(stillImageView)
         
-        loadBlock = { [weak self] in
+        loadBlock = { [weak self, dependencies] in
             Log.assertOnMainThread()
 
             if stillImageView.image != nil {
@@ -234,6 +237,7 @@ public class MediaView: UIView {
                     
                     attachment.thumbnail(
                         size: .large,
+                        using: dependencies,
                         success: { image, _ in applyMediaBlock(image) },
                         failure: {
                             Log.error("[MediaView] Could not load thumbnail")
@@ -308,7 +312,7 @@ public class MediaView: UIView {
             videoPlayButton.center(in: stillImageView)
         }
 
-        loadBlock = { [weak self] in
+        loadBlock = { [weak self, dependencies] in
             Log.assertOnMainThread()
 
             if stillImageView.image != nil {
@@ -324,6 +328,7 @@ public class MediaView: UIView {
                     
                     attachment.thumbnail(
                         size: .medium,
+                        using: dependencies,
                         success: { image, _ in applyMediaBlock(image) },
                         failure: {
                             Log.error("[MediaView] Could not load thumbnail")
@@ -503,6 +508,7 @@ import SwiftUI
 struct MediaView_SwiftUI: UIViewRepresentable {
     public typealias UIViewType = MediaView
     
+    private let dependencies: Dependencies
     private let mediaCache: NSCache<NSString, AnyObject>?
     public let attachment: Attachment
     private let isOutgoing: Bool
@@ -514,8 +520,10 @@ struct MediaView_SwiftUI: UIViewRepresentable {
         attachment: Attachment,
         isOutgoing: Bool,
         shouldSupressControls: Bool,
-        cornerRadius: CGFloat
+        cornerRadius: CGFloat,
+        using dependencies: Dependencies
     ) {
+        self.dependencies = dependencies
         self.mediaCache = mediaCache
         self.attachment = attachment
         self.isOutgoing = isOutgoing
@@ -527,9 +535,10 @@ struct MediaView_SwiftUI: UIViewRepresentable {
         let mediaView = MediaView(
             mediaCache: mediaCache,
             attachment: attachment,
-            isOutgoing: isOutgoing,
+            isOutgoing: isOutgoing, 
             shouldSupressControls: shouldSupressControls,
-            cornerRadius: cornerRadius
+            cornerRadius: cornerRadius,
+            using: dependencies
         )
         
         return mediaView

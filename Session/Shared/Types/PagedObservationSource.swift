@@ -17,7 +17,7 @@ protocol PagedObservationSource {
 
 extension PagedObservationSource {
     public func didInit(using dependencies: Dependencies) {
-        dependencies.storage.addObserver(pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(pagedDataObserver)
     }
 }
 

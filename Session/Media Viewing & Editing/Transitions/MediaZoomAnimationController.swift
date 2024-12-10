@@ -2,13 +2,14 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 class MediaZoomAnimationController: NSObject {
     private let mediaItem: Media
     private let shouldBounce: Bool
 
-    init(galleryItem: MediaGalleryViewModel.Item, shouldBounce: Bool = true) {
-        self.mediaItem = .gallery(galleryItem)
+    init(galleryItem: MediaGalleryViewModel.Item, shouldBounce: Bool = true, using dependencies: Dependencies) {
+        self.mediaItem = .gallery(galleryItem, dependencies)
         self.shouldBounce = shouldBounce
     }
 }

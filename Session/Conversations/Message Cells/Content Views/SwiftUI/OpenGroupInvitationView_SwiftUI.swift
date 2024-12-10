@@ -39,25 +39,23 @@ struct OpenGroupInvitationView_SwiftUI: View {
             spacing: Values.mediumSpacing
         ) {
             // Icon
-            let iconName = (isOutgoing ? "Globe" : "Plus") // stringlint:ignore
-            if let iconImage = UIImage(named: iconName)?
-                .resized(to: CGSize(width: Self.iconSize, height: Self.iconSize))?
+            if let iconImage = UIImage(named: isOutgoing ? "Globe" : "Plus")?
                 .withRenderingMode(.alwaysTemplate)
             {
-                Image(uiImage: iconImage)
-                    .foregroundColor(themeColor: (isOutgoing ? .messageBubble_outgoingText : .textPrimary))
-                    .background(
-                        Circle()
-                            .fill(themeColor: (isOutgoing ? .messageBubble_overlay : .primary))
-                            .frame(
-                                width: Self.iconImageViewSize,
-                                height: Self.iconImageViewSize
-                            )
-                    )
+                Circle()
+                    .fill(themeColor: (isOutgoing ? .messageBubble_overlay : .primary))
                     .frame(
                         width: Self.iconImageViewSize,
                         height: Self.iconImageViewSize
                     )
+                    .overlay {
+                        Image(uiImage: iconImage)
+                            .foregroundColor(themeColor: (isOutgoing ? .messageBubble_outgoingText : .textPrimary))
+                            .frame(
+                                width: Self.iconSize,
+                                height: Self.iconSize
+                            )
+                    }
             }
             
             // Text

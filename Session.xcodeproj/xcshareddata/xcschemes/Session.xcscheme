@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1520"
+   LastUpgradeVersion = "1600"
    version = "1.8">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -42,7 +42,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "FD7C37AD2BBB8B1D009DEEA7"
+               BlueprintIdentifier = "FDB5DAF92A981C42002C8721"
                BuildableName = "SessionSnodeKitTests.xctest"
                BlueprintName = "SessionSnodeKitTests"
                ReferencedContainer = "container:Session.xcodeproj">
@@ -131,6 +131,12 @@
             ReferencedContainer = "container:Session.xcodeproj">
          </BuildableReference>
       </CodeCoverageTargets>
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:SessionTests/Session.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+      </TestPlans>
       <Testables>
          <TestableReference
             skipped = "NO"
@@ -162,6 +168,18 @@
             testExecutionOrdering = "random">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "FDB5DAF92A981C42002C8721"
+               BuildableName = "SessionSnodeKitTests.xctest"
+               BlueprintName = "SessionSnodeKitTests"
+               ReferencedContainer = "container:Session.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES"
+            testExecutionOrdering = "random">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "FD83B9AE27CF200A005E1583"
                BuildableName = "SessionUtilitiesKitTests.xctest"
                BlueprintName = "SessionUtilitiesKitTests"
@@ -174,7 +192,7 @@
             testExecutionOrdering = "random">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "FD7C37AD2BBB8B1D009DEEA7"
+               BlueprintIdentifier = "FDB5DAF92A981C42002C8721"
                BuildableName = "SessionSnodeKitTests.xctest"
                BlueprintName = "SessionSnodeKitTests"
                ReferencedContainer = "container:Session.xcodeproj">
@@ -216,6 +234,11 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "DYLD_PRINT_STATISTICS"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_WARNINGS"
             value = "1"
             isEnabled = "YES">
          </EnvironmentVariable>

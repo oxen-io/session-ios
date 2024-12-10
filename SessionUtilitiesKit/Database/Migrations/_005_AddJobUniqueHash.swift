@@ -18,6 +18,6 @@ enum _005_AddJobUniqueHash: Migration {
             t.add(.uniqueHashValue, .integer)
         }
         
-        Storage.update(progress: 1, for: self, in: target)
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

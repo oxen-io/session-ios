@@ -75,6 +75,6 @@ enum _001_InitialSetupMigration: Migration {
             t.column(.value, .blob).notNull()
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

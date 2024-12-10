@@ -7,6 +7,11 @@ import SessionUtilitiesKit
 
 struct StartConversationScreen: View {
     @EnvironmentObject var host: HostWrapper
+    private let dependencies: Dependencies
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
     
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -23,10 +28,12 @@ struct StartConversationScreen: View {
                             .putNumber(1)
                             .localized()
                         NewConversationCell(
-                            image: "Message",
+                            image: "Message", // stringlint:ignore
                             title: title
                         ) {
-                            let viewController: SessionHostingViewController = SessionHostingViewController(rootView: NewMessageScreen())
+                            let viewController: SessionHostingViewController = SessionHostingViewController(
+                                rootView: NewMessageScreen(using: dependencies)
+                            )
                             viewController.setNavBarTitle(title)
                             viewController.setUpDismissingButton(on: .right)
                             self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
@@ -46,7 +53,7 @@ struct StartConversationScreen: View {
                             image: "Group",
                             title: "groupCreate".localized()
                         ) {
-                            let viewController = NewClosedGroupVC()
+                            let viewController = NewClosedGroupVC(using: dependencies)
                             self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
                         }
                         .accessibility(
@@ -64,7 +71,7 @@ struct StartConversationScreen: View {
                             image: "Globe", // stringlint:ignore
                             title: "communityJoin".localized()
                         ) {
-                            let viewController = JoinOpenGroupVC()
+                            let viewController = JoinOpenGroupVC(using: dependencies)
                             self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
                         }
                         .accessibility(
@@ -82,7 +89,9 @@ struct StartConversationScreen: View {
                             image: "icon_invite", // stringlint:ignore
                             title: "sessionInviteAFriend".localized()
                         ) {
-                            let viewController: SessionHostingViewController = SessionHostingViewController(rootView: InviteAFriendScreen())
+                            let viewController: SessionHostingViewController = SessionHostingViewController(
+                                rootView: InviteAFriendScreen(accountId: dependencies[cache: .general].sessionId.hexString)
+                            )
                             viewController.setNavBarTitle("sessionInviteAFriend".localized())
                             viewController.setUpDismissingButton(on: .right)
                             self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
@@ -105,7 +114,7 @@ struct StartConversationScreen: View {
                         .foregroundColor(themeColor: .textSecondary)
                     
                     QRCodeView(
-                        string: getUserHexEncodedPublicKey(),
+                        string: dependencies[cache: .general].sessionId.hexString,
                         hasBackground: false,
                         logo: "SessionWhite40", // stringlint:ignore
                         themeStyle: ThemeManager.currentTheme.interfaceStyle
@@ -155,5 +164,5 @@ fileprivate struct NewConversationCell: View {
 }
 
 #Preview {
-    StartConversationScreen()
+    StartConversationScreen(using: Dependencies.createEmpty())
 }

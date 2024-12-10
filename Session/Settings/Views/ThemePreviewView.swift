@@ -3,8 +3,11 @@
 import UIKit
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 public class ThemePreviewView: UIView {
+    private let dependencies: Dependencies
+    
     // MARK: - Components
     
     private lazy var incomingMessagePreview: UIView = {
@@ -26,7 +29,8 @@ public class ThemePreviewView: UIView {
             mediaCache: NSCache(),
             playbackInfo: nil,
             showExpandedReactions: false,
-            lastSearchText: nil
+            lastSearchText: nil,
+            using: dependencies
         )
         
         return result
@@ -45,7 +49,8 @@ public class ThemePreviewView: UIView {
             mediaCache: NSCache(),
             playbackInfo: nil,
             showExpandedReactions: false,
-            lastSearchText: nil
+            lastSearchText: nil,
+            using: dependencies
         )
         
         return result
@@ -53,7 +58,9 @@ public class ThemePreviewView: UIView {
     
     // MARK: - Initializtion
     
-    init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
         super.init(frame: .zero)
         
         setupUI()

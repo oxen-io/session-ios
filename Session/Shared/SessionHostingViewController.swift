@@ -111,123 +111,70 @@ public class SessionHostingViewController<Content>: UIHostingController<Modified
         navigationItem.titleView = headingImageView
     }
 
-    internal func setUpNavBarSessionIcon() {
+    internal func setUpNavBarSessionIcon(using dependencies: Dependencies) {
         let logoImageView = UIImageView()
         logoImageView.image = #imageLiteral(resourceName: "SessionGreen32")
         logoImageView.contentMode = .scaleAspectFit
         logoImageView.set(.width, to: 32)
         logoImageView.set(.height, to: 32)
         
-        navigationItem.titleView = logoImageView
-    }
-    
-    internal func setUpClearDataBackButton(flow: Onboarding.Flow) {
-        if #available(iOS 16.0, *) {
-            navigationItem.backAction = UIAction() { [weak self] action in
-                switch flow {
-                    case .register:
-                        self?.clearDataForAccountCreation()
-                    case .recover:
-                        self?.clearDataForLoadAccount()
+        switch (dependencies[feature: .serviceNetwork], dependencies[feature: .forceOffline]) {
+            case (.mainnet, false): navigationItem.titleView = logoImageView
+            case (.testnet, _), (.mainnet, true):
+                let containerView: UIView = UIView()
+                containerView.clipsToBounds = false
+                containerView.addSubview(logoImageView)
+                logoImageView.pin(to: containerView)
+                
+                let labelStackView: UIStackView = UIStackView()
+                labelStackView.axis = .vertical
+                containerView.addSubview(labelStackView)
+                labelStackView.center(in: containerView)
+                labelStackView.transform = CGAffineTransform.identity.rotated(by: -(CGFloat.pi / 6))
+                
+                let testnetLabel: UILabel = UILabel()
+                testnetLabel.font = Fonts.boldSpaceMono(ofSize: 14)
+                testnetLabel.textAlignment = .center
+                
+                if dependencies[feature: .serviceNetwork] != .mainnet {
+                    labelStackView.addArrangedSubview(testnetLabel)
                 }
-            }
-        } else {
-            let action: Selector = {
-                switch flow {
-                    case .register:
-                        return #selector(clearDataForAccountCreation)
-                    case .recover:
-                        return #selector(clearDataForLoadAccount)
+                
+                let offlineLabel: UILabel = UILabel()
+                offlineLabel.font = Fonts.boldSpaceMono(ofSize: 14)
+                offlineLabel.textAlignment = .center
+                labelStackView.addArrangedSubview(offlineLabel)
+                
+                ThemeManager.onThemeChange(observer: testnetLabel) { [weak testnetLabel, weak offlineLabel] theme, primaryColor in
+                    guard
+                        let textColor: UIColor = theme.color(for: .textPrimary),
+                        let strokeColor: UIColor = theme.color(for: .backgroundPrimary)
+                    else { return }
+                    
+                    if dependencies[feature: .serviceNetwork] != .mainnet {
+                        testnetLabel?.attributedText = NSAttributedString(
+                            string: dependencies[feature: .serviceNetwork].title,
+                            attributes: [
+                                .foregroundColor: textColor,
+                                .strokeColor: strokeColor,
+                                .strokeWidth: -3
+                            ]
+                        )
                     }
-            }()
-            let clearDataBackButton = UIBarButtonItem(
-                image: UIImage(
-                    systemName: "chevron.backward",
-                    withConfiguration: UIImage.SymbolConfiguration(textStyle: .headline, scale: .large)
-                ),
-                style: .plain,
-                target: self,
-                action: action
-            )
-            clearDataBackButton.imageInsets = .init(top: 0, leading: -8, bottom: 0, trailing: 8)
-            clearDataBackButton.themeTintColor = .textPrimary
-            navigationItem.leftBarButtonItem = clearDataBackButton
-        }
-    }
-    
-    @objc private func clearDataForAccountCreation() {
-        let modal: ConfirmationModal = ConfirmationModal(
-            targetView: self.view,
-            info: ConfirmationModal.Info(
-                title: "warning".localized(),
-                body: .text(
-                    "onboardingBackAccountCreation"
-                        .put(key: "app_name", value: Constants.app_name)
-                        .localized()
-                ),
-                confirmTitle: "quitButton".localized(),
-                confirmStyle: .danger,
-                cancelStyle: .textPrimary,
-                onConfirm: { [weak self] confirmationModal in
-                    self?.deleteAllLocalData()
+                    
+                    offlineLabel?.attributedText = NSAttributedString(
+                        string: "Offline",  // stringlint:ignore
+                        attributes: [
+                            .foregroundColor: textColor,
+                            .strokeColor: strokeColor,
+                            .strokeWidth: -3
+                        ]
+                    )
                 }
-            )
-        )
-        self.present(modal, animated: true)
-    }
-    
-    @objc private func clearDataForLoadAccount() {
-        let modal: ConfirmationModal = ConfirmationModal(
-            targetView: self.view,
-            info: ConfirmationModal.Info(
-                title: "warning".localized(),
-                body: .text(
-                    "onboardingBackLoadAccount"
-                        .put(key: "app_name", value: Constants.app_name)
-                        .localized()
-                ),
-                confirmTitle: "quitButton".localized(),
-                confirmStyle: .danger,
-                cancelStyle: .textPrimary,
-                onConfirm: { [weak self] confirmationModal in
-                    self?.deleteAllLocalData()
-                }
-            )
-        )
-        self.present(modal, animated: true)
-    }
-    
-    private func deleteAllLocalData(using dependencies: Dependencies = Dependencies()) {
-        /// Stop and cancel all current jobs (don't want to inadvertantly have a job store data after it's table has already been cleared)
-        ///
-        /// **Note:** This is file as long as this process kills the app, if it doesn't then we need an alternate mechanism to flag that
-        /// the `JobRunner` is allowed to start it's queues again
-        JobRunner.stopAndClearPendingJobs(using: dependencies)
-        
-        // Clear the app badge and notifications
-        AppEnvironment.shared.notificationPresenter.clearAllNotifications()
-        UIApplication.shared.applicationIconBadgeNumber = 0
-        
-        // Clear out the user defaults
-        UserDefaults.removeAll()
-        
-        // Remove the cached key so it gets re-cached on next access
-        dependencies.caches.mutate(cache: .general) {
-            $0.encodedPublicKey = nil
-            $0.recentReactionTimestamps = []
+                
+                navigationItem.titleView = containerView
         }
         
-        // Stop any pollers
-        (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()
-        
-        // Call through to the SessionApp's "resetAppData" which will wipe out logs, database and
-        // profile storage
-        let wasUnlinked: Bool = UserDefaults.standard[.wasUnlinked]
-        
-        SessionApp.resetAppData(using: dependencies) {
-            // Resetting the data clears the old user defaults. We need to restore the unlink default.
-            UserDefaults.standard[.wasUnlinked] = wasUnlinked
-        }
     }
     
     internal func setUpDismissingButton(on postion: NavigationItemPosition) {
