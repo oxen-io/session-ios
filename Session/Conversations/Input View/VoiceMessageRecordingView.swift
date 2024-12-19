@@ -62,7 +62,7 @@ final class VoiceMessageRecordingView: UIView {
 
     private lazy var chevronImageView: UIImageView = {
         let result: UIImageView = UIImageView(
-            image: (Singleton.hasAppContext && Singleton.appContext.isRTL ?
+            image: (Dependencies.isRTL ?
                     UIImage(named: "small_chevron_left")?.withHorizontallyFlippedOrientation() :
                     UIImage(named: "small_chevron_left")
                 )?
@@ -277,9 +277,9 @@ final class VoiceMessageRecordingView: UIView {
     // MARK: - Interaction
     
     func handleLongPressMoved(to location: CGPoint) {
-        if (Singleton.hasAppContext && (!Singleton.appContext.isRTL && location.x < bounds.center.x) || (Singleton.appContext.isRTL && location.x > bounds.center.x)) {
+        if ((!Dependencies.isRTL && location.x < bounds.center.x) || (Dependencies.isRTL && location.x > bounds.center.x)) {
             let translationX = location.x - bounds.center.x
-            let sign: CGFloat = (Singleton.appContext.isRTL ? 1 : -1)
+            let sign: CGFloat = (Dependencies.isRTL ? 1 : -1)
             let chevronDamping: CGFloat = 4
             let labelDamping: CGFloat = 3
             let chevronX = (chevronDamping * (sqrt(abs(translationX)) / sqrt(chevronDamping))) * sign
@@ -311,9 +311,9 @@ final class VoiceMessageRecordingView: UIView {
         }
     }
 
-    func handleLongPressEnded(at location: CGPoint, using dependencies: Dependencies = Dependencies()) {
+    func handleLongPressEnded(at location: CGPoint) {
         if pulseView.frame.contains(location) {
-            delegate?.endVoiceMessageRecording(using: dependencies)
+            delegate?.endVoiceMessageRecording()
         }
         else if isValidLockViewLocation(location) {
             let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(onCircleViewTap))
@@ -333,10 +333,8 @@ final class VoiceMessageRecordingView: UIView {
         }
     }
 
-    @objc private func onCircleViewTap() { handleCircleViewTap() }
-    
-    private func handleCircleViewTap(using dependencies: Dependencies = Dependencies()) {
-        delegate?.endVoiceMessageRecording(using: dependencies)
+    @objc private func onCircleViewTap() {
+        delegate?.endVoiceMessageRecording()
     }
 
     @objc private func handleCancelButtonTapped() {
@@ -477,7 +475,7 @@ extension VoiceMessageRecordingView {
 // MARK: - Delegate
 
 protocol VoiceMessageRecordingViewDelegate: AnyObject {
-    func startVoiceMessageRecording(using dependencies: Dependencies)
-    func endVoiceMessageRecording(using dependencies: Dependencies)
+    func startVoiceMessageRecording()
+    func endVoiceMessageRecording()
     func cancelVoiceMessageRecording()
 }

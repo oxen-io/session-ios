@@ -10,9 +10,13 @@ import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 final class NukeDataModal: Modal {
+    private let dependencies: Dependencies
+    
     // MARK: - Initialization
     
-    override init(targetView: UIView? = nil, dismissType: DismissType = .recursive, afterClosed: (() -> ())? = nil) {
+    init(targetView: UIView? = nil, dismissType: DismissType = .recursive, using dependencies: Dependencies, afterClosed: (() -> ())? = nil) {
+        self.dependencies = dependencies
+        
         super.init(targetView: targetView, dismissType: dismissType, afterClosed: afterClosed)
         
         self.modalPresentationStyle = .overFullScreen
@@ -151,8 +155,8 @@ final class NukeDataModal: Modal {
     }
     
     private func clearDeviceOnly() {
-        ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: false) { [weak self] _ in
-            ConfigurationSyncJob.run()
+        ModalActivityIndicatorViewController.present(fromViewController: self, canCancel: false) { [weak self, dependencies] _ in
+            ConfigurationSyncJob.run(swarmPublicKey: dependencies[cache: .general].sessionId.hexString, using: dependencies)
                 .subscribe(on: DispatchQueue.global(qos: .userInitiated))
                 .receive(on: DispatchQueue.main)
                 .sinkUntilComplete(
@@ -165,52 +169,60 @@ final class NukeDataModal: Modal {
     }
     
     private func clearEntireAccount(presentedViewController: UIViewController) {
-        let dependencies: Dependencies = Dependencies()
+        typealias PreparedClearRequests = (
+            deleteAll: Network.PreparedRequest<[String: Bool]>,
+            inboxRequestInfo: [Network.PreparedRequest<String>]
+        )
         
         ModalActivityIndicatorViewController
-            .present(fromViewController: presentedViewController, canCancel: false) { [weak self] _ in
-                Publishers
-                    .MergeMany(
-                        Storage.shared
-                            .read { db -> [(String, Network.PreparedRequest<OpenGroupAPI.DeleteInboxResponse>)] in
-                                return try OpenGroup
-                                    .filter(OpenGroup.Columns.isActive == true)
-                                    .select(.server)
-                                    .distinct()
-                                    .asRequest(of: String.self)
-                                    .fetchSet(db)
-                                    .map { server in
-                                        (
-                                            server,
-                                            try OpenGroupAPI.preparedClearInbox(
-                                                db,
-                                                on: server,
-                                                requestAndPathBuildTimeout: Network.defaultTimeout,
-                                                using: dependencies
-                                            )
-                                        )
-                                    }
-                            }
-                            .defaulting(to: [])
-                            .compactMap { server, preparedRequest in
-                                preparedRequest
-                                    .send(using: dependencies)
-                                    .map { _ in [server: true] }
-                                    .eraseToAnyPublisher()
-                            }
-                    )
-                    .collect()
-                    .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-                    .flatMap { results in
-                        SnodeAPI
-                            .deleteAllMessages(
+            .present(fromViewController: presentedViewController, canCancel: false) { [weak self, dependencies] _ in
+                dependencies[singleton: .storage]
+                    .readPublisher { db -> PreparedClearRequests in
+                        (
+                            try SnodeAPI.preparedDeleteAllMessages(
                                 namespace: .all,
-                                requestAndPathBuildTimeout: Network.defaultTimeout
-                            )
-                            .map { results.reduce($0) { result, next in result.updated(with: next) } }
+                                requestAndPathBuildTimeout: Network.defaultTimeout,
+                                authMethod: try Authentication.with(
+                                    db,
+                                    swarmPublicKey: dependencies[cache: .general].sessionId.hexString,
+                                    using: dependencies
+                                ),
+                                using: dependencies
+                            ),
+                            try OpenGroup
+                                .filter(OpenGroup.Columns.isActive == true)
+                                .select(.server)
+                                .distinct()
+                                .asRequest(of: String.self)
+                                .fetchSet(db)
+                                .map { server in
+                                    try OpenGroupAPI
+                                        .preparedClearInbox(
+                                            db,
+                                            on: server,
+                                            requestAndPathBuildTimeout: Network.defaultTimeout,
+                                            using: dependencies
+                                        )
+                                        .map { _, _ in server }
+                                }
+                        )
+                    }
+                    .subscribe(on: DispatchQueue.global(qos: .userInitiated), using: dependencies)
+                    .flatMap { preparedRequests -> AnyPublisher<(Network.PreparedRequest<[String: Bool]>, [String]), Error> in
+                        Publishers
+                            .MergeMany(preparedRequests.inboxRequestInfo.map { $0.send(using: dependencies) })
+                            .collect()
+                            .map { response in (preparedRequests.deleteAll, response.map { $0.1 }) }
                             .eraseToAnyPublisher()
                     }
-                    .receive(on: DispatchQueue.main)
+                    .flatMap { preparedDeleteAllRequest, clearedServers in
+                        preparedDeleteAllRequest
+                            .send(using: dependencies)
+                            .map { _, data in
+                                clearedServers.reduce(into: data) { result, next in result[next] = true }
+                            }
+                    }
+                    .receive(on: DispatchQueue.main, using: dependencies)
                     .sinkUntilComplete(
                         receiveCompletion: { result in
                             switch result {
@@ -218,34 +230,19 @@ final class NukeDataModal: Modal {
                                 case .failure(let error):
                                     self?.dismiss(animated: true, completion: nil) // Dismiss the loader
                                 
-                                    switch error {
-                                        case NetworkError.timeout, NetworkError.gatewayTimeout:
-                                            let modal: ConfirmationModal = ConfirmationModal(
-                                                targetView: self?.view,
-                                                info: ConfirmationModal.Info(
-                                                    title: "clearDataAll".localized(),
-                                                    body: .text("clearDataErrorDescriptionGeneric".localized()),
-                                                    confirmTitle: "clearDevice".localized(),
-                                                    confirmStyle: .danger,
-                                                    cancelStyle: .alert_text
-                                                ) { [weak self] _ in
-                                                    self?.clearDeviceOnly()
-                                                }
-                                            )
-                                            self?.present(modal, animated: true)
-                                                                                
-                                        default:
-                                            let modal: ConfirmationModal = ConfirmationModal(
-                                                targetView: self?.view,
-                                                info: ConfirmationModal.Info(
-                                                    title: "clearDataError".localized(),
-                                                    body: .text("\(error)"),
-                                                    cancelTitle: "okay".localized(),
-                                                    cancelStyle: .alert_text
-                                                )
-                                            )
-                                            self?.present(modal, animated: true)
-                                    }
+                                    let modal: ConfirmationModal = ConfirmationModal(
+                                        targetView: self?.view,
+                                        info: ConfirmationModal.Info(
+                                            title: "clearDataAll".localized(),
+                                            body: .text("clearDataErrorDescriptionGeneric".localized()),
+                                            confirmTitle: "clearDevice".localized(),
+                                            confirmStyle: .danger,
+                                            cancelStyle: .alert_text
+                                        ) { [weak self] _ in
+                                            self?.clearDeviceOnly()
+                                        }
+                                    )
+                                    self?.present(modal, animated: true)
                             }
                         },
                         receiveValue: { confirmations in
@@ -280,14 +277,14 @@ final class NukeDataModal: Modal {
             }
     }
     
-    private func deleteAllLocalData(using dependencies: Dependencies = Dependencies()) {
+    private func deleteAllLocalData() {
         // Unregister push notifications if needed
-        let isUsingFullAPNs: Bool = UserDefaults.standard[.isUsingFullAPNs]
-        let maybeDeviceToken: String? = UserDefaults.standard[.deviceToken]
+        let isUsingFullAPNs: Bool = dependencies[defaults: .standard, key: .isUsingFullAPNs]
+        let maybeDeviceToken: String? = dependencies[defaults: .standard, key: .deviceToken]
         
         if isUsingFullAPNs, let deviceToken: String = maybeDeviceToken {
             PushNotificationAPI
-                .unsubscribe(token: Data(hex: deviceToken))
+                .unsubscribeAll(token: Data(hex: deviceToken), using: dependencies)
                 .sinkUntilComplete()
         }
         
@@ -295,31 +292,33 @@ final class NukeDataModal: Modal {
         ///
         /// **Note:** This is file as long as this process kills the app, if it doesn't then we need an alternate mechanism to flag that
         /// the `JobRunner` is allowed to start it's queues again
-        JobRunner.stopAndClearPendingJobs(using: dependencies)
+        dependencies[singleton: .jobRunner].stopAndClearPendingJobs()
         
         // Clear the app badge and notifications
-        AppEnvironment.shared.notificationPresenter.clearAllNotifications()
+        dependencies[singleton: .notificationsManager].clearAllNotifications()
         UIApplication.shared.applicationIconBadgeNumber = 0
         
         // Clear out the user defaults
-        UserDefaults.removeAll()
+        UserDefaults.removeAll(using: dependencies)
         
-        // Remove the cached key so it gets re-cached on next access
-        dependencies.caches.mutate(cache: .general) {
-            $0.encodedPublicKey = nil
-            $0.recentReactionTimestamps = []
-        }
+        // Remove the general cache
+        dependencies.remove(cache: .general)
         
         // Stop any pollers
         (UIApplication.shared.delegate as? AppDelegate)?.stopPollers()
         
         // Call through to the SessionApp's "resetAppData" which will wipe out logs, database and
         // profile storage
-        let wasUnlinked: Bool = UserDefaults.standard[.wasUnlinked]
+        let wasUnlinked: Bool = dependencies[defaults: .standard, key: .wasUnlinked]
+        let serviceNetwork: ServiceNetwork = dependencies[feature: .serviceNetwork]
         
-        SessionApp.resetAppData(using: dependencies) {
+        dependencies[singleton: .app].resetData { [dependencies] in
             // Resetting the data clears the old user defaults. We need to restore the unlink default.
-            UserDefaults.standard[.wasUnlinked] = wasUnlinked
+            dependencies[defaults: .standard, key: .wasUnlinked] = wasUnlinked
+            
+            // We also want to keep the `ServiceNetwork` setting (so someone testing can delete and restore
+            // accounts on Testnet without issue
+            dependencies.set(feature: .serviceNetwork, to: serviceNetwork)
         }
     }
 }

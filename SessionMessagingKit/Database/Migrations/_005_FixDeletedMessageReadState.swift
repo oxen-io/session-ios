@@ -23,6 +23,6 @@ enum _005_FixDeletedMessageReadState: Migration {
             )
             .updateAll(db, Interaction.Columns.wasRead.set(to: true))
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

@@ -12,9 +12,9 @@ public struct QuotedReplyModel {
     public let contentType: String?
     public let sourceFileName: String?
     public let thumbnailDownloadFailed: Bool
-    public let currentUserPublicKey: String?
-    public let currentUserBlinded15PublicKey: String?
-    public let currentUserBlinded25PublicKey: String?
+    public let currentUserSessionId: String?
+    public let currentUserBlinded15SessionId: String?
+    public let currentUserBlinded25SessionId: String?
     
     // MARK: - Initialization
     
@@ -27,9 +27,9 @@ public struct QuotedReplyModel {
         contentType: String?,
         sourceFileName: String?,
         thumbnailDownloadFailed: Bool,
-        currentUserPublicKey: String?,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?
+        currentUserSessionId: String?,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?
     ) {
         self.attachment = attachment
         self.threadId = threadId
@@ -39,9 +39,9 @@ public struct QuotedReplyModel {
         self.contentType = contentType
         self.sourceFileName = sourceFileName
         self.thumbnailDownloadFailed = thumbnailDownloadFailed
-        self.currentUserPublicKey = currentUserPublicKey
-        self.currentUserBlinded15PublicKey = currentUserBlinded15PublicKey
-        self.currentUserBlinded25PublicKey = currentUserBlinded25PublicKey
+        self.currentUserSessionId = currentUserSessionId
+        self.currentUserBlinded15SessionId = currentUserBlinded15SessionId
+        self.currentUserBlinded25SessionId = currentUserBlinded25SessionId
     }
     
     public static func quotedReplyForSending(
@@ -52,9 +52,9 @@ public struct QuotedReplyModel {
         timestampMs: Int64,
         attachments: [Attachment]?,
         linkPreviewAttachment: Attachment?,
-        currentUserPublicKey: String?,
-        currentUserBlinded15PublicKey: String?,
-        currentUserBlinded25PublicKey: String?
+        currentUserSessionId: String?,
+        currentUserBlinded15SessionId: String?,
+        currentUserBlinded25SessionId: String?
     ) -> QuotedReplyModel? {
         guard variant == .standardOutgoing || variant == .standardIncoming else { return nil }
         guard (body != nil && body?.isEmpty == false) || attachments?.isEmpty == false else { return nil }
@@ -70,9 +70,9 @@ public struct QuotedReplyModel {
             contentType: targetAttachment?.contentType,
             sourceFileName: targetAttachment?.sourceFilename,
             thumbnailDownloadFailed: false,
-            currentUserPublicKey: currentUserPublicKey,
-            currentUserBlinded15PublicKey: currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: currentUserBlinded25PublicKey
+            currentUserSessionId: currentUserSessionId,
+            currentUserBlinded15SessionId: currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: currentUserBlinded25SessionId
         )
     }
 }

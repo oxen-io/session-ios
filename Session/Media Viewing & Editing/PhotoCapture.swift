@@ -6,6 +6,7 @@ import Foundation
 import Combine
 import AVFoundation
 import CoreServices
+import SessionSnodeKit
 import SessionMessagingKit
 import SessionUtilitiesKit
 
@@ -22,7 +23,7 @@ protocol PhotoCaptureDelegate: AnyObject {
 }
 
 class PhotoCapture: NSObject {
-
+    fileprivate let dependencies: Dependencies
     weak var delegate: PhotoCaptureDelegate?
     var flashMode: AVCaptureDevice.FlashMode {
         return captureOutput.flashMode
@@ -40,9 +41,12 @@ class PhotoCapture: NSObject {
     
     let recordingAudioActivity = AudioActivity(audioDescription: "PhotoCapture", behavior: .playAndRecord)
 
-    override init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.session = AVCaptureSession()
         self.captureOutput = CaptureOutput()
+        
+        super.init()
     }
 
     // MARK: -
@@ -156,6 +160,7 @@ class PhotoCapture: NSObject {
                 case .front: return .back
                 case .back: return .front
                 case .unspecified: return .front
+                @unknown default: return .front
             }
         }()
         
@@ -348,12 +353,12 @@ extension PhotoCapture: CaptureButtonDelegate {
     func didBeginLongPressCaptureButton(_ captureButton: CaptureButton) {
         Log.assertOnMainThread()
 
-        sessionQueue.async { [weak self] in    // Must run this on a specific queue to prevent crashes
+        sessionQueue.async { [weak self, dependencies] in    // Must run this on a specific queue to prevent crashes
             guard let strongSelf = self else { return }
             
             do {
                 try strongSelf.startAudioCapture()
-                strongSelf.captureOutput.beginVideo(delegate: strongSelf)
+                strongSelf.captureOutput.beginVideo(delegate: strongSelf, using: dependencies)
                 
                 DispatchQueue.main.async {
                     strongSelf.delegate?.photoCaptureDidBeginVideo(strongSelf)
@@ -419,8 +424,8 @@ extension PhotoCapture: CaptureOutputDelegate {
             return
         }
 
-        let dataSource = DataSourceValue(data: photoData, dataType: .jpeg)
-        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: .jpeg, imageQuality: .medium)
+        let dataSource = DataSourceValue(data: photoData, dataType: .jpeg, using: dependencies)
+        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: .jpeg, imageQuality: .medium, using: dependencies)
         delegate?.photoCapture(self, didFinishProcessingAttachment: attachment)
     }
 
@@ -441,8 +446,8 @@ extension PhotoCapture: CaptureOutputDelegate {
             Log.debug("[PhotoCapture] Ignoring error, since capture succeeded.")
         }
 
-        let dataSource = DataSourcePath(fileUrl: outputFileURL, shouldDeleteOnDeinit: true)
-        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: .mpeg4Movie)
+        let dataSource = DataSourcePath(fileUrl: outputFileURL, sourceFilename: nil, shouldDeleteOnDeinit: true, using: dependencies)
+        let attachment = SignalAttachment.attachment(dataSource: dataSource, type: .mpeg4Movie, using: dependencies)
         delegate?.photoCapture(self, didFinishProcessingAttachment: attachment)
     }
     
@@ -528,7 +533,7 @@ class CaptureOutput {
 
     // MARK: - Movie Output
 
-    func beginVideo(delegate: CaptureOutputDelegate) {
+    func beginVideo(delegate: CaptureOutputDelegate, using dependencies: Dependencies) {
         delegate.assertIsOnSessionQueue()
         guard let videoConnection = movieOutput.connection(with: .video) else {
             Log.error("[CaptureOutput] movieOutputConnection was unexpectedly nil")
@@ -538,7 +543,7 @@ class CaptureOutput {
         let videoOrientation = delegate.captureOrientation
         videoConnection.videoOrientation = videoOrientation
 
-        let outputFilePath = FileSystem.temporaryFilePath(fileExtension: "mp4")
+        let outputFilePath = dependencies[singleton: .fileManager].temporaryFilePath(fileExtension: "mp4")
         movieOutput.startRecording(to: URL(fileURLWithPath: outputFilePath), recordingDelegate: delegate)
     }
 

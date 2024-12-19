@@ -5,12 +5,14 @@ import SessionUIKit
 import SessionUtilitiesKit
 
 final class SeedModal: Modal {
+    private let dependencies: Dependencies
     private let mnemonic: String
     
     // MARK: - Initialization
     
-    init() throws {
-        self.mnemonic = try Identity.mnemonic()
+    init(using dependencies: Dependencies) throws {
+        self.dependencies = dependencies
+        self.mnemonic = try Identity.mnemonic(using: dependencies)
         
         super.init(targetView: nil, dismissType: .recursive, afterClosed: nil)
         
@@ -122,7 +124,7 @@ final class SeedModal: Modal {
         mnemonicLabel.pin(to: mnemonicLabelContainer, withInset: isIPhone6OrSmaller ? 4 : Values.smallSpacing)
         
         // Mark seed as viewed
-        Storage.shared.writeAsync { db in db[.hasViewedSeed] = true }
+        dependencies[singleton: .storage].writeAsync { db in db[.hasViewedSeed] = true }
     }
     
     // MARK: - Interaction

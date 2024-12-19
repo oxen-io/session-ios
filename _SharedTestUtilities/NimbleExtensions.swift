@@ -11,8 +11,20 @@ public enum CallAmount {
     case noMoreThan(times: Int)
 }
 
-fileprivate func timeStr(_ value: Int) -> String {
-    return "\(value) time\(value == 1 ? "" : "s")"
+public enum ParameterMatchType {
+    case none
+    case all
+    case atLeast(Int)
+}
+
+fileprivate extension String.StringInterpolation {
+    mutating func appendInterpolation(times: Int) {
+        appendInterpolation("\(times) time\(times == 1 ? "" : "s")")
+    }
+    
+    mutating func appendInterpolation(parameters: Int) {
+        appendInterpolation("\(parameters) parameter\(parameters == 1 ? "" : "s")")
+    }
 }
 
 /// Validates whether the function called in `functionBlock` has been called according to the parameter constraints
@@ -27,105 +39,209 @@ fileprivate func timeStr(_ value: Int) -> String {
 ///  - functionBlock: A closure in which the function to be validated should be called
 public func call<M, T, R>(
     _ amount: CallAmount = .atLeast(times: 1),
-    matchingParameters: Bool = false,
+    matchingParameters: ParameterMatchType = .none,
     exclusive: Bool = false,
     functionBlock: @escaping (inout T) throws -> R
-) -> Nimble.Predicate<M> where M: Mock<T> {
-    return Predicate.define { actualExpression in
+) -> Matcher<M> where M: Mock<T> {
+    return Matcher.define { actualExpression in
+        /// First generate the call info
         let callInfo: CallInfo = generateCallInfo(actualExpression, functionBlock)
-        let matchingParameterRecords: [String] = callInfo.desiredFunctionCalls
-            .filter { !matchingParameters || callInfo.hasMatchingParameters($0) }
-        let exclusiveCallsValid: Bool = (!exclusive || callInfo.allFunctionsCalled.count <= 1)  // '<=' to support '0' case
-        let (numParamMatchingCallsValid, timesError): (Bool, String?) = {
-            switch amount {
-                case .atLeast(let times):
-                    return (
-                        (matchingParameterRecords.count >= times),
-                        (times <= 1 ? nil : "at least \(timeStr(times))")
-                    )
+        let expectedDescription: String = {
+            let timesDescription: String? = {
+                switch amount {
+                    case .atLeast(let times): return (times <= 1 ? nil : "at least \(times: times)")
+                    case .exactly(let times): return "exactly \(times: times)"
+                    case .noMoreThan(let times): return (times <= 0 ? nil : "no more than \(times: times))")
+                }
+            }()
+            let matchingParametersDescription: String? = {
+                let paramInfo: String = (callInfo.targetFunctionParameters.map { ": \($0)" } ?? "")
                 
-                case .exactly(let times):
-                    return (
-                        (matchingParameterRecords.count == times),
-                        "exactly \(timeStr(times))"
-                    )
-                    
-                case .noMoreThan(let times):
-                    return (
-                        (matchingParameterRecords.count <= times),
-                        (times <= 0 ? nil : "no more than \(timeStr(times))")
-                    )
-            }
+                switch matchingParameters {
+                    case .none: return nil
+                    case .all: return "matching the parameters\(paramInfo)"
+                    case .atLeast(let count): return "matching at least \(parameters: count)"
+                }
+            }()
+            
+            return [
+                "call '\(callInfo.functionName)'\(exclusive ? " exclusively" : "")",
+                timesDescription,
+                matchingParametersDescription
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
         }()
         
-        let result = (
-            numParamMatchingCallsValid &&
-            exclusiveCallsValid
-        )
-        let matchingParametersError: String? = (matchingParameters ?
-            "matching the parameters\(callInfo.desiredParameters.map { ": \($0)" } ?? "")" :
-            nil
-        )
-        let distinctParameterCombinations: Set<String> = Set(callInfo.desiredFunctionCalls)
-        let actualMessage: String
+        /// If an exception was thrown when generating call info then fail (mock value likely invalid)
+        guard callInfo.caughtException == nil else {
+            return MatcherResult(
+                bool: false,
+                message: .expectedCustomValueTo(
+                    expectedDescription,
+                    actual: "a thrown assertion (invalid mock param, not called or no mocked return value)"
+                )
+            )
+        }
         
-        if callInfo.caughtException != nil {
-            actualMessage = "a thrown assertion (invalid mock param, not called or no mocked return value)"
+        /// If there is no function within the 'callInfo' then we can't provide more useful info
+        guard let targetFunction: MockFunction = callInfo.targetFunction else {
+            return MatcherResult(
+                bool: false,
+                message: .expectedCustomValueTo(
+                    expectedDescription,
+                    actual: "no call details"
+                )
+            )
         }
-        else if callInfo.function == nil {
-            actualMessage = "no call details"
+        
+        /// If the mock wasn't called at all then no other data will be useful
+        guard !callInfo.allFunctionsCalled.isEmpty else {
+            return MatcherResult(
+                bool: false,
+                message: .expectedCustomValueTo(
+                    expectedDescription,
+                    actual: "no calls"
+                )
+            )
         }
-        else if callInfo.desiredFunctionCalls.isEmpty {
-            actualMessage = "no calls"
-        }
-        else if !exclusiveCallsValid {
+        
+        /// If we require the call to be exclusive (ie. the only function called on the mock) then make sure there were no
+        /// other functions called
+        guard
+            !exclusive ||
+            callInfo.allFunctionsCalled.count == 0 || (
+                callInfo.allFunctionsCalled.count == 1 &&
+                callInfo.allFunctionsCalled[0].name == targetFunction.name
+            )
+        else {
             let otherFunctionsCalled: [String] = callInfo.allFunctionsCalled
                 .map { "\($0.name) (params: \($0.paramCount))" }
                 .filter { $0 != "\(callInfo.functionName) (params: \(callInfo.parameterCount))" }
             
-            actualMessage = "calls to other functions: [\(otherFunctionsCalled.joined(separator: ", "))]"
-        }
-        else {
-            let onlyMadeMatchingCalls: Bool = (matchingParameterRecords.count == callInfo.desiredFunctionCalls.count)
-            
-            switch (numParamMatchingCallsValid, onlyMadeMatchingCalls, distinctParameterCombinations.count) {
-                case (false, false, 1):
-                    // No calls with the matching parameter requirements but only one parameter combination
-                    // so include the param info
-                    actualMessage = "called \(timeStr(callInfo.desiredFunctionCalls.count)) with different parameters: \(callInfo.desiredFunctionCalls[0])"
-                    
-                case (false, true, _):
-                    actualMessage = "called \(timeStr(callInfo.desiredFunctionCalls.count))"
-                    
-                case (false, false, _):
-                    let distinctSetterCombinations: Set<String> = distinctParameterCombinations.filter { $0 != "[]" }
-                    
-                    // A getter/setter combo will have function calls split between no params and the set value
-                    // if the setter didn't match then we still want to show the incorrect parameters
-                    if distinctSetterCombinations.count == 1, let paramCombo: String = distinctSetterCombinations.first {
-                        actualMessage = "called with: \(paramCombo)"
-                    }
-                    else {
-                        actualMessage = "called \(timeStr(matchingParameterRecords.count)) with matching parameters, \(timeStr(callInfo.desiredFunctionCalls.count)) total"
-                    }
-                
-                default: actualMessage = "\(exclusive ? " exclusive " : "")call to '\(callInfo.functionName)'"
-            }
+            return MatcherResult(
+                bool: false,
+                message: .expectedCustomValueTo(
+                    expectedDescription,
+                    actual: "calls to other functions: [\(otherFunctionsCalled.joined(separator: ", "))]"
+                )
+            )
         }
         
-        return PredicateResult(
-            bool: result,
-            message: .expectedCustomValueTo(
-                [
-                    "call '\(callInfo.functionName)'\(exclusive ? " exclusively" : "")",
-                    timesError,
-                    matchingParametersError
-                ]
-                .compactMap { $0 }
-                .joined(separator: " "),
-                actual: actualMessage
-            )
-        )
+        /// Check how accurate the calls made actually were
+        let validTargetParameterCombinations: Set<String> = targetFunction.allParameterSummaryCombinations
+            .filter { combination -> Bool in
+                switch matchingParameters {
+                    case .none: return true
+                    case .all: return (combination.count == targetFunction.parameterCount)
+                    case .atLeast(let count): return (combination.count >= count)
+                }
+            }
+            .map { $0.summary }
+            .asSet()
+        let allValidCallDetails: [CallDetails] = callInfo.allCallDetails
+            .compactMap { details -> CallDetails? in
+                let validCombinations: [ParameterCombination] = details.allParameterSummaryCombinations
+                    .filter { combination in
+                        switch matchingParameters {
+                            case .none: return true
+                            case .all:
+                                return (
+                                    combination.count == targetFunction.parameterCount &&
+                                    combination.summary == targetFunction.parameterSummary
+                                )
+                                
+                            case .atLeast(let count):
+                                return (
+                                    combination.count >= count &&
+                                    validTargetParameterCombinations.contains(combination.summary)
+                                )
+                        }
+                    }
+                
+                guard !validCombinations.isEmpty else { return nil }
+                
+                return CallDetails(
+                    parameterSummary: details.parameterSummary,
+                    allParameterSummaryCombinations: validCombinations
+                )
+            }
+        let metCallCountRequirement: Bool = {
+            switch amount {
+                case .atLeast(let times): return (allValidCallDetails.count >= times)
+                case .exactly(let times): return (allValidCallDetails.count == times)
+                case .noMoreThan(let times): return (allValidCallDetails.count <= times)
+            }
+        }()
+        let allCallsMetParamRequirements: Bool = (allValidCallDetails.count == callInfo.allCallDetails.count)
+        let totalUniqueParamCount: Int = callInfo.allCallDetails
+            .map { $0.parameterSummary }
+            .asSet()
+            .count
+        
+        switch (exclusive, metCallCountRequirement, allCallsMetParamRequirements, totalUniqueParamCount) {
+            /// No calls with the matching parameter requirements but only one parameter combination so include the param info
+            case (_, false, false, 1):
+                return MatcherResult(
+                    bool: false,
+                    message: .expectedCustomValueTo(
+                        expectedDescription,
+                        actual: "called \(times: callInfo.allCallDetails.count) with different parameters: \(callInfo.allCallDetails[0].parameterSummary)"
+                    )
+                )
+                
+            /// The calls were made with the correct parameters, but didn't call enough times
+            case (_, false, true, _):
+                return MatcherResult(
+                    bool: false,
+                    message: .expectedCustomValueTo(
+                        expectedDescription,
+                        actual: "called \(times: callInfo.allCallDetails.count)"
+                    )
+                )
+                
+            /// There were multiple parameter combinations
+            ///
+            /// **Note:** A getter/setter combo will have function calls split between no params and the set value, if the
+            /// setter didn't match then we still want to show the incorrect parameters
+            case (true, true, false, _), (_, false, false, _):
+                let distinctSetterCombinations: Set<CallDetails> = callInfo.allCallDetails
+                    .filter { $0.parameterSummary != "[]" }
+                    .asSet()
+                let maxParamMatch: Int = allValidCallDetails
+                    .flatMap { $0.allParameterSummaryCombinations.map { $0.count } }
+                    .max()
+                    .defaulting(to: 0)
+                
+                return MatcherResult(
+                    bool: false,
+                    message: .expectedCustomValueTo(
+                        expectedDescription,
+                        actual: {
+                            guard distinctSetterCombinations.count != 1 else {
+                                return "called with: \(Array(distinctSetterCombinations)[0].parameterSummary)"
+                            }
+                            
+                            return (
+                                "called \(times: allValidCallDetails.count) with matching parameters " +
+                                "(\(times: callInfo.allCallDetails.count) total" + (
+                                    !metCallCountRequirement ? ")" :
+                                    ", matching at most \(parameters: maxParamMatch))"
+                                )
+                            )
+                        }()
+                    )
+                )
+
+            default:
+                return MatcherResult(
+                    bool: true,
+                    message: .expectedCustomValueTo(
+                        expectedDescription,
+                        actual: "call to '\(callInfo.functionName)'"
+                    )
+                )
+        }
     }
 }
 
@@ -134,54 +250,54 @@ public func call<M, T, R>(
 fileprivate struct CallInfo {
     let didError: Bool
     let caughtException: BadInstructionException?
-    let function: MockFunction?
+    let targetFunction: MockFunction?
     let allFunctionsCalled: [FunctionConsumer.Key]
-    let desiredFunctionCalls: [String]
+    let allCallDetails: [CallDetails]
     
-    var functionName: String { "\((function?.name).map { "\($0)" } ?? "a function")" }
-    var parameterCount: Int { (function?.parameterCount ?? 0) }
-    var desiredParameters: String? { function?.parameterSummary }
+    var functionName: String { "\((targetFunction?.name).map { "\($0)" } ?? "a function")" }
+    var parameterCount: Int { (targetFunction?.parameterCount ?? 0) }
+    var targetFunctionParameters: String? { targetFunction?.parameterSummary }
     
     static var error: CallInfo {
         CallInfo(
             didError: true,
             caughtException: nil,
-            function: nil,
+            targetFunction: nil,
             allFunctionsCalled: [],
-            desiredFunctionCalls: []
+            allCallDetails: []
         )
     }
     
     init(
         didError: Bool = false,
         caughtException: BadInstructionException?,
-        function: MockFunction?,
+        targetFunction: MockFunction?,
         allFunctionsCalled: [FunctionConsumer.Key],
-        desiredFunctionCalls: [String]
+        allCallDetails: [CallDetails]
     ) {
         self.didError = didError
         self.caughtException = caughtException
-        self.function = function
+        self.targetFunction = targetFunction
         self.allFunctionsCalled = allFunctionsCalled
-        self.desiredFunctionCalls = desiredFunctionCalls
-    }
-    
-    func hasMatchingParameters(_ parameters: String) -> Bool {
-        return (parameters == (function?.parameterSummary ?? "FALLBACK_NOT_FOUND"))
+        self.allCallDetails = allCallDetails
     }
 }
 
-fileprivate func generateCallInfo<M, T, R>(_ actualExpression: Nimble.Expression<M>, _ functionBlock: @escaping (inout T) throws -> R) -> CallInfo where M: Mock<T> {
-    var maybeFunction: MockFunction?
+fileprivate func generateCallInfo<M, T, R>(
+    _ actualExpression: Nimble.Expression<M>,
+    _ functionBlock: @escaping (inout T) throws -> R
+) -> CallInfo where M: Mock<T> {
+    var maybeTargetFunction: MockFunction?
     var allFunctionsCalled: [FunctionConsumer.Key] = []
-    var desiredFunctionCalls: [String] = []
+    var allCallDetails: [CallDetails] = []
     let builderCreator: ((M) -> MockFunctionBuilder<T, R>) = { validInstance in
         let builder: MockFunctionBuilder<T, R> = MockFunctionBuilder(functionBlock, mockInit: type(of: validInstance).init)
-        builder.returnValueGenerator = { name, parameterCount, parameterSummary in
+        builder.returnValueGenerator = { name, parameterCount, parameterSummary, allParameterSummaryCombinations in
             validInstance.functionConsumer
                 .firstFunction(
                     for: FunctionConsumer.Key(name: name, paramCount: parameterCount),
-                    matchingParameterSummaryIfPossible: parameterSummary
+                    matchingParameterSummaryIfPossible: parameterSummary,
+                    allParameterSummaryCombinations: allParameterSummaryCombinations
                 )?
                 .returnValue as? R
         }
@@ -206,19 +322,19 @@ fileprivate func generateCallInfo<M, T, R>(_ actualExpression: Nimble.Expression
             if !allFunctionsCalled.isEmpty {
                 let builder: MockFunctionBuilder<T, R> = builderCreator(validInstance)
                 validInstance.functionConsumer.trackCalls = false
-                maybeFunction = try? builder.build()
-                
+                maybeTargetFunction = try? builder.build()
+
                 let key: FunctionConsumer.Key = FunctionConsumer.Key(
-                    name: (maybeFunction?.name ?? ""),
-                    paramCount: (maybeFunction?.parameterCount ?? 0)
+                    name: (maybeTargetFunction?.name ?? ""),
+                    paramCount: (maybeTargetFunction?.parameterCount ?? 0)
                 )
-                desiredFunctionCalls = validInstance.functionConsumer.calls
+                allCallDetails = validInstance.functionConsumer.calls
                     .wrappedValue[key]
                     .defaulting(to: [])
                 validInstance.functionConsumer.trackCalls = true
             }
             else {
-                desiredFunctionCalls = []
+                allCallDetails = []
             }
         }
         catch {
@@ -243,23 +359,28 @@ fileprivate func generateCallInfo<M, T, R>(_ actualExpression: Nimble.Expression
     // call (if there weren't any this will likely throw errors when attempting
     // to build)
     if !allFunctionsCalled.isEmpty {
-        let builder: MockExpectationBuilder<T, R> = builderCreator(validInstance)
+        let builder: MockFunctionBuilder<T, R> = builderCreator(validInstance)
         validInstance.functionConsumer.trackCalls = false
-        maybeFunction = try? builder.build()
-        desiredFunctionCalls = validInstance.functionConsumer.calls
-            .wrappedValue[maybeFunction?.name ?? ""]
+        maybeTargetFunction = try? builder.build()
+        
+        let key: FunctionConsumer.Key = FunctionConsumer.Key(
+            name: (maybeTargetFunction?.name ?? ""),
+            paramCount: (maybeTargetFunction?.parameterCount ?? 0)
+        )
+        allCallDetails = validInstance.functionConsumer.calls
+            .wrappedValue[key]
             .defaulting(to: [])
         validInstance.functionConsumer.trackCalls = true
     }
     else {
-        desiredFunctionCalls = []
+        allCallDetails = []
     }
     #endif
     
     return CallInfo(
         caughtException: caughtException,
-        function: maybeFunction,
+        targetFunction: maybeTargetFunction,
         allFunctionsCalled: allFunctionsCalled,
-        desiredFunctionCalls: desiredFunctionCalls
+        allCallDetails: allCallDetails
     )
 }

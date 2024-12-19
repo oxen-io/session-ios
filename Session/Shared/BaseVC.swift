@@ -69,14 +69,4 @@ public class BaseVC: UIViewController {
         
         navigationItem.titleView = headingImageView
     }
-
-    internal func setUpNavBarSessionIcon() {
-        let logoImageView = UIImageView()
-        logoImageView.image = #imageLiteral(resourceName: "SessionGreen32")
-        logoImageView.contentMode = .scaleAspectFit
-        logoImageView.set(.width, to: 32)
-        logoImageView.set(.height, to: 32)
-        
-        navigationItem.titleView = logoImageView
-    }
 }

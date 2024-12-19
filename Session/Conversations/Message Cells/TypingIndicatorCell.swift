@@ -3,6 +3,7 @@
 import UIKit
 import SessionUIKit
 import SessionMessagingKit
+import SessionUtilitiesKit
 
 // Assumptions
 // • We'll never encounter an outgoing typing indicator.
@@ -44,10 +45,12 @@ final class TypingIndicatorCell: MessageCell {
         mediaCache: NSCache<NSString, AnyObject>,
         playbackInfo: ConversationViewModel.PlaybackInfo?,
         showExpandedReactions: Bool,
-        lastSearchText: String?
+        lastSearchText: String?,
+        using dependencies: Dependencies
     ) {
         guard cellViewModel.cellType == .typingIndicator else { return }
         
+        self.dependencies = dependencies
         self.viewModel = cellViewModel
         
         // Bubble view

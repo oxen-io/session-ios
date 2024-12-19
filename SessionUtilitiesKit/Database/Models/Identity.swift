@@ -13,7 +13,6 @@ public struct Identity: Codable, Identifiable, FetchableRecord, PersistableRecor
     }
     
     public enum Variant: String, Codable, CaseIterable, DatabaseValueConvertible {
-        case seed
         case ed25519SecretKey
         case ed25519PublicKey
         case x25519PrivateKey
@@ -22,8 +21,8 @@ public struct Identity: Codable, Identifiable, FetchableRecord, PersistableRecor
     
     public var id: Variant { variant }
     
-    let variant: Variant
-    let data: Data
+    public let variant: Variant
+    public let data: Data
     
     // MARK: - Initialization
     
@@ -39,24 +38,25 @@ public struct Identity: Codable, Identifiable, FetchableRecord, PersistableRecor
 // MARK: - GRDB Interactions
 
 public extension Identity {
-    static func generate(from seed: Data) throws -> (ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) {
+    static func generate(
+        from seed: Data,
+        using dependencies: Dependencies
+    ) throws -> (ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) {
         guard (seed.count == 16) else { throw CryptoError.invalidSeed }
 
         let padding = Data(repeating: 0, count: 16)
         
         guard
-            let ed25519KeyPair: KeyPair = Singleton.crypto.generate(
+            let ed25519KeyPair: KeyPair = dependencies[singleton: .crypto].generate(
                 .ed25519KeyPair(seed: Array(seed + padding))
             ),
-            let x25519PublicKey: [UInt8] = Singleton.crypto.generate(
+            let x25519PublicKey: [UInt8] = dependencies[singleton: .crypto].generate(
                 .x25519(ed25519Pubkey: ed25519KeyPair.publicKey)
             ),
-            let x25519SecretKey: [UInt8] = Singleton.crypto.generate(
+            let x25519SecretKey: [UInt8] = dependencies[singleton: .crypto].generate(
                 .x25519(ed25519Seckey: ed25519KeyPair.secretKey)
             )
-        else {
-            throw GeneralError.keyGenerationFailed
-        }
+        else { throw CryptoError.keyGenerationFailed }
         
         return (
             ed25519KeyPair: KeyPair(
@@ -70,53 +70,37 @@ public extension Identity {
         )
     }
 
-    static func store(_ db: Database, seed: Data, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) throws {
-        try Identity(variant: .seed, data: seed).save(db)
-        try Identity(variant: .ed25519SecretKey, data: Data(ed25519KeyPair.secretKey)).save(db)
-        try Identity(variant: .ed25519PublicKey, data: Data(ed25519KeyPair.publicKey)).save(db)
-        try Identity(variant: .x25519PrivateKey, data: Data(x25519KeyPair.secretKey)).save(db)
-        try Identity(variant: .x25519PublicKey, data: Data(x25519KeyPair.publicKey)).save(db)
+    static func store(_ db: Database, ed25519KeyPair: KeyPair, x25519KeyPair: KeyPair) throws {
+        try Identity(variant: .ed25519SecretKey, data: Data(ed25519KeyPair.secretKey)).upsert(db)
+        try Identity(variant: .ed25519PublicKey, data: Data(ed25519KeyPair.publicKey)).upsert(db)
+        try Identity(variant: .x25519PrivateKey, data: Data(x25519KeyPair.secretKey)).upsert(db)
+        try Identity(variant: .x25519PublicKey, data: Data(x25519KeyPair.publicKey)).upsert(db)
     }
     
-    static func userExists(_ db: Database? = nil) -> Bool {
-        return (fetchUserKeyPair(db) != nil)
-    }
-    
-    static func fetchUserPublicKey(_ db: Database? = nil) -> Data? {
+    static func userExists(
+        _ db: Database? = nil,
+        using dependencies: Dependencies
+    ) -> Bool {
         guard let db: Database = db else {
-            return Storage.shared.read { db in fetchUserPublicKey(db) }
+            return (dependencies[singleton: .storage].read { db in Identity.userExists(db, using: dependencies) } ?? false)
         }
         
-        return try? Identity.fetchOne(db, id: .x25519PublicKey)?.data
+        return (fetchUserEd25519KeyPair(db) != nil)
     }
     
-    static func fetchUserPrivateKey(_ db: Database? = nil) -> Data? {
-        guard let db: Database = db else {
-            return Storage.shared.read { db in fetchUserPrivateKey(db) }
-        }
-        
-        return try? Identity.fetchOne(db, id: .x25519PrivateKey)?.data
-    }
-    
-    static func fetchUserKeyPair(_ db: Database? = nil) -> KeyPair? {
-        guard let db: Database = db else {
-            return Storage.shared.read { db in fetchUserKeyPair(db) }
-        }
+    static func fetchUserKeyPair(_ db: Database) -> KeyPair? {
         guard
-            let publicKey: Data = fetchUserPublicKey(db),
-            let privateKey: Data = fetchUserPrivateKey(db)
+            let publicKey: Data = try? Identity.fetchOne(db, id: .x25519PublicKey)?.data,
+            let secretKey: Data = try? Identity.fetchOne(db, id: .x25519PrivateKey)?.data
         else { return nil }
         
         return KeyPair(
             publicKey: publicKey.bytes,
-            secretKey: privateKey.bytes
+            secretKey: secretKey.bytes
         )
     }
     
-    static func fetchUserEd25519KeyPair(_ db: Database? = nil) -> KeyPair? {
-        guard let db: Database = db else {
-            return Storage.shared.read { db in fetchUserEd25519KeyPair(db) }
-        }
+    static func fetchUserEd25519KeyPair(_ db: Database) -> KeyPair? {
         guard
             let publicKey: Data = try? Identity.fetchOne(db, id: .ed25519PublicKey)?.data,
             let secretKey: Data = try? Identity.fetchOne(db, id: .ed25519SecretKey)?.data
@@ -128,56 +112,43 @@ public extension Identity {
         )
     }
     
-    static func fetchHexEncodedSeed(_ db: Database? = nil) -> String? {
-        guard let db: Database = db else {
-            return Storage.shared.read { db in fetchHexEncodedSeed(db) }
-        }
-        
-        guard let data: Data = try? Identity.fetchOne(db, id: .seed)?.data else {
-            return nil
-        }
-        
-        return data.toHexString()
-    }
-    
-    static func mnemonic() throws -> String {
-        let dbIsValid: Bool = Storage.shared.isValid
-        let dbIsSuspended: Bool = Storage.shared.isSuspended
-        
-        if let hexEncodedSeed: String = Identity.fetchHexEncodedSeed() {
-            return Mnemonic.encode(hexEncodedString: hexEncodedSeed)
-        }
-        
-        // stringlint:ignore_contents
-        guard let legacyPrivateKey: String = Identity.fetchUserPrivateKey()?.toHexString() else {
-            let hasStoredPublicKey: Bool = (Identity.fetchUserPublicKey() != nil)
-            let hasStoredEdKeyPair: Bool = (Identity.fetchUserEd25519KeyPair() != nil)
+    static func mnemonic(using dependencies: Dependencies) throws -> String {
+        guard
+            let ed25519KeyPair: KeyPair = dependencies[singleton: .storage]
+                .read({ db in Identity.fetchUserEd25519KeyPair(db) }),
+            let seedData: Data = dependencies[singleton: .crypto].generate(
+                .ed25519Seed(ed25519SecretKey: ed25519KeyPair.secretKey)
+            ),
+            seedData.count >= 16    // Just to be safe
+        else {
+            let dbIsValid: Bool = dependencies[singleton: .storage].isValid
+            let dbHasRead: Bool = dependencies[singleton: .storage].hasSuccessfullyRead
+            let dbHasWritten: Bool = dependencies[singleton: .storage].hasSuccessfullyWritten
+            let dbIsSuspended: Bool = dependencies[singleton: .storage].isSuspended
+            let (hasStoredXKeyPair, hasStoredEdKeyPair) = dependencies[singleton: .storage].read { db -> (Bool, Bool) in
+                (
+                    (Identity.fetchUserKeyPair(db) != nil),
+                    (Identity.fetchUserEd25519KeyPair(db) != nil)
+                )
+            }.defaulting(to: (false, false))
+
+            // stringlint:ignore_start
             let dbStates: [String] = [
                 "dbIsValid: \(dbIsValid)",
+                "dbHasRead: \(dbHasRead)",
+                "dbHasWritten: \(dbHasWritten)",
                 "dbIsSuspended: \(dbIsSuspended)",
-                "storedSeed: false",
-                "userPublicKey: \(hasStoredPublicKey)",
-                "userPrivateKey: false",
+                "userXKeyPair: \(hasStoredXKeyPair)",
                 "userEdKeyPair: \(hasStoredEdKeyPair)"
             ]
-            
+            // stringlint:ignore_stop
+
             SNLog("Failed to retrieve keys for mnemonic generation (\(dbStates.joined(separator: ", ")))")
             throw StorageError.objectNotFound
         }
-                
-        // Legacy account
-        return Mnemonic.encode(hexEncodedString: legacyPrivateKey)
-    }
-}
 
-// MARK: - Convenience
-
-public extension Notification.Name {
-    static let registrationStateDidChange = Notification.Name("registrationStateDidChange")
-}
-
-public extension Identity {
-    static func didRegister() {
-        NotificationCenter.default.post(name: .registrationStateDidChange, object: nil, userInfo: nil)
+        // Our account is generated with a 16-byte seed where the second 16-bytes are just padding so
+        // only use the first 16 bytes to generate the mnemonic
+        return Mnemonic.encode(hexEncodedString: Data(seedData[0..<16]).toHexString())
     }
 }

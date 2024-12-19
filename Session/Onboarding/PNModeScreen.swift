@@ -18,11 +18,9 @@ struct PNModeScreen: View {
     @State private var currentSelection: PNMode = .fast
     
     private let dependencies: Dependencies
-    private let flow: Onboarding.Flow
     
-    public init(flow: Onboarding.Flow, using dependencies: Dependencies) {
+    public init(using dependencies: Dependencies) {
         self.dependencies = dependencies
-        self.flow = flow
     }
     
     let options: [PNOptionView.Info] = [
@@ -128,43 +126,43 @@ struct PNModeScreen: View {
     }
     
     private func register() {
-        UserDefaults.standard[.isUsingFullAPNs] = (currentSelection == .fast)
+        // Store whether we want to use APNS
+        dependencies.mutate(cache: .onboarding) { $0.setUserAPNS(currentSelection == .fast) }
         
         // If we are registering then we can just continue on
-        guard flow != .register else {
-            return finishRegister()
+        guard dependencies[cache: .onboarding].initialFlow != .register else {
+            return completeRegistration()
         }
         
         // Check if we already have a profile name (ie. profile retrieval completed while waiting on
         // this screen)
-        let existingProfileName: String? = Storage.shared
-            .read { db in
-                try Profile
-                    .filter(id: getUserHexEncodedPublicKey(db))
-                    .select(.name)
-                    .asRequest(of: String.self)
-                    .fetchOne(db)
-            }
-        
-        guard existingProfileName?.isEmpty != false else {
+        guard dependencies[cache: .onboarding].displayName.isEmpty else {
             // If we have one then we can go straight to the home screen
-            return finishRegister()
+            return self.completeRegistration()
         }
         
         // If we don't have one then show a loading indicator and try to retrieve the existing name
         let viewController: SessionHostingViewController = SessionHostingViewController(
-            rootView: LoadingScreen(flow: flow, using: dependencies)
+            rootView: LoadingScreen(using: dependencies)
         )
-        viewController.setUpNavBarSessionIcon()
+        viewController.setUpNavBarSessionIcon(using: dependencies)
         self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
     }
     
-    private func finishRegister() {
-        self.flow.completeRegistration()
-        
-        let homeVC: HomeVC = HomeVC(flow: self.flow, using: dependencies)
-        self.host.controller?.navigationController?.setViewControllers([ homeVC ], animated: true)
-        return
+    private func completeRegistration() {
+        dependencies.mutate(cache: .onboarding) { [dependencies] onboarding in
+            let shouldSyncPushTokens: Bool = onboarding.useAPNS
+            
+            onboarding.completeRegistration {
+                // Trigger the 'SyncPushTokensJob' directly as we don't want to wait for paths to build
+                // before requesting the permission from the user
+                if shouldSyncPushTokens { SyncPushTokensJob.run(uploadOnlyIfStale: false, using: dependencies) }
+                
+                let homeVC: HomeVC = HomeVC(using: dependencies)
+                dependencies[singleton: .app].setHomeViewController(homeVC)
+                self.host.controller?.navigationController?.setViewControllers([ homeVC ], animated: true)
+            }
+        }
     }
 }
 
@@ -257,6 +255,6 @@ struct PNOptionView: View {
 
 struct PNModeView_Previews: PreviewProvider {
     static var previews: some View {
-        PNModeScreen(flow: .register, using: Dependencies())
+        PNModeScreen(using: Dependencies.createEmpty())
     }
 }

@@ -5,6 +5,7 @@ import Combine
 import AVFoundation
 import SessionUIKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 protocol PhotoCaptureViewControllerDelegate: AnyObject {
@@ -26,8 +27,24 @@ class PhotoCaptureViewController: OWSViewController {
 
     weak var delegate: PhotoCaptureViewControllerDelegate?
 
+    private let dependencies: Dependencies
     private var photoCapture: PhotoCapture!
-
+    var isRecordingMovie: Bool = false
+    let recordingTimerView: RecordingTimerView
+    
+    // MARK: - Initialization
+    
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        recordingTimerView = RecordingTimerView(using: dependencies)
+        
+        super.init()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     deinit {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         if let photoCapture = photoCapture {
@@ -71,8 +88,6 @@ class PhotoCaptureViewController: OWSViewController {
     }
 
     // MARK: -
-    var isRecordingMovie: Bool = false
-    let recordingTimerView = RecordingTimerView()
 
     func updateNavigationItems() {
         if isRecordingMovie {
@@ -285,7 +300,7 @@ class PhotoCaptureViewController: OWSViewController {
     }
 
     private func setupPhotoCapture() {
-        photoCapture = PhotoCapture()
+        photoCapture = PhotoCapture(using: dependencies)
         photoCapture.delegate = self
         captureButton.delegate = photoCapture
         previewView = CapturePreviewView(session: photoCapture.session)
@@ -564,11 +579,13 @@ class CapturePreviewView: UIView {
 }
 
 class RecordingTimerView: UIView {
-
+    private let dependencies: Dependencies
     let stackViewSpacing: CGFloat = 4
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
+        
+        super.init(frame: .zero)
 
         let stackView = UIStackView(arrangedSubviews: [icon, label])
         stackView.axis = .horizontal
@@ -619,7 +636,9 @@ class RecordingTimerView: UIView {
 
     func startCounting() {
         recordingStartTime = CACurrentMediaTime()
-        timer = Timer.weakScheduledTimer(withTimeInterval: 0.1, target: self, selector: #selector(updateView), userInfo: nil, repeats: true)
+        timer = Timer.scheduledTimerOnMainThread(withTimeInterval: 0.1, repeats: true, using: dependencies) { [weak self] _ in
+            self?.updateView()
+        }
         UIView.animate(
             withDuration: 0.5,
             delay: 0,
@@ -659,7 +678,6 @@ class RecordingTimerView: UIView {
         return CACurrentMediaTime() - recordingStartTime
     }
 
-    @objc
     private func updateView() {
         let recordingDuration = self.recordingDuration
         Log.verbose("[RecordingTimerView] recordingDuration: \(recordingDuration)")

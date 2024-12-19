@@ -180,7 +180,7 @@ public class SignalAttachment: Equatable {
         return errorDescription
     }
 
-    public func staticThumbnail() -> UIImage? {
+    public func staticThumbnail(using dependencies: Dependencies) -> UIImage? {
         if isAnimatedImage {
             return image()
         }
@@ -188,7 +188,7 @@ public class SignalAttachment: Equatable {
             return image()
         }
         else if isVideo {
-            return videoPreview()
+            return videoPreview(using: dependencies)
         }
         else if isAudio {
             return nil
@@ -209,7 +209,7 @@ public class SignalAttachment: Equatable {
         return image
     }
 
-    public func videoPreview() -> UIImage? {
+    public func videoPreview(using dependencies: Dependencies) -> UIImage? {
         if let cachedVideoPreview = cachedVideoPreview {
             return cachedVideoPreview
         }
@@ -220,7 +220,7 @@ public class SignalAttachment: Equatable {
 
         do {
             let filePath = mediaUrl.path
-            guard FileManager.default.fileExists(atPath: filePath) else {
+            guard dependencies[singleton: .fileManager].fileExists(atPath: filePath) else {
                 return nil
             }
 
@@ -269,7 +269,7 @@ public class SignalAttachment: Equatable {
     // can be identified.
     public var mimeType: String {
         guard
-            let fileExtension: String = sourceFilename.map({ $0 as NSString })?.pathExtension,
+            let fileExtension: String = sourceFilename.map({ URL(fileURLWithPath: $0) })?.pathExtension,
             !fileExtension.isEmpty,
             let fileExtensionMimeType: String = UTType(sessionFileExtension: fileExtension)?.preferredMIMEType
         else { return (dataType.preferredMIMEType ?? UTType.mimeTypeDefault) }
@@ -306,9 +306,9 @@ public class SignalAttachment: Equatable {
     // can be identified.
     public var fileExtension: String? {
         guard
-            let fileExtension: String = sourceFilename.map({ $0 as NSString })?.pathExtension,
+            let fileExtension: String = sourceFilename.map({ URL(fileURLWithPath: $0) })?.pathExtension,
             !fileExtension.isEmpty
-        else { return dataType.sessionFileExtension }
+        else { return dataType.sessionFileExtension(sourceFilename: sourceFilename) }
         
         return fileExtension.filteredFilename
     }
@@ -362,7 +362,7 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    public class func attachmentFromPasteboard() -> SignalAttachment? {
+    public class func attachmentFromPasteboard(using dependencies: Dependencies) -> SignalAttachment? {
         guard
             UIPasteboard.general.numberOfItems > 0,
             let pasteboardUTIdentifiers: [[String]] = UIPasteboard.general.types(forItemSet: IndexSet(integer: 0)),
@@ -374,32 +374,32 @@ public class SignalAttachment: Equatable {
                 guard let data: Data = dataForFirstPasteboardItem(type: type) else { return nil }
                 
                 // Pasted images _SHOULD _NOT_ be resized, if possible.
-                let dataSource = DataSourceValue(data: data, dataType: type)
-                return attachment(dataSource: dataSource, type: type, imageQuality: .original)
+                let dataSource = DataSourceValue(data: data, dataType: type, using: dependencies)
+                return attachment(dataSource: dataSource, type: type, imageQuality: .original, using: dependencies)
             }
         }
         for type in UTType.supportedVideoTypes {
             if pasteboardUTTypes.contains(type) {
                 guard let data = dataForFirstPasteboardItem(type: type) else { return nil }
                 
-                let dataSource = DataSourceValue(data: data, dataType: type)
-                return videoAttachment(dataSource: dataSource, type: type)
+                let dataSource = DataSourceValue(data: data, dataType: type, using: dependencies)
+                return videoAttachment(dataSource: dataSource, type: type, using: dependencies)
             }
         }
         for type in UTType.supportedAudioTypes {
             if pasteboardUTTypes.contains(type) {
                 guard let data = dataForFirstPasteboardItem(type: type) else { return nil }
                 
-                let dataSource = DataSourceValue(data: data, dataType: type)
-                return audioAttachment(dataSource: dataSource, type: type)
+                let dataSource = DataSourceValue(data: data, dataType: type, using: dependencies)
+                return audioAttachment(dataSource: dataSource, type: type, using: dependencies)
             }
         }
 
         let type: UTType = pasteboardUTTypes[pasteboardUTTypes.startIndex]
         guard let data = dataForFirstPasteboardItem(type: type) else { return nil }
         
-        let dataSource = DataSourceValue(data: data, dataType: type)
-        return genericAttachment(dataSource: dataSource, type: type)
+        let dataSource = DataSourceValue(data: data, dataType: type, using: dependencies)
+        return genericAttachment(dataSource: dataSource, type: type, using: dependencies)
     }
 
     // This method should only be called for dataUTIs that
@@ -423,10 +423,10 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    private class func imageAttachment(dataSource: (any DataSource)?, type: UTType, imageQuality: TSImageQuality) -> SignalAttachment {
+    private class func imageAttachment(dataSource: (any DataSource)?, type: UTType, imageQuality: TSImageQuality, using dependencies: Dependencies) -> SignalAttachment {
         assert(dataSource != nil)
         guard var dataSource = dataSource else {
-            let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: type)
+            let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: type)
             attachment.error = .missingData
             return attachment
         }
@@ -479,9 +479,9 @@ public class SignalAttachment: Equatable {
             }
 
             if isValidOutput {
-                return removeImageMetadata(attachment: attachment)
+                return removeImageMetadata(attachment: attachment, using: dependencies)
             } else {
-                return compressImageAsJPEG(image: image, attachment: attachment, filename: dataSource.sourceFilename, imageQuality: imageQuality)
+                return compressImageAsJPEG(image: image, attachment: attachment, filename: dataSource.sourceFilename, imageQuality: imageQuality, using: dependencies)
             }
         }
     }
@@ -505,9 +505,9 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may nil or not be valid.
     //       Check the attachment's error property.
-    public class func imageAttachment(image: UIImage?, type: UTType, filename: String?, imageQuality: TSImageQuality) -> SignalAttachment {
+    public class func imageAttachment(image: UIImage?, type: UTType, filename: String?, imageQuality: TSImageQuality, using dependencies: Dependencies) -> SignalAttachment {
         guard let image: UIImage = image else {
-            let dataSource = DataSourceValue.empty
+            let dataSource = DataSourceValue.empty(using: dependencies)
             dataSource.sourceFilename = filename
             let attachment = SignalAttachment(dataSource: dataSource, dataType: type)
             attachment.error = .missingData
@@ -515,15 +515,15 @@ public class SignalAttachment: Equatable {
         }
 
         // Make a placeholder attachment on which to hang errors if necessary.
-        let dataSource = DataSourceValue.empty
+        let dataSource = DataSourceValue.empty(using: dependencies)
         dataSource.sourceFilename = filename
         let attachment = SignalAttachment(dataSource: dataSource, dataType: type)
         attachment.cachedImage = image
 
-        return compressImageAsJPEG(image: image, attachment: attachment, filename: filename, imageQuality: imageQuality)
+        return compressImageAsJPEG(image: image, attachment: attachment, filename: filename, imageQuality: imageQuality, using: dependencies)
     }
 
-    private class func compressImageAsJPEG(image: UIImage, attachment: SignalAttachment, filename: String?, imageQuality: TSImageQuality) -> SignalAttachment {
+    private class func compressImageAsJPEG(image: UIImage, attachment: SignalAttachment, filename: String?, imageQuality: TSImageQuality, using dependencies: Dependencies) -> SignalAttachment {
         assert(attachment.error == nil)
 
         if imageQuality == .original &&
@@ -551,7 +551,7 @@ public class SignalAttachment: Equatable {
                 return attachment
             }
 
-            let dataSource = DataSourceValue(data: jpgImageData, fileExtension: "jpg")
+            let dataSource = DataSourceValue(data: jpgImageData, fileExtension: "jpg", using: dependencies)
             let baseFilename = filename?.filenameWithoutExtension
             let jpgFilename = baseFilename?.appendingFileExtension("jpg")
             dataSource.sourceFilename = jpgFilename
@@ -672,15 +672,15 @@ public class SignalAttachment: Equatable {
         }
     }
 
-    private class func removeImageMetadata(attachment: SignalAttachment) -> SignalAttachment {
+    private class func removeImageMetadata(attachment: SignalAttachment, using dependencies: Dependencies) -> SignalAttachment {
         guard let source = CGImageSourceCreateWithData(attachment.data as CFData, nil) else {
-            let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: attachment.dataType)
+            let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: attachment.dataType)
             attachment.error = .missingData
             return attachment
         }
 
         guard let type = CGImageSourceGetType(source) else {
-            let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: attachment.dataType)
+            let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: attachment.dataType)
             attachment.error = .invalidFileFormat
             return attachment
         }
@@ -709,7 +709,7 @@ public class SignalAttachment: Equatable {
         }
 
         if CGImageDestinationFinalize(destination) {
-            guard let dataSource = DataSourceValue(data: mutableData as Data, dataType: attachment.dataType) else {
+            guard let dataSource = DataSourceValue(data: mutableData as Data, dataType: attachment.dataType, using: dependencies) else {
                 attachment.error = .couldNotRemoveMetadata
                 return attachment
             }
@@ -729,9 +729,9 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    private class func videoAttachment(dataSource: (any DataSource)?, type: UTType) -> SignalAttachment {
+    private class func videoAttachment(dataSource: (any DataSource)?, type: UTType, using dependencies: Dependencies) -> SignalAttachment {
         guard let dataSource = dataSource else {
-            let dataSource = DataSourceValue.empty
+            let dataSource = DataSourceValue.empty(using: dependencies)
             let attachment = SignalAttachment(dataSource: dataSource, dataType: type)
             attachment.error = .missingData
             return attachment
@@ -741,23 +741,26 @@ public class SignalAttachment: Equatable {
             dataSource: dataSource,
             type: type,
             validTypes: UTType.supportedVideoTypes,
-            maxFileSize: MediaUtils.maxFileSizeVideo
+            maxFileSize: MediaUtils.maxFileSizeVideo,
+            using: dependencies
         )
     }
 
-    public class func copyToVideoTempDir(url fromUrl: URL) throws -> URL {
-        let baseDir = SignalAttachment.videoTempPath.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try? FileSystem.ensureDirectoryExists(at: baseDir.path)
+    public class func copyToVideoTempDir(url fromUrl: URL, using dependencies: Dependencies) throws -> URL {
+        let baseDir = SignalAttachment.videoTempPath(using: dependencies)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? dependencies[singleton: .fileManager].ensureDirectoryExists(at: baseDir.path)
         let toUrl = baseDir.appendingPathComponent(fromUrl.lastPathComponent)
 
-        try FileManager.default.copyItem(at: fromUrl, to: toUrl)
+        try dependencies[singleton: .fileManager].copyItem(at: fromUrl, to: toUrl)
 
         return toUrl
     }
 
-    private class var videoTempPath: URL {
-        let videoDir = URL(fileURLWithPath: Singleton.appContext.temporaryDirectory).appendingPathComponent("video")
-        try? FileSystem.ensureDirectoryExists(at: videoDir.path)
+    private class func videoTempPath(using dependencies: Dependencies) -> URL {
+        let videoDir = URL(fileURLWithPath: dependencies[singleton: .fileManager].temporaryDirectory)
+            .appendingPathComponent("video")
+        try? dependencies[singleton: .fileManager].ensureDirectoryExists(at: videoDir.path)
         return videoDir
     }
 
@@ -767,7 +770,7 @@ public class SignalAttachment: Equatable {
         using dependencies: Dependencies
     ) -> (AnyPublisher<SignalAttachment, Error>, AVAssetExportSession?) {
         guard let url = dataSource.dataUrl else {
-            let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: type)
+            let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: type)
             attachment.error = .missingData
             return (
                 Just(attachment)
@@ -780,7 +783,7 @@ public class SignalAttachment: Equatable {
         let asset = AVAsset(url: url)
 
         guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetMediumQuality) else {
-            let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: type)
+            let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: type)
             attachment.error = .couldNotConvertToMpeg4
             return (
                 Just(attachment)
@@ -794,7 +797,8 @@ public class SignalAttachment: Equatable {
         exportSession.outputFileType = AVFileType.mp4
         exportSession.metadataItemFilter = AVMetadataItemFilter.forSharing()
 
-        let exportURL = videoTempPath.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+        let exportURL = videoTempPath(using: dependencies)
+            .appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
         exportSession.outputURL = exportURL
 
         let publisher = Deferred {
@@ -803,8 +807,8 @@ public class SignalAttachment: Equatable {
                     let baseFilename = dataSource.sourceFilename
                     let mp4Filename = baseFilename?.filenameWithoutExtension.appendingFileExtension("mp4")
                     
-                    guard let dataSource = DataSourcePath(fileUrl: exportURL, shouldDeleteOnDeinit: true) else {
-                        let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: type)
+                    guard let dataSource = DataSourcePath(fileUrl: exportURL, sourceFilename: baseFilename, shouldDeleteOnDeinit: true, using: dependencies) else {
+                        let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: type)
                         attachment.error = .couldNotConvertToMpeg4
                         resolver(Result.success(attachment))
                         return
@@ -868,12 +872,13 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    private class func audioAttachment(dataSource: (any DataSource)?, type: UTType) -> SignalAttachment {
+    private class func audioAttachment(dataSource: (any DataSource)?, type: UTType, using dependencies: Dependencies) -> SignalAttachment {
         return newAttachment(
             dataSource: dataSource,
             type: type,
             validTypes: UTType.supportedAudioTypes,
-            maxFileSize: MediaUtils.maxFileSizeAudio
+            maxFileSize: MediaUtils.maxFileSizeAudio,
+            using: dependencies
         )
     }
 
@@ -883,19 +888,20 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    private class func genericAttachment(dataSource: (any DataSource)?, type: UTType) -> SignalAttachment {
+    private class func genericAttachment(dataSource: (any DataSource)?, type: UTType, using dependencies: Dependencies) -> SignalAttachment {
         return newAttachment(
             dataSource: dataSource,
             type: type,
             validTypes: nil,
-            maxFileSize: MediaUtils.maxFileSizeGeneric
+            maxFileSize: MediaUtils.maxFileSizeGeneric,
+            using: dependencies
         )
     }
 
     // MARK: Voice Messages
 
-    public class func voiceMessageAttachment(dataSource: (any DataSource)?, type: UTType) -> SignalAttachment {
-        let attachment = audioAttachment(dataSource: dataSource, type: type)
+    public class func voiceMessageAttachment(dataSource: (any DataSource)?, type: UTType, using dependencies: Dependencies) -> SignalAttachment {
+        let attachment = audioAttachment(dataSource: dataSource, type: type, using: dependencies)
         attachment.isVoiceMessage = true
         return attachment
     }
@@ -906,31 +912,32 @@ public class SignalAttachment: Equatable {
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    public class func attachment(dataSource: (any DataSource)?, type: UTType) -> SignalAttachment {
-        return attachment(dataSource: dataSource, type: type, imageQuality: .original)
+    public class func attachment(dataSource: (any DataSource)?, type: UTType, using dependencies: Dependencies) -> SignalAttachment {
+        return attachment(dataSource: dataSource, type: type, imageQuality: .original, using: dependencies)
     }
 
     // Factory method for attachments of any kind.
     //
     // NOTE: The attachment returned by this method may not be valid.
     //       Check the attachment's error property.
-    public class func attachment(dataSource: (any DataSource)?, type: UTType, imageQuality: TSImageQuality) -> SignalAttachment {
+    public class func attachment(dataSource: (any DataSource)?, type: UTType, imageQuality: TSImageQuality, using dependencies: Dependencies) -> SignalAttachment {
         if UTType.supportedInputImageTypes.contains(type) {
-            return imageAttachment(dataSource: dataSource, type: type, imageQuality: imageQuality)
+            return imageAttachment(dataSource: dataSource, type: type, imageQuality: imageQuality, using: dependencies)
         } else if UTType.supportedVideoTypes.contains(type) {
-            return videoAttachment(dataSource: dataSource, type: type)
+            return videoAttachment(dataSource: dataSource, type: type, using: dependencies)
         } else if UTType.supportedAudioTypes.contains(type) {
-            return audioAttachment(dataSource: dataSource, type: type)
+            return audioAttachment(dataSource: dataSource, type: type, using: dependencies)
         }
         
-        return genericAttachment(dataSource: dataSource, type: type)
+        return genericAttachment(dataSource: dataSource, type: type, using: dependencies)
     }
 
-    public class func empty() -> SignalAttachment {
+    public class func empty(using dependencies: Dependencies) -> SignalAttachment {
         return SignalAttachment.attachment(
-            dataSource: DataSourceValue.empty,
+            dataSource: DataSourceValue.empty(using: dependencies),
             type: .content,
-            imageQuality: .original
+            imageQuality: .original,
+            using: dependencies
         )
     }
 
@@ -940,11 +947,11 @@ public class SignalAttachment: Equatable {
         dataSource: (any DataSource)?,
         type: UTType,
         validTypes: Set<UTType>?,
-        maxFileSize: UInt
+        maxFileSize: UInt,
+        using dependencies: Dependencies
     ) -> SignalAttachment {
-        assert(dataSource != nil)
         guard let dataSource = dataSource else {
-            let attachment = SignalAttachment(dataSource: DataSourceValue.empty, dataType: type)
+            let attachment = SignalAttachment(dataSource: DataSourceValue.empty(using: dependencies), dataType: type)
             attachment.error = .missingData
             return attachment
         }

@@ -21,24 +21,26 @@ extension MessageReceiver {
         else { throw MessageReceiverError.invalidMessage }
         
         let timestampMs: Int64 = (
-            message.sentTimestamp.map { Int64($0) } ??
-            SnodeAPI.currentOffsetTimestampMs()
+            message.sentTimestampMs.map { Int64($0) } ??
+            dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
         )
         
-        let wasRead: Bool = LibSession.timestampAlreadyRead(
-            threadId: threadId,
-            threadVariant: threadVariant,
-            timestampMs: (timestampMs * 1000),
-            userPublicKey: getUserHexEncodedPublicKey(db),
-            openGroup: nil,
-            using: dependencies
-        )
+        let wasRead: Bool = dependencies.mutate(cache: .libSession) { cache in
+            cache.timestampAlreadyRead(
+                threadId: threadId,
+                threadVariant: threadVariant,
+                timestampMs: (timestampMs * 1000),
+                userSessionId: dependencies[cache: .general].sessionId,
+                openGroup: nil
+            )
+        }
         let messageExpirationInfo: Message.MessageExpirationInfo = Message.getMessageExpirationInfo(
             threadVariant: threadVariant,
             wasRead: wasRead,
             serverExpirationTimestamp: serverExpirationTimestamp,
             expiresInSeconds: message.expiresInSeconds,
-            expiresStartedAtMs: message.expiresStartedAtMs
+            expiresStartedAtMs: message.expiresStartedAtMs,
+            using: dependencies
         )
         _ = try Interaction(
             serverHash: message.serverHash,
@@ -54,7 +56,8 @@ extension MessageReceiver {
             timestampMs: timestampMs,
             wasRead: wasRead,
             expiresInSeconds: messageExpirationInfo.expiresInSeconds,
-            expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs
+            expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs,
+            using: dependencies
         )
         .inserted(db)
         
@@ -65,7 +68,8 @@ extension MessageReceiver {
                 threadVariant: threadVariant,
                 serverHash: message.serverHash,
                 expiresInSeconds: messageExpirationInfo.expiresInSeconds,
-                expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs
+                expiresStartedAtMs: messageExpirationInfo.expiresStartedAtMs,
+                using: dependencies
             )
         }
     }

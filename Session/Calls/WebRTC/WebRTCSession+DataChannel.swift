@@ -3,6 +3,7 @@
 import Foundation
 import WebRTC
 import Foundation
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 extension WebRTCSession: RTCDataChannelDelegate {
@@ -13,15 +14,15 @@ extension WebRTCSession: RTCDataChannelDelegate {
         dataChannelConfiguration.isNegotiated = true
         dataChannelConfiguration.channelId = 548
         guard let dataChannel = peerConnection?.dataChannel(forLabel: "CONTROL", configuration: dataChannelConfiguration) else {
-            SNLog("[Calls] Couldn't create data channel.")
+            Log.error(.calls, "Couldn't create data channel.")
             return nil
         }
         return dataChannel
     }
     
-    public func sendJSON(_ json: JSON) {
+    public func sendJSON(_ json: [String: Any]) {
         if let dataChannel = self.dataChannel, let jsonAsData = try? JSONSerialization.data(withJSONObject: json, options: [ .fragmentsAllowed ]) {
-            SNLog("[Calls] Send json to data channel")
+            Log.info(.calls, "Send json to data channel")
             let dataBuffer = RTCDataBuffer(data: jsonAsData, isBinary: false)
             dataChannel.sendData(dataBuffer)
         }
@@ -29,7 +30,7 @@ extension WebRTCSession: RTCDataChannelDelegate {
     
     // MARK: Data channel delegate
     public func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
-        SNLog("[Calls] Data channel did change to \(dataChannel.readyState.rawValue)")
+        Log.info(.calls, "Data channel did change to \(dataChannel.readyState.rawValue)")
         if dataChannel.readyState == .open {
             delegate?.dataChannelDidOpen()
         }
@@ -37,8 +38,8 @@ extension WebRTCSession: RTCDataChannelDelegate {
     
     // stringlint:ignore_contents
     public func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-        if let json = try? JSONSerialization.jsonObject(with: buffer.data, options: [ .fragmentsAllowed ]) as? JSON {
-            SNLog("[Calls] Data channel did receive data: \(json)")
+        if let json: [String: Any] = try? JSONSerialization.jsonObject(with: buffer.data, options: [ .fragmentsAllowed ]) as? [String: Any] {
+            Log.info(.calls, "Data channel did receive data: \(json)")
             if let isRemoteVideoEnabled = json["video"] as? Bool {
                 delegate?.isRemoteVideoDidChange(isEnabled: isRemoteVideoEnabled)
             }

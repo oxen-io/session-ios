@@ -20,6 +20,6 @@ enum _019_ScheduleAppUpdateCheckJob: Migration {
             behaviour: .recurring
         ).migrationSafeInserted(db)
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

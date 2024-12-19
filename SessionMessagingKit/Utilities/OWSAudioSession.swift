@@ -23,7 +23,7 @@ public class AudioActivity: NSObject {
     // MARK: 
 
     override public var description: String {
-        return "<[AudioActivity] audioDescription: \"\(audioDescription)\">"
+        return "<[AudioActivity] audioDescription: \"\(audioDescription)\">" // stringlint:ignore
     }
 }
 

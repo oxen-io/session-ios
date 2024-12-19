@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "E28C8E17-1836-4FE3-88EB-38AE854F655B",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Session.xcodeproj",
+        "identifier" : "FDC4388D27B9FFC700C60D73",
+        "name" : "SessionMessagingKitTests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -3,21 +3,17 @@
 import Foundation
 import SessionUtilitiesKit
 
-@objc
 public protocol OWSProximityMonitoringManager: AnyObject {
     func add(lifetime: AnyObject)
     func remove(lifetime: AnyObject)
 }
 
-@objc
-public class OWSProximityMonitoringManagerImpl: NSObject, OWSProximityMonitoringManager {
+public class OWSProximityMonitoringManagerImpl: OWSProximityMonitoringManager {
     var lifetimes: [Weak<AnyObject>] = []
 
-    public override init() {
-        super.init()
-
-        Singleton.appReadiness.runNowOrWhenAppWillBecomeReady {
-            self.setup()
+    public init(using dependencies: Dependencies) {
+        dependencies[singleton: .appReadiness].runNowOrWhenAppWillBecomeReady { [weak self] in
+            self?.setup()
         }
     }
 

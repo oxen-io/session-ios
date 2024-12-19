@@ -1,7 +1,9 @@
+// Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+
 import Foundation
+import SessionUtilitiesKit
 
 public extension Data {
-
     init(from inputStream: InputStream) throws {
         self.init()
         inputStream.open()
@@ -19,5 +21,10 @@ public extension Data {
                 append(buffer, count: count)
             }
         }
+    }
+    
+    func decoded<T: Decodable>(as type: T.Type, using dependencies: Dependencies) throws -> T {
+        do { return try JSONDecoder(using: dependencies).decode(type, from: self) }
+        catch { throw NetworkError.parsingFailed }
     }
 }

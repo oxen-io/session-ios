@@ -23,25 +23,25 @@ extension SessionCallManager: CXProviderDelegate {
     
     public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         Log.assertOnMainThread()
-        Log.debug("[CallKit] Perform CXAnswerCallAction")
+        Log.debug(.calls, "Perform CXAnswerCallAction")
         
-        guard let call: SessionCall = (self.currentCall as? SessionCall) else { return action.fail() }
+        guard let call: SessionCall = (self.currentCall as? SessionCall) else {
+            Log.warn("[CallKit] No session call")
+            return action.fail()
+        }
         
-        if Singleton.hasAppContext && Singleton.appContext.isMainAppAndActive {
-            if answerCallAction() {
-                action.fulfill()
-            }
-            else {
-                action.fail()
-            }
+        call.answerCallAction = action
+        
+        if dependencies[singleton: .appContext].isMainAppAndActive {
+            self.answerCallAction()
         }
         else {
-            call.answerSessionCallInBackground(action: action)
+            call.answerSessionCallInBackground()
         }
     }
     
     public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-        Log.debug("[CallKit] Perform CXEndCallAction")
+        Log.debug(.calls, "Perform CXEndCallAction")
         Log.assertOnMainThread()
         
         if endCallAction() {
@@ -53,7 +53,7 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
-        Log.debug("[CallKit] Perform CXSetMutedCallAction, isMuted: \(action.isMuted)")
+        Log.debug(.calls, "Perform CXSetMutedCallAction, isMuted: \(action.isMuted)")
         Log.assertOnMainThread()
         
         if setMutedCallAction(isMuted: action.isMuted) {
@@ -65,15 +65,15 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
-        // TODO: set on hold
+        // TODO: [CALLS] set on hold
     }
     
     public func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
-        // TODO: handle timeout
+        // TODO: [CALLS] handle timeout
     }
     
     public func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
-        Log.debug("[CallKit] Audio session did activate.")
+        Log.debug(.calls, "Audio session did activate.")
         Log.assertOnMainThread()
         guard let call: SessionCall = (self.currentCall as? SessionCall) else { return }
         
@@ -82,7 +82,7 @@ extension SessionCallManager: CXProviderDelegate {
     }
     
     public func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
-        Log.debug("[CallKit] Audio session did deactivate.")
+        Log.debug(.calls, "Audio session did deactivate.")
         Log.assertOnMainThread()
         guard let call: SessionCall = (self.currentCall as? SessionCall) else { return }
         

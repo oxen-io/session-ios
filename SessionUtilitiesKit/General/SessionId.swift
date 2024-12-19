@@ -4,8 +4,9 @@ import Foundation
 
 public struct SessionId: Equatable, Hashable, CustomStringConvertible {
     public static let byteCount: Int = 33
+    public static let invalid: SessionId = SessionId(.standard, publicKey: [])
     
-    public enum Prefix: String, CaseIterable {
+    public enum Prefix: String, CaseIterable, Hashable {
         case standard = "05"    // Used for identified users, open groups, etc.
         case blinded15 = "15"   // Used for authentication and participants in open groups with blinding enabled
         case blinded25 = "25"   // Used for authentication and participants in open groups with blinding enabled
@@ -47,7 +48,7 @@ public struct SessionId: Equatable, Hashable, CustomStringConvertible {
     
     public let prefix: Prefix
     public let publicKey: [UInt8]
-    private let publicKeyString: String
+    public let publicKeyString: String
     
     public var hexString: String {
         return prefix.rawValue + publicKeyString

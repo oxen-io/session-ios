@@ -2,29 +2,12 @@
 
 import Foundation
 import GRDB
+import SessionSnodeKit
 import SessionUtilitiesKit
 
-// MARK: - OpenGroupAPITarget
+// MARK: Request - OpenGroupAPI
 
-internal extension Network {
-    struct OpenGroupAPITarget<E: EndpointType>: ServerRequestTarget {
-        typealias Endpoint = E
-        
-        public let server: String
-        public let endpoint: Endpoint
-        let queryParameters: [HTTPQueryParam: String]
-        public let serverPublicKey: String
-        public let forceBlinded: Bool
-        
-        public var url: URL? { URL(string: "\(server)\(urlPathAndParamsString)") }
-        public var urlPathAndParamsString: String { pathFor(endpoint: endpoint, queryParams: queryParameters) }
-        public var x25519PublicKey: String { serverPublicKey }
-    }
-}
-
-// MARK: Request - OpenGroupAPITarget
-
-public extension Request {
+public extension Request where Endpoint == OpenGroupAPI.Endpoint {
     init(
         _ db: Database,
         method: HTTPMethod = .get,
@@ -32,8 +15,7 @@ public extension Request {
         endpoint: Endpoint,
         queryParameters: [HTTPQueryParam: String] = [:],
         headers: [HTTPHeader: String] = [:],
-        body: T? = nil,
-        forceBlinded: Bool = false
+        body: T? = nil
     ) throws {
         let maybePublicKey: String? = try? OpenGroup
             .select(.publicKey)
@@ -43,17 +25,15 @@ public extension Request {
 
         guard let publicKey: String = maybePublicKey else { throw OpenGroupAPIError.noPublicKey }
         
-        self = Request(
-            method: method,
+        self = try Request(
             endpoint: endpoint,
-            target: Network.OpenGroupAPITarget(
+            destination: try .server(
+                method: method,
                 server: server,
-                endpoint: endpoint,
                 queryParameters: queryParameters,
-                serverPublicKey: publicKey,
-                forceBlinded: forceBlinded
+                headers: headers,
+                x25519PublicKey: publicKey
             ),
-            headers: headers,
             body: body
         )
     }

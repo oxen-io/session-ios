@@ -8,13 +8,12 @@ import AVFoundation
 
 struct LoadAccountScreen: View {
     @EnvironmentObject var host: HostWrapper
+    private let dependencies: Dependencies
     
     @State var tabIndex = 0
     @State private var recoveryPassword: String = ""
     @State private var hexEncodedSeed: String = ""
     @State private var errorString: String? = nil
-    
-    private let dependencies: Dependencies
     
     public init(using dependencies: Dependencies) {
         self.dependencies = dependencies
@@ -46,7 +45,8 @@ struct LoadAccountScreen: View {
                     ScanQRCodeScreen(
                         $hexEncodedSeed,
                         error: $errorString,
-                        continueAction: continueWithhexEncodedSeed
+                        continueAction: continueWithHexEncodedSeed,
+                        using: dependencies
                     )
                 }
             }
@@ -54,22 +54,18 @@ struct LoadAccountScreen: View {
     }
     
     private func continueWithSeed(seed: Data, from source: Onboarding.SeedSource, onSuccess: (() -> ())?, onError: (() -> ())?) {
-        if (seed.count != 16) {
+        do {
+            guard seed.count == 16 else { throw Mnemonic.DecodingError.generic }
+            
+            try dependencies.mutate(cache: .onboarding) { try $0.setSeedData(seed) }
+        }
+        catch {
             errorString =  source.genericErrorMessage
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 onError?()
             }
             return
         }
-        let (ed25519KeyPair, x25519KeyPair) = try! Identity.generate(from: seed)
-        
-        Onboarding.Flow.recover
-            .preregister(
-                with: seed,
-                ed25519KeyPair: ed25519KeyPair,
-                x25519KeyPair: x25519KeyPair,
-                using: dependencies
-            )
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             onSuccess?()
@@ -77,40 +73,29 @@ struct LoadAccountScreen: View {
         
         // Otherwise continue on to request push notifications permissions
         let viewController: SessionHostingViewController = SessionHostingViewController(
-            rootView: PNModeScreen(flow: .recover, using: dependencies)
+            rootView: PNModeScreen(using: dependencies)
         )
-        viewController.setUpNavBarSessionIcon()
-        viewController.setUpClearDataBackButton(flow: .recover)
-        self.host.controller?.navigationController?.setViewControllers([viewController], animated: true)
+        viewController.setUpNavBarSessionIcon(using: dependencies)
+        self.host.controller?.navigationController?.pushViewController(viewController, animated: true)
     }
     
-    func continueWithhexEncodedSeed(onSuccess: (() -> ())?, onError: (() -> ())?) {
+    func continueWithHexEncodedSeed(onSuccess: (() -> ())?, onError: (() -> ())?) {
         let seed = Data(hex: hexEncodedSeed)
         continueWithSeed(seed: seed, from: .qrCode, onSuccess: onSuccess, onError: onError)
     }
     
     func continueWithMnemonic() {
-        let mnemonic = recoveryPassword.lowercased()
-        let hexEncodedSeed: String
         do {
-            hexEncodedSeed = try Mnemonic.decode(mnemonic: mnemonic)
+            let hexEncodedSeed: String = try Mnemonic.decode(mnemonic: recoveryPassword.lowercased())
+            let seed: Data = Data(hex: hexEncodedSeed)
+            continueWithSeed(seed: seed, from: .mnemonic, onSuccess: nil, onError: nil)
         } catch {
-            if let decodingError = error as? Mnemonic.DecodingError {
-                switch decodingError {
-                    case .inputTooShort:
-                        errorString = "recoveryPasswordErrorMessageShort".localized()
-                    case .invalidWord:
-                        errorString = "recoveryPasswordErrorMessageIncorrect".localized()
-                    default:
-                        errorString = "recoveryPasswordErrorMessageGeneric".localized()
-                }
-            } else {
-                errorString = "recoveryPasswordErrorMessageGeneric".localized()
+            switch error as? Mnemonic.DecodingError {
+                case .some(.inputTooShort): errorString = "recoveryPasswordErrorMessageShort".localized()
+                case .some(.invalidWord): errorString = "recoveryPasswordErrorMessageIncorrect".localized()
+                default: errorString = "recoveryPasswordErrorMessageGeneric".localized()
             }
-            return
         }
-        let seed = Data(hex: hexEncodedSeed)
-        continueWithSeed(seed: seed, from: .mnemonic, onSuccess: nil, onError: nil)
     }
 }
 
@@ -220,6 +205,6 @@ struct EnterRecoveryPasswordScreen: View{
 
 struct LoadAccountView_Previews: PreviewProvider {
     static var previews: some View {
-        LoadAccountScreen(using: Dependencies())
+        LoadAccountScreen(using: Dependencies.createEmpty())
     }
 }

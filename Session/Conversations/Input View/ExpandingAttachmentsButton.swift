@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionUIKit
+import SessionUtilitiesKit
 
 final class ExpandingAttachmentsButton: UIView, InputViewButtonDelegate {
     private weak var delegate: ExpandingAttachmentsButtonDelegate?
@@ -146,6 +147,10 @@ final class ExpandingAttachmentsButton: UIView, InputViewButtonDelegate {
         if inputViewButton == cameraButton { delegate?.handleCameraButtonTapped(); isExpanded = false }
         if inputViewButton == mainButton { isExpanded = !isExpanded }
     }
+    
+    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?) {}
+    func handleInputViewButtonLongPressMoved(_ inputViewButton: InputViewButton, with touch: UITouch?) {}
+    func handleInputViewButtonLongPressEnded(_ inputViewButton: InputViewButton, with touch: UITouch?) {}
     
     // MARK: Convenience
     private func container(for button: InputViewButton) -> UIView {

@@ -31,6 +31,28 @@ public class ModalActivityIndicatorViewController: OWSViewController {
         return result
     }()
     
+    private lazy var stackView: UIStackView = {
+        let result: UIStackView = UIStackView()
+        result.axis = .vertical
+        result.spacing = Values.largeSpacing
+        result.alignment = .center
+        
+        return result
+    }()
+    
+    private lazy var messageLabel: UILabel = {
+        let result: UILabel = UILabel()
+        result.font = .systemFont(ofSize: Values.mediumFontSize)
+        result.text = message
+        result.textAlignment = .center
+        result.themeTextColor = .textPrimary
+        result.lineBreakMode = .byWordWrapping
+        result.numberOfLines = 0
+        result.isHidden = (message == nil)
+        
+        return result
+    }()
+    
     private lazy var spinner: NVActivityIndicatorView = {
         let result: NVActivityIndicatorView = NVActivityIndicatorView(
             frame: CGRect.zero,
@@ -120,31 +142,15 @@ public class ModalActivityIndicatorViewController: OWSViewController {
         self.view.themeBackgroundColor = .clear
         
         self.view.addSubview(dimmingView)
+        self.view.addSubview(stackView)
         dimmingView.pin(to: self.view)
+        stackView.center(in: self.view)
         
-        if let message = message {
-            let messageLabel: UILabel = UILabel()
-            messageLabel.font = .systemFont(ofSize: Values.mediumFontSize)
-            messageLabel.text = message
-            messageLabel.themeTextColor = .textPrimary
-            messageLabel.numberOfLines = 0
-            messageLabel.textAlignment = .center
-            messageLabel.lineBreakMode = .byWordWrapping
-            messageLabel.set(.width, to: UIScreen.main.bounds.width - 2 * Values.mediumSpacing)
-            
-            let stackView = UIStackView(arrangedSubviews: [ messageLabel, spinner ])
-            stackView.axis = .vertical
-            stackView.spacing = Values.largeSpacing
-            stackView.alignment = .center
-            self.view.addSubview(stackView)
-            
-            stackView.center(in: self.view)
-        }
-        else {
-            self.view.addSubview(spinner)
-            spinner.center(in: self.view)
-        }
-
+        stackView.addArrangedSubview(spinner)
+        stackView.addArrangedSubview(messageLabel)
+        
+        messageLabel.set(.width, to: .width, of: stackView, withOffset: -(2 * Values.mediumSpacing))
+        
         if canCancel {
             let cancelButton: SessionButton = SessionButton(style: .destructive, size: .large)
             cancelButton.setTitle("cancel".localized(), for: .normal)
@@ -189,5 +195,10 @@ public class ModalActivityIndicatorViewController: OWSViewController {
         wasCancelled = true
 
         dismiss { }
+    }
+    
+    public func setMessage(_ message: String?) {
+        messageLabel.text = message
+        messageLabel.isHidden = (message == nil)
     }
 }

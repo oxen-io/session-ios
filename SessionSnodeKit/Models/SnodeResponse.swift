@@ -4,10 +4,17 @@ import Foundation
 
 public class SnodeResponse: Codable {
     private enum CodingKeys: String, CodingKey {
-        case hardFork = "hf"
+        case hardForkVersion = "hf"
         case timeOffset = "t"
     }
     
-    internal let hardFork: [Int]
+    internal let hardForkVersion: [Int]
     internal let timeOffset: Int64
+    
+    // MARK: - Initialization
+    
+    internal init(hardForkVersion: [Int], timeOffset: Int64) {
+        self.hardForkVersion = hardForkVersion
+        self.timeOffset = timeOffset
+    }
 }

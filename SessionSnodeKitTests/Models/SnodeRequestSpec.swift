@@ -13,7 +13,7 @@ class SnodeRequestSpec: QuickSpec {
     override class func spec() {
         // MARK: Configuration
         
-        @TestState var dependencies: Dependencies! = Dependencies()
+        @TestState var dependencies: TestDependencies! = TestDependencies()
         @TestState var batchRequest: Network.BatchRequest!
         
         // MARK: - a SnodeRequest
@@ -25,22 +25,22 @@ class SnodeRequestSpec: QuickSpec {
                     batchRequest = Network.BatchRequest(
                         requestsKey: .requests,
                         requests: [
-                            Network.PreparedRequest<NoResponse>(
+                            try! Network.PreparedRequest<NoResponse>(
                                 request: Request<SnodeRequest<TestType>, TestEndpoint>(
-                                    method: .post,
-                                    server: "testServer",
                                     endpoint: .endpoint,
-                                    queryParameters: [:],
-                                    headers: [:],
-                                    x25519PublicKey: "05\(TestConstants.publicKey)",
+                                    destination: try! .server(
+                                        method: .post,
+                                        server: "testServer",
+                                        x25519PublicKey: "05\(TestConstants.publicKey)"
+                                    ),
                                     body: SnodeRequest<TestType>(
                                         endpoint: .sendMessage,
                                         body: TestType(stringValue: "testValue")
                                     )
                                 ),
-                                urlRequest: URLRequest(url: URL(string: "https://www.oxen.io")!),
                                 responseType: NoResponse.self,
-                                requestTimeout: 0
+                                requestTimeout: 0,
+                                using: dependencies
                             )
                         ]
                     )

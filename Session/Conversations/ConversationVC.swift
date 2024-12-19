@@ -4,6 +4,7 @@ import UIKit
 import AVKit
 import GRDB
 import DifferenceKit
+import Lucide
 import SessionUIKit
 import SessionMessagingKit
 import SessionUtilitiesKit
@@ -74,8 +75,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }
     
     override var inputAccessoryView: UIView? {
-        return (
-            (viewModel.threadData.canWrite && isShowingSearchUI) ?
+        return (viewModel.threadData.threadCanWrite == true && isShowingSearchUI ?
             searchController.resultsBar :
             snInputView
         )
@@ -98,7 +98,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         return margin <= ConversationVC.scrollToBottomMargin
     }
 
-    lazy var mnemonic: String = { ((try? Identity.mnemonic()) ?? "") }()
+    lazy var mnemonic: String = { ((try? Identity.mnemonic(using: viewModel.dependencies)) ?? "") }()
 
     // FIXME: Would be good to create a Swift-based cache and replace this
     lazy var mediaCache: NSCache<NSString, AnyObject> = {
@@ -129,10 +129,9 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     var scrollButtonBottomConstraint: NSLayoutConstraint?
     var scrollButtonMessageRequestsBottomConstraint: NSLayoutConstraint?
     var messageRequestsViewBotomConstraint: NSLayoutConstraint?
-    var emptyStateLabelTopConstraint: NSLayoutConstraint?
     
     lazy var titleView: ConversationTitleView = {
-        let result: ConversationTitleView = ConversationTitleView()
+        let result: ConversationTitleView = ConversationTitleView(using: viewModel.dependencies)
         let tapGestureRecognizer = UITapGestureRecognizer(
             target: self,
             action: #selector(handleTitleViewTapped)
@@ -151,7 +150,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         result.contentInset = UIEdgeInsets(
             top: 0,
             leading: 0,
-            bottom: (viewModel.threadData.canWrite ?
+            bottom: (viewModel.threadData.threadCanWrite == true ?
                 Values.mediumSpacing :
                 (Values.mediumSpacing + (UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? 0))
             ),
@@ -175,7 +174,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
 
     lazy var snInputView: InputView = InputView(
         threadVariant: self.viewModel.initialThreadVariant,
-        delegate: self
+        delegate: self,
+        using: self.viewModel.dependencies
     )
 
     lazy var unreadCountView: UIView = {
@@ -201,7 +201,12 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }()
     
     lazy var stateStackView: UIStackView = {
-        let result: UIStackView = UIStackView(arrangedSubviews: [ outdatedClientBanner, emptyStateLabelContainer ])
+        let result: UIStackView = UIStackView(arrangedSubviews: [
+            outdatedClientBanner,
+            legacyGroupsBanner,
+            emptyStatePaddingView,
+            emptyStateLabelContainer
+        ])
         result.axis = .vertical
         result.spacing = Values.smallSpacing
         result.alignment = .fill
@@ -210,39 +215,54 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }()
     
     lazy var outdatedClientBanner: InfoBanner = {
-        let info: InfoBanner.Info = InfoBanner.Info(
-            message: "disappearingMessagesLegacy"
-                .put(key: "name", value: self.viewModel.threadData.displayName)
-                .localized(),
-            backgroundColor: .primary,
-            messageFont: .systemFont(ofSize: Values.verySmallFontSize),
-            messageTintColor: .messageBubble_outgoingText,
-            messageLabelAccessibilityLabel: "Outdated client banner text",
-            height: 40
+        let result: InfoBanner = InfoBanner(
+            info: InfoBanner.Info(
+                font: .systemFont(ofSize: Values.verySmallFontSize),
+                message: "disappearingMessagesLegacy"
+                    .put(key: "name", value: self.viewModel.threadData.displayName)
+                    .localizedFormatted(baseFont: .systemFont(ofSize: Values.verySmallFontSize)),
+                icon: .close,
+                tintColor: .messageBubble_outgoingText,
+                backgroundColor: .primary,
+                accessibility: Accessibility(label: "Outdated client banner"),
+                labelAccessibility: Accessibility(label: "Outdated client banner text"),
+                height: 40,
+                onTap: { [weak self] in self?.removeOutdatedClientBanner() }
+            )
         )
-        let result: InfoBanner = InfoBanner(info: info, dismiss: { [weak self] in
-            self?.removeOutdatedClientBanner()
-        })
-        result.accessibilityLabel = "Outdated client banner"
-        result.isAccessibilityElement = true
         
         return result
     }()
 
-    lazy var blockedBanner: InfoBanner = {
-        let info: InfoBanner.Info = InfoBanner.Info(
-            message: self.viewModel.blockedBannerMessage,
-            backgroundColor: .danger,
-            messageFont: .boldSystemFont(ofSize: Values.smallFontSize),
-            messageTintColor: .textPrimary,
-            messageLabelAccessibilityLabel: "Blocked banner text",
-            height: 54
+    lazy var legacyGroupsBanner: InfoBanner = {
+        // FIXME: String should be updated in Crowdin to include the {icon}
+        let result: InfoBanner = InfoBanner(
+            info: InfoBanner.Info(
+                font: .systemFont(ofSize: Values.miniFontSize),
+                message: "groupLegacyBanner"
+                    .put(key: "date", value: Features.legacyGroupDepricationDate.formattedForBanner)
+                    .localizedFormatted(baseFont: .systemFont(ofSize: Values.miniFontSize))
+                    .appending(string: " ")     // Designs have a space before the icon
+                    .appending(
+                        Lucide.Icon.squareArrowUpRight.attributedString(for: .systemFont(ofSize: Values.miniFontSize))
+                    )
+                    .appending(string: " "),    // In case it's a RTL font
+                icon: .none,
+                tintColor: .messageBubble_outgoingText,
+                backgroundColor: .primary,
+                accessibility: Accessibility(label: "Legacy group banner"),
+                height: nil,
+                onTap: { [weak self] in self?.openUrl(Features.legacyGroupDepricationUrl) }
+            )
         )
-        let result: InfoBanner = InfoBanner(info: info)
-        result.accessibilityLabel = "Blocked banner"
-        result.isAccessibilityElement = true
-        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(unblock))
-        result.addGestureRecognizer(tapGestureRecognizer)
+        result.isHidden = (self.viewModel.threadData.threadVariant != .legacyGroup)
+        
+        return result
+    }()
+    
+    private lazy var emptyStatePaddingView: UIView = {
+        let result: UIView = UIView()
+        result.set(.height, to: Values.largeSpacing)
         
         return result
     }()
@@ -257,20 +277,12 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     }()
     
     private lazy var emptyStateLabel: UILabel = {
-        let text: String = emptyStateText(for: viewModel.threadData)
         let result: UILabel = UILabel()
         result.isAccessibilityElement = true
-        result.accessibilityIdentifier = "Empty state label"
-        result.accessibilityLabel = "Empty state label"
+        result.accessibilityIdentifier = "Control message"
         result.translatesAutoresizingMaskIntoConstraints = false
         result.font = .systemFont(ofSize: Values.verySmallFontSize)
-        result.attributedText = NSAttributedString(string: text)
-            .adding(
-                attributes: [.font: UIFont.boldSystemFont(ofSize: Values.verySmallFontSize)],
-                range: text.range(of: self.viewModel.threadData.displayName)
-                    .map { NSRange($0, in: text) }
-                    .defaulting(to: NSRange(location: 0, length: 0))
-            )
+        result.attributedText = viewModel.emptyStateText(for: viewModel.threadData).formatted(in: result)
         result.themeTextColor = .textSecondary
         result.textAlignment = .center
         result.lineBreakMode = .byWordWrapping
@@ -311,9 +323,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     
     lazy var messageRequestFooterView: MessageRequestFooterView = MessageRequestFooterView(
         threadVariant: self.viewModel.threadData.threadVariant,
-        canWrite: self.viewModel.threadData.canWrite,
+        canWrite: (self.viewModel.threadData.threadCanWrite == true),
         threadIsMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true),
         threadRequiresApproval: (self.viewModel.threadData.threadRequiresApproval == true),
+        closedGroupAdminProfile: self.viewModel.threadData.closedGroupAdminProfile,
         onBlock: { [weak self] in self?.blockMessageRequest() },
         onAccept: { [weak self] in self?.acceptMessageRequest() },
         onDecline: { [weak self] in self?.declineMessageRequest() }
@@ -341,9 +354,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         focusedInteractionInfo: Interaction.TimestampInfo? = nil,
         using dependencies: Dependencies
     ) {
-        self.viewModel = ConversationViewModel(threadId: threadId, threadVariant: threadVariant, focusedInteractionInfo: focusedInteractionInfo, using: dependencies)
+        self.viewModel = ConversationViewModel(
+            threadId: threadId,
+            threadVariant: threadVariant,
+            focusedInteractionInfo: focusedInteractionInfo,
+            using: dependencies
+        )
         
-        Storage.shared.addObserver(viewModel.pagedDataObserver)
+        dependencies[singleton: .storage].addObserver(viewModel.pagedDataObserver)
         
         super.init(nibName: nil, bundle: nil)
     }
@@ -375,7 +393,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         )
         titleView.initialSetup(
             with: self.viewModel.initialThreadVariant,
-            isNoteToSelf: self.viewModel.threadData.threadIsNoteToSelf
+            isNoteToSelf: self.viewModel.threadData.threadIsNoteToSelf,
+            isMessageRequest: (self.viewModel.threadData.threadIsMessageRequest == true)
         )
         
         // Constraints
@@ -390,7 +409,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         stateStackView.pin(.top, to: .top, of: view, withInset: 0)
         stateStackView.pin(.leading, to: .leading, of: view, withInset: 0)
         stateStackView.pin(.trailing, to: .trailing, of: view, withInset: 0)
-        self.emptyStateLabelTopConstraint = emptyStateLabel.pin(.top, to: .top, of: emptyStateLabelContainer, withInset: Values.largeSpacing)
         
         scrollButton.pin(.trailing, to: .trailing, of: view, withInset: -20)
         messageRequestFooterView.pin(.leading, to: .leading, of: view, withInset: 16)
@@ -470,16 +488,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        /// When the `ConversationVC` is on the screen we want to store it so we can avoid sending notification without accessing the
-        /// main thread (we don't currently care if it's still in the nav stack though - so if a user is on a conversation settings screen this should
-        /// get cleared within `viewWillDisappear`)
-        ///
-        /// **Note:** We do this on an async queue because `Atomic<T>` can block if something else is mutating it and we want to avoid
-        /// the risk of blocking the conversation transition
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            SessionApp.currentlyOpenConversationViewController.mutate { $0 = self }
-        }
-        
         if delayFirstResponder || isShowingSearchUI {
             delayFirstResponder = false
             
@@ -510,16 +518,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
-        /// When the `ConversationVC` is on the screen we want to store it so we can avoid sending notification without accessing the
-        /// main thread (we don't currently care if it's still in the nav stack though - so if a user leaves a conversation settings screen we clear
-        /// it, and if a user moves to a different `ConversationVC` this will get updated to that one within `viewDidAppear`)
-        ///
-        /// **Note:** We do this on an async queue because `Atomic<T>` can block if something else is mutating it and we want to avoid
-        /// the risk of blocking the conversation transition
-        DispatchQueue.global(qos: .userInitiated).async {
-            SessionApp.currentlyOpenConversationViewController.mutate { $0 = nil }
-        }
-        
         viewIsDisappearing = true
         lastPresentedViewController = self.presentedViewController
         
@@ -539,9 +537,9 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         hasReloadedThreadDataAfterDisappearance = false
         viewIsDisappearing = false
         
-        // If the user just created this thread but didn't send a message then we want to delete the
-        // "shadow" thread since it's not actually in use (this is to prevent it from taking up database
-        // space or unintentionally getting synced via libSession in the future)
+        /// If the user just created this thread but didn't send a message or the conversation is marked as hidden then we want to delete the
+        /// "shadow" thread since it's not actually in use (this is to prevent it from taking up database space or unintentionally getting synced
+        /// via `libSession` in the future)
         let threadId: String = viewModel.threadData.threadId
         
         if
@@ -550,15 +548,9 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                 self.navigationController?.viewControllers.contains(self) == false
             ) &&
             viewModel.threadData.threadIsNoteToSelf == false &&
-            viewModel.threadData.threadShouldBeVisible == false &&
-            !LibSession.conversationInConfig(
-                threadId: threadId,
-                threadVariant: viewModel.threadData.threadVariant,
-                visibleOnly: false,
-                using: viewModel.dependencies
-            )
+            viewModel.threadData.threadIsDraft == true
         {
-            Storage.shared.writeAsync { db in
+            viewModel.dependencies[singleton: .storage].writeAsync { db in
                 _ = try SessionThread   // Intentionally use `deleteAll` here instead of `deleteOrLeave`
                     .filter(id: threadId)
                     .deleteAll(db)
@@ -593,10 +585,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     private func startObservingChanges(didReturnFromBackground: Bool = false) {
         guard dataChangeObservable == nil else { return }
         
-        dataChangeObservable = Storage.shared.start(
+        dataChangeObservable = viewModel.dependencies[singleton: .storage].start(
             viewModel.observableThreadData,
             onError:  { _ in },
-            onChange: { [weak self] maybeThreadData in
+            onChange: { [weak self, dependencies = viewModel.dependencies] maybeThreadData in
                 guard let threadData: SessionThreadViewModel = maybeThreadData else {
                     // If the thread data is null and the id was blinded then we just unblinded the thread
                     // and need to swap over to the new one
@@ -606,7 +598,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                             (try? SessionId.Prefix(from: sessionId)) == .blinded15 ||
                             (try? SessionId.Prefix(from: sessionId)) == .blinded25
                         ),
-                        let blindedLookup: BlindedIdLookup = Storage.shared.read({ db in
+                        let blindedLookup: BlindedIdLookup = dependencies[singleton: .storage].read({ db in
                             try BlindedIdLookup
                                 .filter(id: sessionId)
                                 .fetchOne(db)
@@ -630,14 +622,14 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     
                     // Stop observing changes
                     self?.stopObservingChanges()
-                    Storage.shared.removeObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].removeObserver(self?.viewModel.pagedDataObserver)
                     
                     // Swap the observing to the updated thread
                     let newestVisibleMessageId: Int64? = self?.fullyVisibleCellViewModels()?.last?.id
                     self?.viewModel.swapToThread(updatedThreadId: unblindedId, focussedMessageId: newestVisibleMessageId)
                     
                     // Start observing changes again
-                    Storage.shared.addObserver(self?.viewModel.pagedDataObserver)
+                    dependencies[singleton: .storage].addObserver(self?.viewModel.pagedDataObserver)
                     self?.startObservingChanges()
                     return
                 }
@@ -668,27 +660,6 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
     func stopObservingChanges() {
         self.dataChangeObservable = nil
         self.viewModel.onInteractionChange = nil
-    }
-    
-    private func emptyStateText(for threadData: SessionThreadViewModel) -> String {
-        switch (threadData.threadIsNoteToSelf, threadData.canWrite) {
-            case (true, _):
-                return "noteToSelfEmpty".localized()
-            case (_, false):
-                if threadData.profile?.blocksCommunityMessageRequests == true {
-                    return "messageRequestsTurnedOff"
-                        .put(key: "name", value: threadData.displayName)
-                        .localized()
-                } else {
-                    return "conversationsEmpty"
-                        .put(key: "conversation_name", value: threadData.displayName)
-                        .localized()
-                }
-            default:
-                return "groupNoMessages"
-                    .put(key: "group_name", value: threadData.displayName)
-                    .localized()
-        }
     }
     
     private func handleThreadUpdates(_ updatedThreadData: SessionThreadViewModel, initialLoad: Bool = false) {
@@ -725,6 +696,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             titleView.update(
                 with: updatedThreadData.displayName,
                 isNoteToSelf: updatedThreadData.threadIsNoteToSelf,
+                isMessageRequest: (updatedThreadData.threadIsMessageRequest == true),
                 threadVariant: updatedThreadData.threadVariant,
                 mutedUntilTimestamp: updatedThreadData.threadMutedUntilTimestamp,
                 onlyNotifyForMentions: (updatedThreadData.threadOnlyNotifyForMentions == true),
@@ -733,8 +705,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             )
             
             // Update the empty state
-            let text: String = emptyStateText(for: updatedThreadData)
-            emptyStateLabel.attributedText = text.formatted(in: emptyStateLabel)
+            emptyStateLabel.attributedText = viewModel.emptyStateText(for: updatedThreadData).formatted(in: emptyStateLabel)
         }
         
         if
@@ -756,12 +727,13 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         
         if
             initialLoad ||
-            viewModel.threadData.canWrite != updatedThreadData.canWrite ||
+            viewModel.threadData.threadCanWrite != updatedThreadData.threadCanWrite ||
             viewModel.threadData.threadVariant != updatedThreadData.threadVariant ||
             viewModel.threadData.threadIsMessageRequest != updatedThreadData.threadIsMessageRequest ||
-            viewModel.threadData.threadRequiresApproval != updatedThreadData.threadRequiresApproval
+            viewModel.threadData.threadRequiresApproval != updatedThreadData.threadRequiresApproval ||
+            viewModel.threadData.closedGroupAdminProfile != updatedThreadData.closedGroupAdminProfile
         {
-            if updatedThreadData.canWrite {
+            if updatedThreadData.threadCanWrite == true {
                 self.showInputAccessoryView()
             } else {
                 self.hideInputAccessoryView()
@@ -769,12 +741,13 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
            
             let messageRequestsViewWasVisible: Bool = (self.messageRequestFooterView.isHidden == false)
             
-            UIView.animate(withDuration: 0.3) { [weak self] in
+            UIView.animate(withDuration: 0.3) { [weak self, dependencies = viewModel.dependencies] in
                 self?.messageRequestFooterView.update(
                     threadVariant: updatedThreadData.threadVariant,
-                    canWrite: updatedThreadData.canWrite,
+                    canWrite: (updatedThreadData.threadCanWrite == true),
                     threadIsMessageRequest: (updatedThreadData.threadIsMessageRequest == true),
-                    threadRequiresApproval: (updatedThreadData.threadRequiresApproval == true)
+                    threadRequiresApproval: (updatedThreadData.threadRequiresApproval == true),
+                    closedGroupAdminProfile: updatedThreadData.closedGroupAdminProfile
                 )
                 self?.scrollButtonMessageRequestsBottomConstraint?.isActive = (
                     self?.messageRequestFooterView.isHidden == false
@@ -809,19 +782,20 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
             )
         }
         
-        if initialLoad || viewModel.threadData.threadIsBlocked != updatedThreadData.threadIsBlocked {
-            addOrRemoveBlockedBanner(threadIsBlocked: (updatedThreadData.threadIsBlocked == true))
+        if
+            initialLoad ||
+            viewModel.threadData.threadVariant != updatedThreadData.threadVariant ||
+            viewModel.threadData.currentUserIsClosedGroupAdmin != updatedThreadData.currentUserIsClosedGroupAdmin
+        {
+            legacyGroupsBanner.isHidden = (updatedThreadData.threadVariant != .legacyGroup)
         }
         
         if initialLoad || viewModel.threadData.threadUnreadCount != updatedThreadData.threadUnreadCount {
             updateUnreadCountView(unreadCount: updatedThreadData.threadUnreadCount)
         }
         
-        if initialLoad || viewModel.threadData.enabledMessageTypes != updatedThreadData.enabledMessageTypes {
-            snInputView.setEnabledMessageTypes(
-                updatedThreadData.enabledMessageTypes,
-                message: nil
-            )
+        if initialLoad || viewModel.threadData.messageInputState != updatedThreadData.messageInputState {
+            snInputView.setMessageInputState(updatedThreadData.messageInputState)
         }
         
         // Only set the draft content on the initial load
@@ -832,8 +806,9 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         // Now we have done all the needed diffs update the viewModel with the latest data
         self.viewModel.updateThreadData(updatedThreadData)
         
-        /// **Note:** This needs to happen **after** we have update the viewModel's thread data
-        if initialLoad || viewModel.threadData.currentUserIsClosedGroupMember != updatedThreadData.currentUserIsClosedGroupMember {
+        /// **Note:** This needs to happen **after** we have update the viewModel's thread data (otherwise the `inputAccessoryView`
+        /// won't be generated correctly)
+        if initialLoad || viewModel.threadData.threadCanWrite != updatedThreadData.threadCanWrite {
             if !self.isFirstResponder {
                 self.becomeFirstResponder()
             }
@@ -1324,9 +1299,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     profilePictureView.update(
                         publicKey: threadData.threadId,  // Contact thread uses the contactId
                         threadVariant: threadData.threadVariant,
-                        customImageData: nil,
+                        displayPictureFilename: nil,
                         profile: threadData.profile,
-                        additionalProfile: nil
+                        additionalProfile: nil,
+                        using: viewModel.dependencies
                     )
                     profilePictureView.customWidth = (44 - 16)   // Width of the standard back button
 
@@ -1462,7 +1438,10 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         // Do not show the banner until the new disappearing messages is enabled
         guard currentDisappearingMessagesConfiguration?.isEnabled == true else {
             self.outdatedClientBanner.isHidden = true
-            self.emptyStateLabelTopConstraint?.constant = Values.largeSpacing
+            self.emptyStatePaddingView.isHidden = (stateStackView
+                .arrangedSubviews
+                .filter { !$0.isHidden }
+                .count > 1)
             return
         }
         
@@ -1475,7 +1454,11 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                 completion: { [weak self] _ in
                     self?.outdatedClientBanner.isHidden = true
                     self?.outdatedClientBanner.alpha = 1
-                    self?.emptyStateLabelTopConstraint?.constant = Values.largeSpacing
+                    self?.emptyStatePaddingView.isHidden = ((self?.stateStackView
+                        .arrangedSubviews
+                        .filter { !$0.isHidden })
+                        .defaulting(to: [])
+                        .count > 1)
                 }
             )
             return
@@ -1483,41 +1466,33 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         
         self.outdatedClientBanner.update(
             message: "disappearingMessagesLegacy"
-                .put(key: "name", value: Profile.displayName(id: outdatedMemberId, threadVariant: self.viewModel.threadData.threadVariant))
-                .localized(),
-            dismiss: self.removeOutdatedClientBanner
+                .put(
+                    key: "name",
+                    value: Profile.displayName(
+                        id: outdatedMemberId,
+                        threadVariant: self.viewModel.threadData.threadVariant,
+                        using: viewModel.dependencies
+                    )
+                )
+                .localizedFormatted(baseFont: self.outdatedClientBanner.font),
+            onTap: { [weak self] in self?.removeOutdatedClientBanner() }
         )
 
         self.outdatedClientBanner.isHidden = false
-        self.emptyStateLabelTopConstraint?.constant = 0
+        self.emptyStatePaddingView.isHidden = (stateStackView
+            .arrangedSubviews
+            .filter { !$0.isHidden }
+            .count > 1)
     }
     
     private func removeOutdatedClientBanner() {
         guard let outdatedMemberId: String = self.viewModel.threadData.outdatedMemberId else { return }
-        Storage.shared.writeAsync { db in
+        
+        viewModel.dependencies[singleton: .storage].writeAsync { db in
             try Contact
                 .filter(id: outdatedMemberId)
                 .updateAll(db, Contact.Columns.lastKnownClientVersion.set(to: nil))
         }
-    }
-
-    func addOrRemoveBlockedBanner(threadIsBlocked: Bool) {
-        guard threadIsBlocked else {
-            UIView.animate(
-                withDuration: 0.25,
-                animations: { [weak self] in
-                    self?.blockedBanner.alpha = 0
-                },
-                completion: { [weak self] _ in
-                    self?.blockedBanner.alpha = 1
-                    self?.blockedBanner.removeFromSuperview()
-                }
-            )
-            return
-        }
-
-        self.view.addSubview(self.blockedBanner)
-        self.blockedBanner.pin([ UIView.HorizontalEdge.left, UIView.VerticalEdge.top, UIView.HorizontalEdge.right ], to: self.view)
     }
     
     func recoverInputView(completion: (() -> ())? = nil) {
@@ -1572,7 +1547,8 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
                     },
                     showExpandedReactions: viewModel.reactionExpandedInteractionIds
                         .contains(cellViewModel.id),
-                    lastSearchText: viewModel.lastSearchedText
+                    lastSearchText: viewModel.lastSearchedText,
+                    using: viewModel.dependencies
                 )
                 cell.delegate = self
                 
@@ -1863,6 +1839,7 @@ final class ConversationVC: BaseVC, LibSessionRespondingViewController, Conversa
         hideSearchUI()
     }
     
+    func conversationSearchControllerDependencies() -> Dependencies { return viewModel.dependencies }
     func currentVisibleIds() -> [Int64] { return (fullyVisibleCellViewModels() ?? []).map { $0.id } }
     
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Interaction.TimestampInfo]?, searchText: String?) {

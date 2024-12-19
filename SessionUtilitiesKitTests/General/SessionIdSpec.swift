@@ -23,13 +23,13 @@ class SessionIdSpec: QuickSpec {
                         expect(sessionId?.hexString).to(equal("05\(TestConstants.publicKey)"))
                     }
                     
-                    // MARK: ------ fails when too short
-                    it("fails when too short") {
+                    // MARK: ------ throws when too short
+                    it("throws when too short") {
                         expect(try SessionId(from: "")).to(throwError(SessionIdError.invalidSessionId))
                     }
                     
-                    // MARK: ------ fails with an invalid prefix
-                    it("fails with an invalid prefix") {
+                    // MARK: ------ throws with an invalid prefix
+                    it("throws with an invalid prefix") {
                         expect(try SessionId(from: "AB\(TestConstants.publicKey)"))
                             .to(throwError(SessionIdError.invalidPrefix))
                     }
@@ -49,14 +49,16 @@ class SessionIdSpec: QuickSpec {
             
             // MARK: -- generates the correct hex string
             it("generates the correct hex string") {
-                expect(SessionId(.unblinded, publicKey: Data(hex: TestConstants.publicKey).bytes).hexString)
+                expect(SessionId(.unblinded, hex: TestConstants.publicKey).hexString)
                     .to(equal("0088672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
-                expect(SessionId(.standard, publicKey: Data(hex: TestConstants.publicKey).bytes).hexString)
+                expect(SessionId(.standard, hex: TestConstants.publicKey).hexString)
                     .to(equal("0588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
-                expect(SessionId(.blinded15, publicKey: Data(hex: TestConstants.publicKey).bytes).hexString)
+                expect(SessionId(.blinded15, hex: TestConstants.publicKey).hexString)
                     .to(equal("1588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
-                expect(SessionId(.blinded25, publicKey: Data(hex: TestConstants.publicKey).bytes).hexString)
+                expect(SessionId(.blinded25, hex: TestConstants.publicKey).hexString)
                     .to(equal("2588672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
+                expect(SessionId(.group, hex: TestConstants.publicKey).hexString)
+                    .to(equal("0388672ccb97f40bb57238989226cf429b575ba355443f47bc76c5ab144a96c65b"))
             }
         }
         
@@ -75,32 +77,32 @@ class SessionIdSpec: QuickSpec {
                         expect(try? SessionId.Prefix(from: "03")).to(equal(.group))
                     }
                     
-                    // MARK: ------ fails when nil
-                    it("fails when nil") {
+                    // MARK: ------ throws when nil
+                    it("throws when nil") {
                         expect(try SessionId.Prefix(from: nil)).to(throwError(SessionIdError.emptyValue))
                     }
                     
-                    // MARK: ------ fails when invalid
-                    it("fails when invalid") {
+                    // MARK: ------ throws when invalid
+                    it("throws when invalid") {
                         expect(try SessionId.Prefix(from: "AB")).to(throwError(SessionIdError.invalidPrefix))
                     }
                 }
                 
                 // MARK: ---- with a longer string
                 context("with a longer string") {
-                    // MARK: ------ fails with invalid hex
-                    it("fails with invalid hex") {
+                    // MARK: ------ throws with invalid hex
+                    it("throws with invalid hex") {
                         expect(try SessionId.Prefix(from: "05\(TestConstants.publicKey.map { _ in "Z" }.joined())"))
                             .to(throwError(SessionIdError.invalidSessionId))
                     }
                     
-                    // MARK: ------ fails with the wrong length
-                    it("fails with the wrong length") {
+                    // MARK: ------ throws with the wrong length
+                    it("throws with the wrong length") {
                         expect(try SessionId.Prefix(from: "0")).to(throwError(SessionIdError.invalidLength))
                     }
                     
-                    // MARK: ------ fails with an invalid prefix
-                    it("fails with an invalid prefix") {
+                    // MARK: ------ throws with an invalid prefix
+                    it("throws with an invalid prefix") {
                         expect(try SessionId.Prefix(from: "AB\(TestConstants.publicKey)"))
                             .to(throwError(SessionIdError.invalidPrefix))
                     }

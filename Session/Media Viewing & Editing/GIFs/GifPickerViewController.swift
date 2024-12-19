@@ -4,6 +4,7 @@ import UIKit
 import Combine
 import SignalUtilitiesKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollectionViewDataSource, UICollectionViewDelegate, GifPickerLayoutDelegate {
@@ -16,7 +17,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     private var viewMode = ViewMode.idle {
         didSet {
-            Log.debug("[GifPickerViewController] viewMode: \(viewMode)")
+            Log.debug(.giphy, "ViewController viewMode: \(viewMode)")
 
             updateContents()
         }
@@ -24,6 +25,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     var lastQuery: String = ""
 
+    private let dependencies: Dependencies
     public weak var delegate: GifPickerViewControllerDelegate?
 
     let searchBar: SearchBar
@@ -40,7 +42,6 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     var progressiveSearchTimer: Timer?
     
     private var disposables: Set<AnyCancellable> = Set()
-    private var networkStatusCallbackId: UUID?
 
     // MARK: - Initialization
 
@@ -49,7 +50,8 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         fatalError("init(coder:) has not been implemented")
     }
 
-    required init() {
+    required init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.searchBar = SearchBar()
         self.layout = GifPickerLayout()
         self.collectionView = UICollectionView(frame: CGRect.zero, collectionViewLayout: self.layout)
@@ -60,7 +62,6 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     }
 
     deinit {
-        LibSession.removeNetworkChangedCallback(callbackId: networkStatusCallbackId)
         NotificationCenter.default.removeObserver(self)
 
         progressiveSearchTimer?.invalidate()
@@ -76,7 +77,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     func ensureCellState() {
         for cell in self.collectionView.visibleCells {
             guard let cell = cell as? GifPickerCell else {
-                Log.error("[GifPickerViewController] unexpected cell.")
+                Log.error(.giphy, "ViewController unexpected cell.")
                 return
             }
             cell.ensureCellState()
@@ -103,12 +104,13 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
         createViews()
         
-        networkStatusCallbackId = LibSession.onNetworkStatusChanged { [weak self] _ in
-            DispatchQueue.main.async {
+        dependencies[cache: .libSessionNetwork].networkStatus
+            .receive(on: DispatchQueue.main, using: dependencies)
+            .sink(receiveValue: { [weak self] _ in
                 // Prod cells to try to load when connectivity changes.
                 self?.ensureCellState()
-            }
-        }
+            })
+            .store(in: &disposables)
 
         NotificationCenter.default.addObserver(
             self,
@@ -220,15 +222,15 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     private func updateContents() {
         guard let noResultsView = self.noResultsView else {
-            Log.error("[GifPickerViewController] Missing noResultsView")
+            Log.error(.giphy, "ViewController missing noResultsView")
             return
         }
         guard let searchErrorView = self.searchErrorView else {
-            Log.error("[GifPickerViewController] Missing searchErrorView")
+            Log.error(.giphy, "ViewController missing searchErrorView")
             return
         }
         guard let activityIndicator = self.activityIndicator else {
-            Log.error("[GifPickerViewController] Missing activityIndicator")
+            Log.error(.giphy, "ViewController missing activityIndicator")
             return
         }
 
@@ -289,15 +291,16 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: kCellReuseIdentifier, for: indexPath)
 
         guard indexPath.row < imageInfos.count else {
-            Log.warn("[GifPickerViewController] indexPath: \(indexPath.row) out of range for imageInfo count: \(imageInfos.count) ")
+            Log.warn(.giphy, "ViewController indexPath: \(indexPath.row) out of range for imageInfo count: \(imageInfos.count) ")
             return cell
         }
         let imageInfo = imageInfos[indexPath.row]
 
         guard let gifCell = cell as? GifPickerCell else {
-            Log.error("[GifPickerViewController] Unexpected cell type.")
+            Log.error(.giphy, "ViewController unexpected cell type.")
             return cell
         }
+        gifCell.dependencies = dependencies
         gifCell.imageInfo = imageInfo
         return cell
     }
@@ -306,30 +309,30 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     public func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         guard let cell = collectionView.cellForItem(at: indexPath) as? GifPickerCell else {
-            Log.error("[GifPickerViewController] unexpected cell.")
+            Log.error(.giphy, "ViewController unexpected cell.")
             return
         }
 
         guard cell.stillAsset != nil || cell.animatedAsset != nil else {
             // we don't want to let the user blindly select a gray cell
-            Log.debug("[GifPickerViewController] ignoring selection of cell with no preview")
+            Log.debug(.giphy, "ViewController ignoring selection of cell with no preview")
             return
         }
 
         guard self.hasSelectedCell == false else {
-            Log.error("[GifPickerViewController] Already selected cell")
+            Log.error(.giphy, "ViewController already selected cell")
             return
         }
         self.hasSelectedCell = true
 
         // Fade out all cells except the selected one.
-        let maskingView = OWSBezierPathView()
+        let maskingView = BezierPathView()
 
         // Selecting cell behind searchbar masks part of search bar.
         // So we insert mask *behind* the searchbar.
         self.view.insertSubview(maskingView, belowSubview: searchBar)
         let cellRect = self.collectionView.convert(cell.frame, to: self.view)
-        maskingView.configureShapeLayerBlock = { layer, bounds in
+        maskingView.configureShapeLayer = { layer, bounds in
             let path = UIBezierPath(rect: bounds)
             path.append(UIBezierPath(rect: cellRect))
 
@@ -347,7 +350,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     }
 
     public func getFileForCell(_ cell: GifPickerCell) {
-        GiphyDownloader.giphyDownloader.cancelAllRequests()
+        dependencies[singleton: .giphyDownloader].cancelAllRequests()
         
         cell
             .requestRenditionForSending()
@@ -374,14 +377,14 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
                             self?.present(modal, animated: true)
                     }
                 },
-                receiveValue: { [weak self] asset in
+                receiveValue: { [weak self, dependencies] asset in
                     guard let rendition = asset.assetDescription as? GiphyRendition else {
-                        Log.error("[GifPickerViewController] Invalid asset description.")
+                        Log.error(.giphy, "ViewController invalid asset description.")
                         return
                     }
 
-                    let dataSource = DataSourcePath(filePath: asset.filePath, shouldDeleteOnDeinit: false)
-                    let attachment = SignalAttachment.attachment(dataSource: dataSource, type: rendition.type, imageQuality: .medium)
+                    let dataSource = DataSourcePath(filePath: asset.filePath, sourceFilename: URL(fileURLWithPath: asset.filePath).pathExtension, shouldDeleteOnDeinit: false, using: dependencies)
+                    let attachment = SignalAttachment.attachment(dataSource: dataSource, type: rendition.type, imageQuality: .medium, using: dependencies)
 
                     self?.dismiss(animated: true) {
                         // Delegate presents view controllers, so it's important that *this* controller be dismissed before that occurs.
@@ -394,7 +397,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     public func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
         guard let cell = cell as? GifPickerCell else {
-            Log.error("[GifPickerViewController] unexpected cell.")
+            Log.error(.giphy, "ViewController unexpected cell.")
             return
         }
         // We only want to load the cells which are on-screen.
@@ -403,7 +406,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
 
     public func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
         guard let cell = cell as? GifPickerCell else {
-            Log.error("[GifPickerViewController] unexpected cell.")
+            Log.error(.giphy, "ViewController unexpected cell.")
             return
         }
         cell.isCellVisible = false
@@ -427,7 +430,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         progressiveSearchTimer?.invalidate()
         progressiveSearchTimer = nil
         let kProgressiveSearchDelaySeconds = 1.0
-        progressiveSearchTimer = WeakTimer.scheduledTimer(timeInterval: kProgressiveSearchDelaySeconds, target: self, userInfo: nil, repeats: true) { [weak self] _ in
+        progressiveSearchTimer = Timer.scheduledTimerOnMainThread(withTimeInterval: kProgressiveSearchDelaySeconds, repeats: true, using: dependencies) { [weak self] _ in
             self?.tryToSearch()
         }
     }
@@ -460,7 +463,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
         let query: String = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if (viewMode == .searching || viewMode == .results) && lastQuery == query {
-            Log.debug("[GifPickerViewController] ignoring duplicate search: \(query)")
+            Log.debug(.giphy, "ViewController ignoring duplicate search: \(query)")
             return
         }
 
@@ -485,18 +488,18 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
                         case .finished: break
                         case .failure(let error):
                             // Don't both showing error UI feedback for default "trending" results.
-                            Log.error("[GifPickerViewController] error: \(error)")
+                            Log.error(.giphy, "ViewController error: \(error)")
                     }
                 },
                 receiveValue: { [weak self] imageInfos in
-                    Log.debug("[GifPickerViewController] showing trending")
+                    Log.debug(.giphy, "ViewController showing trending")
                     
                     if imageInfos.count > 0 {
                         self?.imageInfos = imageInfos
                         self?.viewMode = .results
                     }
                     else {
-                        Log.error("[GifPickerViewController] trending results was unexpectedly empty")
+                        Log.error(.giphy, "ViewController trending results was unexpectedly empty")
                     }
                 }
             )
@@ -504,7 +507,7 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
     }
 
     private func search(query: String) {
-        Log.verbose("[GifPickerViewController] searching: \(query)")
+        Log.verbose(.giphy, "ViewController searching: \(query)")
 
         progressiveSearchTimer?.invalidate()
         progressiveSearchTimer = nil
@@ -522,13 +525,13 @@ class GifPickerViewController: OWSViewController, UISearchBarDelegate, UICollect
                     switch result {
                         case .finished: break
                         case .failure:
-                            Log.verbose("[GifPickerViewController] search failed.")
+                            Log.verbose(.giphy, "ViewController search failed.")
                             // TODO: Present this error to the user.
                             self?.viewMode = .error
                     }
                 },
                 receiveValue: { [weak self] imageInfos in
-                    Log.verbose("[GifPickerViewController] search complete")
+                    Log.verbose(.giphy, "ViewController search complete")
                     self?.imageInfos = imageInfos
                     
                     if imageInfos.count > 0 {

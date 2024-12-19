@@ -19,14 +19,92 @@ public extension UIImage {
         }
     }
     
-    func resized(to targetSize: CGSize) -> UIImage? {
+    /// This function can be used to resize an image to a different size, it **should not** be used within the UI for rendering smaller
+    /// images as it's fairly inefficient (instead the image should be contained within another view and sized explicitly that way)
+    func resized(toFillPixelSize dstSize: CGSize) -> UIImage {
+        let normalized: UIImage = self.normalizedImage()
+        
+        guard
+            let normalizedRef: CGImage = normalized.cgImage,
+            let imgRef: CGImage = self.cgImage
+        else { return self }
+        
+        // Get the size in pixels, not points
+        let srcSize: CGSize = CGSize(width: normalizedRef.width, height: normalizedRef.height)
+        let widthRatio: CGFloat = (srcSize.width / srcSize.height)
+        let heightRatio: CGFloat = (srcSize.height / srcSize.height)
+        let drawRect: CGRect = {
+            guard widthRatio <= heightRatio else {
+                let targetWidth: CGFloat = (dstSize.height * srcSize.width / srcSize.height)
+                
+                return CGRect(
+                    x: (targetWidth - dstSize.width) * -0.5,
+                    y: 0,
+                    width: targetWidth,
+                    height: dstSize.height
+                )
+            }
+            
+            let targetHeight: CGFloat = (dstSize.width * srcSize.height / srcSize.width)
+            
+            return CGRect(
+                x: 0,
+                y: (targetHeight - dstSize.height) * -0.5,
+                width: dstSize.width,
+                height: targetHeight
+            )
+        }()
+        
+        let bounds: CGRect = CGRect(x: 0, y: 0, width: dstSize.width, height: dstSize.height)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1    // We are specifying a specific pixel size rather than a point size
+        format.opaque = false
+        
+        let renderer: UIGraphicsImageRenderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
+
+        return renderer.image { rendererContext in
+            rendererContext.cgContext.interpolationQuality = .high
+            
+            // we use srcSize (and not dstSize) as the size to specify is in user space (and we use the CTM to apply a
+            // scaleRatio)
+            rendererContext.cgContext.draw(imgRef, in: drawRect, byTiling: false)
+        }
+    }
+    
+    /// This function can be used to resize an image to a different size, it **should not** be used within the UI for rendering smaller
+    /// images as it's fairly inefficient (instead the image should be contained within another view and sized explicitly that way)
+    func resized(maxDimensionPoints: CGFloat) -> UIImage? {
         guard let imgRef: CGImage = self.cgImage else { return nil }
+        
+        let originalSize: CGSize = self.size
+        let maxOriginalDimensionPoints: CGFloat = max(originalSize.width, originalSize.height)
+        
+        guard originalSize.width > 0 && originalSize.height > 0 else { return nil }
+        
+        // Don't bother scaling an image that is already smaller than the max dimension.
+        guard maxOriginalDimensionPoints > maxDimensionPoints else { return self }
+        
+        let thumbnailSize: CGSize = {
+            guard originalSize.width <= originalSize.height else {
+                return CGSize(
+                    width: maxDimensionPoints,
+                    height: round(maxDimensionPoints * originalSize.height / originalSize.width)
+                )
+            }
+            
+            return CGSize(
+                width: round(maxDimensionPoints * originalSize.width / originalSize.height),
+                height: maxDimensionPoints
+            )
+        }()
+        
+        guard thumbnailSize.width > 0 && thumbnailSize.height > 0 else { return nil }
         
         // the below values are regardless of orientation : for UIImages from Camera, width>height (landscape)
         //
         // Note: Not equivalent to self.size (which is dependant on the imageOrientation)!
         let srcSize: CGSize = CGSize(width: imgRef.width, height: imgRef.height)
-        var dstSize: CGSize = targetSize
+        var dstSize: CGSize = thumbnailSize
         
         // Don't resize if we already meet the required destination size
         guard dstSize != srcSize else { return self }
@@ -105,83 +183,5 @@ public extension UIImage {
                 byTiling: false
             )
         }
-    }
-    
-    func resized(toFillPixelSize dstSize: CGSize) -> UIImage {
-        let normalized: UIImage = self.normalizedImage()
-        
-        guard
-            let normalizedRef: CGImage = normalized.cgImage,
-            let imgRef: CGImage = self.cgImage
-        else { return self }
-        
-        // Get the size in pixels, not points
-        let srcSize: CGSize = CGSize(width: normalizedRef.width, height: normalizedRef.height)
-        let widthRatio: CGFloat = (srcSize.width / srcSize.height)
-        let heightRatio: CGFloat = (srcSize.height / srcSize.height)
-        let drawRect: CGRect = {
-            guard widthRatio <= heightRatio else {
-                let targetWidth: CGFloat = (dstSize.height * srcSize.width / srcSize.height)
-                
-                return CGRect(
-                    x: (targetWidth - dstSize.width) * -0.5,
-                    y: 0,
-                    width: targetWidth,
-                    height: dstSize.height
-                )
-            }
-            
-            let targetHeight: CGFloat = (dstSize.width * srcSize.height / srcSize.width)
-            
-            return CGRect(
-                x: 0,
-                y: (targetHeight - dstSize.height) * -0.5,
-                width: dstSize.width,
-                height: targetHeight
-            )
-        }()
-        
-        let bounds: CGRect = CGRect(x: 0, y: 0, width: dstSize.width, height: dstSize.height)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1    // We are specifying a specific pixel size rather than a point size
-        format.opaque = false
-        
-        let renderer: UIGraphicsImageRenderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
-
-        return renderer.image { rendererContext in
-            rendererContext.cgContext.interpolationQuality = .high
-            
-            // we use srcSize (and not dstSize) as the size to specify is in user space (and we use the CTM to apply a
-            // scaleRatio)
-            rendererContext.cgContext.draw(imgRef, in: drawRect, byTiling: false)
-        }
-    }
-    
-    func resized(maxDimensionPoints: CGFloat) -> UIImage? {
-        let originalSize: CGSize = self.size
-        let maxOriginalDimensionPoints: CGFloat = max(originalSize.width, originalSize.height)
-        
-        guard originalSize.width > 0 && originalSize.height > 0 else { return nil }
-        
-        // Don't bother scaling an image that is already smaller than the max dimension.
-        guard maxOriginalDimensionPoints > maxDimensionPoints else { return self }
-        
-        let thumbnailSize: CGSize = {
-            guard originalSize.width <= originalSize.height else {
-                return CGSize(
-                    width: maxDimensionPoints,
-                    height: round(maxDimensionPoints * originalSize.height / originalSize.width)
-                )
-            }
-            
-            return CGSize(
-                width: round(maxDimensionPoints * originalSize.width / originalSize.height),
-                height: maxDimensionPoints
-            )
-        }()
-        
-        guard thumbnailSize.width > 0 && thumbnailSize.height > 0 else { return nil }
-        
-        return resized(to: thumbnailSize)
     }
 }

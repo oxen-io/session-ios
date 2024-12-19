@@ -28,19 +28,14 @@ extension SnodeAPI {
         public init(
             message: SnodeMessage,
             namespace: SnodeAPI.Namespace,
-            subkey: String?,
-            timestampMs: UInt64,
-            ed25519PublicKey: [UInt8],
-            ed25519SecretKey: [UInt8]
+            authMethod: AuthenticationMethod,
+            timestampMs: UInt64
         ) {
             self.message = message
             self.namespace = namespace
             
             super.init(
-                pubkey: message.recipient,
-                ed25519PublicKey: ed25519PublicKey,
-                ed25519SecretKey: ed25519SecretKey,
-                subkey: subkey,
+                authMethod: authMethod,
                 timestampMs: timestampMs
             )
         }

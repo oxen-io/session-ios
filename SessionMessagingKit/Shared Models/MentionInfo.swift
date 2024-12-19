@@ -1,4 +1,6 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import GRDB
 import SessionUtilitiesKit
@@ -98,7 +100,7 @@ public extension MentionInfo {
                         JOIN \(GroupMember.self) ON (
                             \(SQL("\(groupMember[.groupId]) = \(threadId)")) AND
                             \(groupMember[.profileId]) = \(profile[.id]) AND
-                            \(SQL("\(groupMember[.role]) = \(GroupMember.Role.standard)"))
+                            \(SQL("\(groupMember[.role]) != \(GroupMember.Role.zombie)"))
                         )
                         \(targetWhere)
                         GROUP BY \(profile[.id])

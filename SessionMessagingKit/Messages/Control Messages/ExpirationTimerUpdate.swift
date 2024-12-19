@@ -39,7 +39,7 @@ public final class ExpirationTimerUpdate: ControlMessage {
 
     // MARK: - Proto Conversion
     
-    public override class func fromProto(_ proto: SNProtoContent, sender: String) -> ExpirationTimerUpdate? {
+    public override class func fromProto(_ proto: SNProtoContent, sender: String, using dependencies: Dependencies) -> ExpirationTimerUpdate? {
         guard let dataMessageProto = proto.dataMessage else { return nil }
         
         let isExpirationTimerUpdate = (dataMessageProto.flags & UInt32(SNProtoDataMessage.SNProtoDataMessageFlags.expirationTimerUpdate.rawValue)) != 0

@@ -6,6 +6,7 @@ import Photos
 import PhotosUI
 import SessionUIKit
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 protocol ImagePickerGridControllerDelegate: AnyObject {
@@ -25,6 +26,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
 
     weak var delegate: ImagePickerGridControllerDelegate?
 
+    private let dependencies: Dependencies
     private let library: PhotoLibrary = PhotoLibrary()
     private var photoCollection: PhotoCollection
     private var photoCollectionContents: PhotoCollectionContents
@@ -34,7 +36,8 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
     var collectionViewFlowLayout: UICollectionViewFlowLayout
     var titleView: TitleView!
 
-    init() {
+    init(using dependencies: Dependencies) {
+        self.dependencies = dependencies
         collectionViewFlowLayout = type(of: self).buildLayout()
         photoCollection = library.defaultPhotoCollection()
         photoCollectionContents = photoCollection.contents()
@@ -186,7 +189,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
             delegate.imagePicker(
                 self,
                 didSelectAsset: asset,
-                attachmentPublisher: photoCollectionContents.outgoingAttachment(for: asset)
+                attachmentPublisher: photoCollectionContents.outgoingAttachment(for: asset, using: dependencies)
             )
             collectionView.selectItem(at: indexPath, animated: true, scrollPosition: [])
         case .deselect:
@@ -395,7 +398,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
     var isShowingCollectionPickerController: Bool = false
     
     lazy var collectionPickerController: SessionTableViewController = SessionTableViewController(
-        viewModel: PhotoCollectionPickerViewModel(library: library) { [weak self] collection in
+        viewModel: PhotoCollectionPickerViewModel(library: library, using: dependencies) { [weak self] collection in
             guard self?.photoCollection != collection else {
                 self?.hideCollectionPicker()
                 return
@@ -488,7 +491,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         delegate.imagePicker(
             self,
             didSelectAsset: asset,
-            attachmentPublisher: photoCollectionContents.outgoingAttachment(for: asset)
+            attachmentPublisher: photoCollectionContents.outgoingAttachment(for: asset, using: dependencies)
         )
         firstSelectedIndexPath = nil
 

@@ -1,26 +1,67 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import SwiftUI
+import Combine
 import SessionUIKit
+import SessionSnodeKit
 import SessionMessagingKit
 import SignalUtilitiesKit
 import SessionUtilitiesKit
 
 struct LoadingScreen: View {
+    public class ViewModel {
+        fileprivate let dependencies: Dependencies
+        fileprivate let preview: Bool
+        fileprivate var profileRetrievalCancellable: AnyCancellable?
+        
+        init(preview: Bool, using dependencies: Dependencies) {
+            self.preview = preview
+            self.dependencies = dependencies
+        }
+        
+        deinit {
+            profileRetrievalCancellable?.cancel()
+        }
+        
+        fileprivate func observeProfileRetrieving(onComplete: @escaping (Bool) -> ()) {
+            profileRetrievalCancellable = dependencies[cache: .onboarding].displayNamePublisher
+                .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+                .timeout(.seconds(15), scheduler: DispatchQueue.main, customError: { NetworkError.timeout(error: "", rawData: nil) })
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { _ in },
+                    receiveValue: { displayName in onComplete(displayName?.isEmpty == false) }
+                )
+        }
+        
+        fileprivate func completeRegistration(onComplete: @escaping () -> ()) {
+            dependencies.mutate(cache: .onboarding) { [dependencies] onboarding in
+                let shouldSyncPushTokens: Bool = onboarding.useAPNS
+                
+                onboarding.completeRegistration {
+                    // Trigger the 'SyncPushTokensJob' directly as we don't want to wait for paths to build
+                    // before requesting the permission from the user
+                    if shouldSyncPushTokens { SyncPushTokensJob.run(uploadOnlyIfStale: false, using: dependencies) }
+                    
+                    onComplete()
+                }
+            }
+        }
+    }
+    
     @EnvironmentObject var host: HostWrapper
+    private let viewModel: ViewModel
     
     @State var percentage: Double = 0.0
     @State var animationTimer: Timer?
     
-    private let dependencies: Dependencies
-    private let flow: Onboarding.Flow
-    private let preview: Bool
+    // MARK: - Initialization
     
-    public init(flow: Onboarding.Flow, preview: Bool = false, using dependencies: Dependencies) {
-        self.dependencies = dependencies
-        self.flow = flow
-        self.preview = preview
+    public init(preview: Bool = false, using dependencies: Dependencies) {
+        self.viewModel = ViewModel(preview: preview, using: dependencies)
     }
+    
+    // MARK: - UI
     
     var body: some View {
         ZStack(alignment: .center) {
@@ -43,7 +84,7 @@ struct LoadingScreen: View {
                     .padding(.bottom, Values.mediumSpacing)
                     .onAppear {
                         progress()
-                        observeProfileRetrieving()
+                        viewModel.observeProfileRetrieving { finishLoading(success: $0) }
                     }
                 
                 Text("waitOneMoment".localized())
@@ -65,55 +106,49 @@ struct LoadingScreen: View {
     private func progress() {
         animationTimer = Timer.scheduledTimerOnMainThread(
             withTimeInterval: 0.15,
-            repeats: true
+            repeats: true,
+            using: viewModel.dependencies
         ) { timer in
             self.percentage += 0.01
             if percentage >= 1 {
                 self.percentage = 1
                 timer.invalidate()
-                if !self.preview { finishLoading(success: false) }
+                if !viewModel.preview { finishLoading(success: false) }
             }
         }
-    }
-    
-    private func observeProfileRetrieving() {
-        Onboarding.profileNamePublisher
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .receive(on: DispatchQueue.main)
-            .sinkUntilComplete(
-                receiveValue: { displayName in
-                    if displayName?.isEmpty == false {
-                        finishLoading(success: true)
-                    }
-                }
-            )
     }
     
     private func finishLoading(success: Bool) {
+        viewModel.profileRetrievalCancellable?.cancel()
+        animationTimer?.invalidate()
+        animationTimer = nil
+        
         guard success else {
             let viewController: SessionHostingViewController = SessionHostingViewController(
-                rootView: DisplayNameScreen(flow: flow, using: dependencies)
+                rootView: DisplayNameScreen(using: viewModel.dependencies)
             )
-            viewController.setUpNavBarSessionIcon()
+            viewController.setUpNavBarSessionIcon(using: viewModel.dependencies)
             if let navigationController = self.host.controller?.navigationController {
-                let index = navigationController.viewControllers.count - 1
-                navigationController.pushViewController(viewController, animated: true)
-                navigationController.viewControllers.remove(at: index)
+                let updatedViewControllers: [UIViewController] = navigationController.viewControllers
+                    .filter { !$0.isKind(of: SessionHostingViewController<LoadingScreen>.self) }
+                    .appending(viewController)
+                navigationController.setViewControllers(updatedViewControllers, animated: true)
             }
             return
         }
-        self.animationTimer?.invalidate()
-        self.animationTimer = nil
+        
+        // Complete the animation and then complete the registration
         withAnimation(.linear(duration: 0.3)) {
             self.percentage = 1
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [dependencies] in
-            self.flow.completeRegistration()
-            
-            let homeVC: HomeVC = HomeVC(flow: self.flow, using: dependencies)
-            self.host.controller?.navigationController?.setViewControllers([ homeVC ], animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            viewModel.completeRegistration {
+                // Go to the home screen
+                let homeVC: HomeVC = HomeVC(using: viewModel.dependencies)
+                viewModel.dependencies[singleton: .app].setHomeViewController(homeVC)
+                self.host.controller?.navigationController?.setViewControllers([ homeVC ], animated: true)
+            }
         }
-        
     }
 }
 
@@ -128,7 +163,7 @@ struct AnimatableNumberModifier: AnimatableModifier {
     func body(content: Content) -> some View {
         content
             .overlay(
-                Text(String(format: "%.0f%%", number))
+                Text(String(format: "%.0f%%", number))  // stringlint:ignore
                     .bold()
                     .font(.system(size: Values.superLargeFontSize))
                     .foregroundColor(themeColor: .textPrimary)
@@ -178,6 +213,6 @@ struct CircularProgressView: View {
 
 struct LoadingView_Previews: PreviewProvider {
     static var previews: some View {
-        LoadingScreen(flow: .recover, preview: true, using: Dependencies())
+        LoadingScreen(preview: true, using: Dependencies.createEmpty())
     }
 }

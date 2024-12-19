@@ -147,7 +147,7 @@ public extension Crypto.Generator {
         }
     }
     
-    static func signature(message: [UInt8], ed25519SecretKey: [UInt8]) -> Crypto.Generator<[UInt8]> {
+    static func signature(message: [UInt8], ed25519SecretKey: [UInt8]) -> Crypto.Generator<Authentication.Signature> {
         return Crypto.Generator(id: "signature", args: [message, ed25519SecretKey]) {
             var cEd25519SecretKey: [UInt8] = ed25519SecretKey
             var cMessage: [UInt8] = message
@@ -158,7 +158,7 @@ public extension Crypto.Generator {
                 session_ed25519_sign(&cEd25519SecretKey, &cMessage, cMessage.count, &cSignature)
             else { throw CryptoError.signatureGenerationFailed }
             
-            return cSignature
+            return Authentication.Signature.standard(signature: cSignature)
         }
     }
 }

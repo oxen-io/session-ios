@@ -147,7 +147,7 @@ enum _001_InitialSetupMigration: Migration {
             t.column(.name, .text).notNull()
             t.column(.roomDescription, .text)
             t.column(.imageId, .text)
-            t.column(.imageData, .blob)
+            t.deprecatedColumn(name: "imageData", .blob)
             t.column(.userCount, .integer).notNull()
             t.column(.infoUpdates, .integer).notNull()
             t.column(.sequenceNumber, .integer).notNull()
@@ -389,7 +389,7 @@ enum _001_InitialSetupMigration: Migration {
             t.column(.timestampMs, .integer).notNull()
         }
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }
 

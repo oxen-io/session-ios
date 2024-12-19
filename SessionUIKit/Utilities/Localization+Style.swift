@@ -1,9 +1,9 @@
 // Copyright © 2024 Rangeproof Pty Ltd. All rights reserved.
-
+//
 // stringlint:disable
 
 import UIKit
-import SessionUtilitiesKit
+import Lucide
 
 public extension NSAttributedString {
     /// These are the tags we current support formatting for
@@ -19,6 +19,7 @@ public extension NSAttributedString {
         case underline = "u"
         case strikethrough = "s"
         case primaryTheme = "span"
+        case icon = "icon"
 
         // MARK: - Functions
 
@@ -51,6 +52,7 @@ public extension NSAttributedString {
                 case .underline: return [.underlineStyle: NSUnderlineStyle.single.rawValue]
                 case .strikethrough: return [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
                 case .primaryTheme: return [.foregroundColor: ThemeManager.currentTheme.color(for: .sessionButton_text).defaulting(to: ThemeManager.primaryColor.color)]
+                case .icon: return Lucide.attributes(for: font)
             }
         }
     }
@@ -175,24 +177,12 @@ private extension Collection where Element == NSAttributedString.HTMLTag {
                 case .underline: result[.underlineStyle] = NSUnderlineStyle.single.rawValue
                 case .strikethrough: result[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
                 case .primaryTheme: result[.foregroundColor] = ThemeManager.currentTheme.color(for: .sessionButton_text).defaulting(to: ThemeManager.primaryColor.color)
+                case .icon:
+                    result[.font] = fontWith(Lucide.font(ofSize: (font.pointSize + 1)), traits: [])
+                    result[.baselineOffset] = Lucide.defaultBaselineOffset
             }
         }
     }
-}
-
-public extension LocalizationHelper {
-    func localizedFormatted(in view: FontAccessible) -> NSAttributedString {
-        return localizedFormatted(baseFont: (view.fontValue ?? .systemFont(ofSize: 14)))
-    }
-    
-    func localizedFormatted(baseFont: UIFont) -> NSAttributedString {
-        return NSAttributedString(stringWithHTMLTags: localized(), font: baseFont)
-    }
-    
-    func localizedDeformatted() -> String {
-        return NSAttributedString(stringWithHTMLTags: localized(), font: .systemFont(ofSize: 14)).string
-    }
-
 }
 
 public protocol FontAccessible {
@@ -217,10 +207,6 @@ extension UITextField: DirectFontAccessible {}
 extension UITextView: DirectFontAccessible {}
 
 public extension String {
-    func localizedFormatted(in view: FontAccessible) -> NSAttributedString {
-        return LocalizationHelper(template: self).localizedFormatted(in: view)
-    }
-    
     func formatted(in view: FontAccessible) -> NSAttributedString {
         return NSAttributedString(stringWithHTMLTags: self, font: (view.fontValue ?? .systemFont(ofSize: 14)))
     }
@@ -231,5 +217,11 @@ public extension String {
     
     func deformatted() -> String {
         return NSAttributedString(stringWithHTMLTags: self, font: .systemFont(ofSize: 14)).string
+    }
+}
+
+private extension Optional {
+    func defaulting(to value: Wrapped) -> Wrapped {
+        return (self ?? value)
     }
 }

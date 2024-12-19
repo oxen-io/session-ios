@@ -4,6 +4,7 @@ import UIKit
 import GRDB
 import SignalUtilitiesKit
 import SessionUIKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 public class StyledSearchController: UISearchController {
@@ -74,6 +75,7 @@ extension ConversationSearchController: UISearchResultsUpdating {
         Log.verbose("searchBar.text: \( searchController.searchBar.text ?? "<blank>")")
 
         guard
+            let dependencies: Dependencies = self.delegate?.conversationSearchControllerDependencies(),
             let searchText: String = searchController.searchBar.text?.stripped,
             searchText.count >= ConversationSearchController.minimumSearchTextLength
         else {
@@ -85,7 +87,7 @@ extension ConversationSearchController: UISearchResultsUpdating {
         let threadId: String = self.threadId
         
         DispatchQueue.global(qos: .default).async { [weak self] in
-            let results: [Interaction.TimestampInfo]? = Storage.shared.read { db -> [Interaction.TimestampInfo] in
+            let results: [Interaction.TimestampInfo]? = dependencies[singleton: .storage].read { db -> [Interaction.TimestampInfo] in
                 self?.resultsBar.willStartSearching(readConnection: db)
                 
                 return try Interaction.idsForTermWithin(
@@ -360,6 +362,7 @@ public final class SearchResultsBar: UIView {
 // MARK: - ConversationSearchControllerDelegate
 
 public protocol ConversationSearchControllerDelegate: UISearchControllerDelegate {
+    func conversationSearchControllerDependencies() -> Dependencies
     func currentVisibleIds() -> [Int64]
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didUpdateSearchResults results: [Interaction.TimestampInfo]?, searchText: String?)
     func conversationSearchController(_ conversationSearchController: ConversationSearchController, didSelectInteractionInfo: Interaction.TimestampInfo)

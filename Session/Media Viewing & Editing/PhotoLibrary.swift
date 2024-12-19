@@ -6,6 +6,7 @@ import Photos
 import CoreServices
 import UniformTypeIdentifiers
 import SignalUtilitiesKit
+import SessionMessagingKit
 import SessionUtilitiesKit
 
 protocol PhotoLibraryDelegate: AnyObject {
@@ -138,10 +139,9 @@ class PhotoCollectionContents {
         _ = imageManager.requestImage(for: asset, targetSize: thumbnailSize, contentMode: .aspectFill, options: nil, resultHandler: resultHandler)
     }
 
-    private func requestImageDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: (any DataSource), type: UTType), Error> {
+    private func requestImageDataSource(for asset: PHAsset, using dependencies: Dependencies) -> AnyPublisher<(dataSource: (any DataSource), type: UTType), Error> {
         return Deferred {
             Future { [weak self] resolver in
-                
                 let options: PHImageRequestOptions = PHImageRequestOptions()
                 options.isNetworkAccessAllowed = true
                 
@@ -157,7 +157,7 @@ class PhotoCollectionContents {
                         return
                     }
                     
-                    guard let dataSource = DataSourceValue(data: imageData, dataType: type) else {
+                    guard let dataSource = DataSourceValue(data: imageData, dataType: type, using: dependencies) else {
                         resolver(Result.failure(PhotoLibraryError.assertionError(description: "dataSource was unexpectedly nil")))
                         return
                     }
@@ -169,10 +169,9 @@ class PhotoCollectionContents {
         .eraseToAnyPublisher()
     }
 
-    private func requestVideoDataSource(for asset: PHAsset) -> AnyPublisher<(dataSource: (any DataSource), type: UTType), Error> {
+    private func requestVideoDataSource(for asset: PHAsset, using dependencies: Dependencies) -> AnyPublisher<(dataSource: (any DataSource), type: UTType), Error> {
         return Deferred {
             Future { [weak self] resolver in
-                
                 let options: PHVideoRequestOptions = PHVideoRequestOptions()
                 options.isNetworkAccessAllowed = true
                 
@@ -186,7 +185,7 @@ class PhotoCollectionContents {
                     exportSession.outputFileType = AVFileType.mp4
                     exportSession.metadataItemFilter = AVMetadataItemFilter.forSharing()
                     
-                    let exportPath = FileSystem.temporaryFilePath(fileExtension: "mp4") // stringlint:ignore
+                    let exportPath = dependencies[singleton: .fileManager].temporaryFilePath(fileExtension: "mp4") // stringlint:ignore
                     let exportURL = URL(fileURLWithPath: exportPath)
                     exportSession.outputURL = exportURL
                     
@@ -196,7 +195,7 @@ class PhotoCollectionContents {
                         
                         guard
                             exportSession?.status == .completed,
-                            let dataSource = DataSourcePath(fileUrl: exportURL, shouldDeleteOnDeinit: true)
+                            let dataSource = DataSourcePath(fileUrl: exportURL, sourceFilename: nil, shouldDeleteOnDeinit: true, using: dependencies)
                         else {
                             resolver(Result.failure(PhotoLibraryError.assertionError(description: "Failed to build data source for exported video URL")))
                             return
@@ -210,21 +209,19 @@ class PhotoCollectionContents {
         .eraseToAnyPublisher()
     }
 
-    func outgoingAttachment(for asset: PHAsset) -> AnyPublisher<SignalAttachment, Error> {
+    func outgoingAttachment(for asset: PHAsset, using dependencies: Dependencies) -> AnyPublisher<SignalAttachment, Error> {
         switch asset.mediaType {
             case .image:
-                return requestImageDataSource(for: asset)
+                return requestImageDataSource(for: asset, using: dependencies)
                     .map { (dataSource: DataSource, type: UTType) in
-                        SignalAttachment
-                            .attachment(dataSource: dataSource, type: type, imageQuality: .medium)
+                        SignalAttachment.attachment(dataSource: dataSource, type: type, imageQuality: .medium, using: dependencies)
                     }
                     .eraseToAnyPublisher()
                 
             case .video:
-                return requestVideoDataSource(for: asset)
+                return requestVideoDataSource(for: asset, using: dependencies)
                     .map { (dataSource: DataSource, type: UTType) in
-                        SignalAttachment
-                            .attachment(dataSource: dataSource, type: type)
+                        SignalAttachment.attachment(dataSource: dataSource, type: type, using: dependencies)
                     }
                     .eraseToAnyPublisher()
                 

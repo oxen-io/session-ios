@@ -34,8 +34,11 @@ public protocol DataSource: Equatable {
 // MARK: - DataSourceValue
 
 public class DataSourceValue: DataSource {
-    public static let empty: DataSourceValue = DataSourceValue(data: Data(), fileExtension: UTType.fileExtensionText)
+    public static func empty(using dependencies: Dependencies) -> DataSourceValue {
+        return DataSourceValue(data: Data(), fileExtension: UTType.fileExtensionText, using: dependencies)
+    }
     
+    private let dependencies: Dependencies
     public var data: Data
     public var sourceFilename: String?
     var fileExtension: String
@@ -50,9 +53,9 @@ public class DataSourceValue: DataSource {
     var dataPath: String? {
         let fileExtension: String = self.fileExtension
         
-        return DataSourceValue.synced(self) { [weak self] in
+        return DataSourceValue.synced(self) { [weak self, dependencies] in
             guard let cachedFilePath: String = self?.cachedFilePath else {
-                let filePath: String = FileSystem.temporaryFilePath(fileExtension: fileExtension)
+                let filePath: String = dependencies[singleton: .fileManager].temporaryFilePath(fileExtension: fileExtension)
                 
                 do { try self?.write(to: filePath) }
                 catch { return nil }
@@ -73,42 +76,43 @@ public class DataSourceValue: DataSource {
         // if ows_isValidImage is given a file path, it will
         // avoid loading most of the data into memory, which
         // is considerably more performant, so try to do that.
-        return Data.isValidImage(at: dataPath, type: UTType(sessionFileExtension: fileExtension))
+        return Data.isValidImage(at: dataPath, type: UTType(sessionFileExtension: fileExtension), using: dependencies)
     }
     
     public var isValidVideo: Bool {
         guard let dataUrl: URL = self.dataUrl else { return false }
         
-        return MediaUtils.isValidVideo(path: dataUrl.path)
+        return MediaUtils.isValidVideo(path: dataUrl.path, using: dependencies)
     }
     
     // MARK: - Initialization
     
-    public init(data: Data, fileExtension: String) {
+    public init(data: Data, fileExtension: String, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.data = data
         self.fileExtension = fileExtension
         self.shouldDeleteOnDeinit = true
     }
     
-    convenience init?(data: Data?, fileExtension: String) {
+    convenience init?(data: Data?, fileExtension: String, using dependencies: Dependencies) {
         guard let data: Data = data else { return nil }
         
-        self.init(data: data, fileExtension: fileExtension)
+        self.init(data: data, fileExtension: fileExtension, using: dependencies)
     }
     
-    public convenience init?(data: Data?, dataType: UTType) {
-        guard let fileExtension: String = dataType.sessionFileExtension else { return nil }
+    public convenience init?(data: Data?, dataType: UTType, using dependencies: Dependencies) {
+        guard let fileExtension: String = dataType.sessionFileExtension(sourceFilename: nil) else { return nil }
         
-        self.init(data: data, fileExtension: fileExtension)
+        self.init(data: data, fileExtension: fileExtension, using: dependencies)
     }
     
-    public convenience init?(text: String?) {
+    public convenience init?(text: String?, using dependencies: Dependencies) {
         guard
             let text: String = text,
             let data: Data = text.filteredForDisplay.data(using: .utf8)
         else { return nil }
         
-        self.init(data: data, fileExtension: UTType.fileExtensionText)
+        self.init(data: data, fileExtension: UTType.fileExtensionText, using: dependencies)
     }
     
     deinit {
@@ -117,8 +121,8 @@ public class DataSourceValue: DataSource {
             let filePath: String = cachedFilePath
         else { return }
         
-        DispatchQueue.global(qos: .default).async {
-            try? FileManager.default.removeItem(atPath: filePath)
+        DispatchQueue.global(qos: .default).async { [dependencies] in
+            try? dependencies[singleton: .fileManager].removeItem(atPath: filePath)
         }
     }
     
@@ -148,6 +152,7 @@ public class DataSourceValue: DataSource {
 // MARK: - DataSourcePath
 
 public class DataSourcePath: DataSource {
+    private let dependencies: Dependencies
     public var filePath: String
     public var sourceFilename: String?
     var cachedData: Data?
@@ -174,12 +179,12 @@ public class DataSourcePath: DataSource {
     public var dataLength: Int {
         let filePath: String = self.filePath
         
-        return DataSourcePath.synced(self) { [weak self] in
+        return DataSourcePath.synced(self) { [weak self, dependencies] in
             if let cachedDataLength: Int = self?.cachedDataLength {
                 return cachedDataLength
             }
             
-            let attrs: [FileAttributeKey: Any]? = try? FileManager.default.attributesOfItem(atPath: filePath)
+            let attrs: [FileAttributeKey: Any]? = try? dependencies[singleton: .fileManager].attributesOfItem(atPath: filePath)
             let length: Int = ((attrs?[FileAttributeKey.size] as? Int) ?? 0)
             self?.cachedDataLength = length
             return length
@@ -198,34 +203,52 @@ public class DataSourcePath: DataSource {
         // is considerably more performant, so try to do that.
         return Data.isValidImage(
             at: dataPath,
-            type: UTType(sessionFileExtension: URL(fileURLWithPath: filePath).pathExtension)
+            type: UTType(sessionFileExtension: URL(fileURLWithPath: filePath).pathExtension),
+            using: dependencies
         )
     }
     
     public var isValidVideo: Bool {
         guard let dataUrl: URL = self.dataUrl else { return false }
         
-        return MediaUtils.isValidVideo(path: dataUrl.path)
+        return MediaUtils.isValidVideo(path: dataUrl.path, using: dependencies)
     }
 
     // MARK: - Initialization
     
-    public init(filePath: String, shouldDeleteOnDeinit: Bool) {
+    public init(
+        filePath: String,
+        sourceFilename: String?,
+        shouldDeleteOnDeinit: Bool,
+        using dependencies: Dependencies
+    ) {
+        self.dependencies = dependencies
         self.filePath = filePath
+        self.sourceFilename = sourceFilename
         self.shouldDeleteOnDeinit = shouldDeleteOnDeinit
     }
     
-    public convenience init?(fileUrl: URL?, shouldDeleteOnDeinit: Bool) {
+    public convenience init?(
+        fileUrl: URL?,
+        sourceFilename: String?,
+        shouldDeleteOnDeinit: Bool,
+        using dependencies: Dependencies
+    ) {
         guard let fileUrl: URL = fileUrl, fileUrl.isFileURL else { return nil }
         
-        self.init(filePath: fileUrl.path, shouldDeleteOnDeinit: shouldDeleteOnDeinit)
+        self.init(
+            filePath: fileUrl.path,
+            sourceFilename: (sourceFilename ?? fileUrl.lastPathComponent),
+            shouldDeleteOnDeinit: shouldDeleteOnDeinit,
+            using: dependencies
+        )
     }
     
     deinit {
         guard shouldDeleteOnDeinit else { return }
         
-        DispatchQueue.global(qos: .default).async { [filePath] in
-            try? FileManager.default.removeItem(atPath: filePath)
+        DispatchQueue.global(qos: .default).async { [filePath, dependencies] in
+            try? dependencies[singleton: .fileManager].removeItem(atPath: filePath)
         }
     }
     
@@ -239,7 +262,7 @@ public class DataSourcePath: DataSource {
     }
     
     public func write(to path: String) throws {
-        try FileManager.default.copyItem(atPath: filePath, toPath: path)
+        try dependencies[singleton: .fileManager].copyItem(atPath: filePath, toPath: path)
     }
     
     public static func == (lhs: DataSourcePath, rhs: DataSourcePath) -> Bool {

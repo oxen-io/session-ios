@@ -24,6 +24,6 @@ enum _006_DropSnodeCache: Migration {
         let variants: [Job.Variant] = [._legacy_getSnodePool, ._legacy_buildPaths, ._legacy_getSwarm]
         try Job.filter(variants.contains(Job.Columns.variant)).deleteAll(db)
         
-        Storage.update(progress: 1, for: self, in: target)
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }

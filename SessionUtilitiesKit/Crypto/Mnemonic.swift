@@ -65,7 +65,7 @@ public enum Mnemonic {
         }
     }
     
-    public enum DecodingError : LocalizedError {
+    public enum DecodingError: Error {
         case generic, inputTooShort, invalidWord, verificationFailed
     }
     

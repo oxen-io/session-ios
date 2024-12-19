@@ -1,6 +1,7 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
+import Combine
 import SessionUIKit
 import SessionSnodeKit
 import SessionMessagingKit
@@ -28,10 +29,12 @@ final class PathStatusView: UIView {
     
     // MARK: - Initialization
     
+    private let dependencies: Dependencies
     private let size: Size
-    private var networkStatusCallbackId: UUID?
+    private var disposables: Set<AnyCancellable> = Set()
     
-    init(size: Size = .small) {
+    init(size: Size = .small, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.size = size
         
         super.init(frame: .zero)
@@ -41,16 +44,7 @@ final class PathStatusView: UIView {
     }
 
     required init?(coder: NSCoder) {
-        self.size = .small
-        
-        super.init(coder: coder)
-        
-        setUpViewHierarchy()
-        registerObservers()
-    }
-    
-    deinit {
-        LibSession.removeNetworkChangedCallback(callbackId: networkStatusCallbackId)
+        fatalError("init(coder:) has not been implemented")
     }
     
     // MARK: - Layout
@@ -65,15 +59,24 @@ final class PathStatusView: UIView {
     // MARK: - Functions
 
     private func registerObservers() {
-        // Register for status updates (will be called immediately with current status)
-        networkStatusCallbackId = LibSession.onNetworkStatusChanged { [weak self] status in
-            DispatchQueue.main.async {
-                self?.setStatus(to: status)
-            }
-        }
+        /// Register for status updates (will be called immediately with current status)
+        dependencies[cache: .libSessionNetwork].networkStatus
+            .subscribe(on: DispatchQueue.global(qos: .background), using: dependencies)
+            .receive(on: DispatchQueue.main, using: dependencies)
+            .sink(
+                receiveCompletion: { [weak self] _ in
+                    /// If the stream completes it means the network cache was reset in which case we want to
+                    /// re-register for updates in the next run loop (as the new cache should be created by then)
+                    DispatchQueue.global(qos: .background).async {
+                        self?.registerObservers()
+                    }
+                },
+                receiveValue: { [weak self] status in self?.setStatus(to: status) }
+            )
+            .store(in: &disposables)
     }
 
-    private func setStatus(to status: LibSession.NetworkStatus) {
+    private func setStatus(to status: NetworkStatus) {
         themeBackgroundColor = status.themeColor
         layer.themeShadowColor = status.themeColor
         layer.shadowOffset = CGSize(width: 0, height: 0.8)
@@ -91,7 +94,7 @@ final class PathStatusView: UIView {
     }
 }
 
-public extension LibSession.NetworkStatus {
+public extension NetworkStatus {
     var themeColor: ThemeValue {
         switch self {
             case .unknown: return .path_unknown

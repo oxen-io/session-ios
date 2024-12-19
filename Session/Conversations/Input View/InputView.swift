@@ -13,6 +13,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     private static let linkPreviewViewInset: CGFloat = 6
 
     private var disposables: Set<AnyCancellable> = Set()
+    private let dependencies: Dependencies
     private let threadVariant: SessionThread.Variant
     private weak var delegate: InputViewDelegate?
     
@@ -40,9 +41,9 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         set { inputTextView.selectedRange = newValue }
     }
     
-    var enabledMessageTypes: MessageInputTypes = .all {
+    var inputState: SessionThreadViewModel.MessageInputState = .all {
         didSet {
-            setEnabledMessageTypes(enabledMessageTypes, message: nil)
+            setMessageInputState(inputState)
         }
     }
 
@@ -50,6 +51,14 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     var lastSearchedText: String? { nil }
 
     // MARK: - UI
+    
+    private lazy var tapGestureRecognizer: UITapGestureRecognizer = {
+        let result: UITapGestureRecognizer = UITapGestureRecognizer()
+        result.addTarget(self, action: #selector(disabledInputTapped))
+        result.isEnabled = false
+        
+        return result
+    }()
 
     private var bottomStackView: UIStackView?
     private lazy var attachmentsButton: ExpandingAttachmentsButton = {
@@ -82,7 +91,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     private lazy var voiceMessageButtonContainer = container(for: voiceMessageButton)
 
     private lazy var mentionsView: MentionSelectionView = {
-        let result: MentionSelectionView = MentionSelectionView()
+        let result: MentionSelectionView = MentionSelectionView(using: dependencies)
         result.delegate = self
         
         return result
@@ -144,7 +153,8 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     // MARK: - Initialization
     
-    init(threadVariant: SessionThread.Variant, delegate: InputViewDelegate) {
+    init(threadVariant: SessionThread.Variant, delegate: InputViewDelegate, using dependencies: Dependencies) {
+        self.dependencies = dependencies
         self.threadVariant = threadVariant
         self.delegate = delegate
         
@@ -163,6 +173,8 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     private func setUpViewHierarchy() {
         autoresizingMask = .flexibleHeight
+        
+        addGestureRecognizer(tapGestureRecognizer)
         
         // Background & blur
         let backgroundView = UIView()
@@ -263,11 +275,12 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
             authorId: quoteDraftInfo.model.authorId,
             quotedText: quoteDraftInfo.model.body,
             threadVariant: threadVariant,
-            currentUserPublicKey: quoteDraftInfo.model.currentUserPublicKey,
-            currentUserBlinded15PublicKey: quoteDraftInfo.model.currentUserBlinded15PublicKey,
-            currentUserBlinded25PublicKey: quoteDraftInfo.model.currentUserBlinded25PublicKey,
+            currentUserSessionId: quoteDraftInfo.model.currentUserSessionId,
+            currentUserBlinded15SessionId: quoteDraftInfo.model.currentUserBlinded15SessionId,
+            currentUserBlinded25SessionId: quoteDraftInfo.model.currentUserBlinded25SessionId,
             direction: (quoteDraftInfo.isOutgoing ? .outgoing : .incoming),
-            attachment: quoteDraftInfo.model.attachment
+            attachment: quoteDraftInfo.model.attachment,
+            using: dependencies
         ) { [weak self] in
             self?.quoteDraftInfo = nil
         }
@@ -281,20 +294,20 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     private func autoGenerateLinkPreviewIfPossible() {
         // Don't allow link previews on 'none' or 'textOnly' input
-        guard enabledMessageTypes == .all else { return }
+        guard inputState.allowedInputTypes == .all else { return }
 
         // Suggest that the user enable link previews if they haven't already and we haven't
         // told them about link previews yet
         let text = inputTextView.text!
-        let areLinkPreviewsEnabled: Bool = Storage.shared[.areLinkPreviewsEnabled]
+        let areLinkPreviewsEnabled: Bool = dependencies[singleton: .storage, key: .areLinkPreviewsEnabled]
         
         if
             !LinkPreview.allPreviewUrls(forMessageBodyText: text).isEmpty &&
             !areLinkPreviewsEnabled &&
-            !UserDefaults.standard[.hasSeenLinkPreviewSuggestion]
+            !dependencies[defaults: .standard, key: .hasSeenLinkPreviewSuggestion]
         {
             delegate?.showLinkPreviewSuggestionModal()
-            UserDefaults.standard[.hasSeenLinkPreviewSuggestion] = true
+            dependencies[defaults: .standard, key: .hasSeenLinkPreviewSuggestion] = true
             return
         }
         // Check that link previews are enabled
@@ -306,7 +319,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 
     func autoGenerateLinkPreview() {
         // Check that a valid URL is present
-        guard let linkPreviewURL = LinkPreview.previewUrl(for: text, selectedRange: inputTextView.selectedRange) else {
+        guard let linkPreviewURL = LinkPreview.previewUrl(for: text, selectedRange: inputTextView.selectedRange, using: dependencies) else {
             return
         }
         
@@ -319,7 +332,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         
         // Set the state to loading
         linkPreviewInfo = (url: linkPreviewURL, draft: nil)
-        linkPreviewView.update(with: LinkPreview.LoadingState(), isOutgoing: false)
+        linkPreviewView.update(with: LinkPreview.LoadingState(), isOutgoing: false, using: dependencies)
 
         // Add the link preview view
         additionalContentContainer.addSubview(linkPreviewView)
@@ -329,7 +342,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         linkPreviewView.pin(.bottom, to: .bottom, of: additionalContentContainer, withInset: -4)
         
         // Build the link preview
-        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL)
+        LinkPreview.tryToBuildPreviewInfo(previewUrl: linkPreviewURL, using: dependencies)
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .sink(
@@ -343,36 +356,45 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
                             self?.additionalContentContainer.subviews.forEach { $0.removeFromSuperview() }
                     }
                 },
-                receiveValue: { [weak self] draft in
+                receiveValue: { [weak self, dependencies] draft in
                     guard self?.linkPreviewInfo?.url == linkPreviewURL else { return } // Obsolete
                     
                     self?.linkPreviewInfo = (url: linkPreviewURL, draft: draft)
-                    self?.linkPreviewView.update(with: LinkPreview.DraftState(linkPreviewDraft: draft), isOutgoing: false)
+                    self?.linkPreviewView.update(
+                        with: LinkPreview.DraftState(linkPreviewDraft: draft),
+                        isOutgoing: false,
+                        using: dependencies
+                    )
                 }
             )
             .store(in: &disposables)
     }
 
-    func setEnabledMessageTypes(_ messageTypes: MessageInputTypes, message: String?) {
-        guard enabledMessageTypes != messageTypes else { return }
+    func setMessageInputState(_ updatedInputState: SessionThreadViewModel.MessageInputState) {
+        guard inputState != updatedInputState else { return }
 
-        enabledMessageTypes = messageTypes
-        disabledInputLabel.text = (message ?? "")
+        self.accessibilityIdentifier = updatedInputState.accessibility?.identifier
+        self.accessibilityLabel = updatedInputState.accessibility?.label
+        tapGestureRecognizer.isEnabled = (updatedInputState.allowedInputTypes == .none)
+        inputState = updatedInputState
+        disabledInputLabel.text = (updatedInputState.message ?? "")
+        disabledInputLabel.accessibilityIdentifier = updatedInputState.messageAccessibility?.identifier
+        disabledInputLabel.accessibilityLabel = updatedInputState.messageAccessibility?.label
 
-        attachmentsButton.isUserInteractionEnabled = (messageTypes == .all)
-        voiceMessageButton.isUserInteractionEnabled = (messageTypes == .all)
+        attachmentsButton.isUserInteractionEnabled = (updatedInputState.allowedInputTypes == .all)
+        voiceMessageButton.isUserInteractionEnabled = (updatedInputState.allowedInputTypes == .all)
 
         UIView.animate(withDuration: 0.3) { [weak self] in
-            self?.bottomStackView?.alpha = (messageTypes != .none ? 1 : 0)
-            self?.attachmentsButton.alpha = (messageTypes == .all ?
+            self?.bottomStackView?.alpha = (updatedInputState.allowedInputTypes != .none ? 1 : 0)
+            self?.attachmentsButton.alpha = (updatedInputState.allowedInputTypes == .all ?
                 1 :
-                (messageTypes == .textOnly ? 0.4 : 0)
+                (updatedInputState.allowedInputTypes == .textOnly ? 0.4 : 0)
             )
-            self?.voiceMessageButton.alpha =  (messageTypes == .all ?
+            self?.voiceMessageButton.alpha =  (updatedInputState.allowedInputTypes == .all ?
                 1 :
-                (messageTypes == .textOnly ? 0.4 : 0)
+                (updatedInputState.allowedInputTypes == .textOnly ? 0.4 : 0)
             )
-            self?.disabledInputLabel.alpha = (messageTypes != .none ? 0 : Values.mediumOpacity)
+            self?.disabledInputLabel.alpha = (updatedInputState.allowedInputTypes != .none ? 0 : Values.mediumOpacity)
         }
     }
 
@@ -413,14 +435,14 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
         if inputViewButton == sendButton { delegate?.handleSendButtonTapped() }
     }
 
-    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?, using dependencies: Dependencies) {
+    func handleInputViewButtonLongPressBegan(_ inputViewButton: InputViewButton?) {
         guard inputViewButton == voiceMessageButton else { return }
         
         // Note: The 'showVoiceMessageUI' call MUST come before triggering 'startVoiceMessageRecording'
         // because if something goes wrong it'll trigger `hideVoiceMessageUI` and we don't want it to
         // end up in a state with the input content hidden
         showVoiceMessageUI()
-        delegate?.startVoiceMessageRecording(using: dependencies)
+        delegate?.startVoiceMessageRecording()
     }
 
     func handleInputViewButtonLongPressMoved(_ inputViewButton: InputViewButton, with touch: UITouch?) {
@@ -515,6 +537,10 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
     func tapableLabel(_ label: TappableLabel, didTapUrl url: String, atRange range: NSRange) {
         // Do nothing
     }
+    
+    @objc private func disabledInputTapped() {
+        delegate?.handleDisabledInputTapped()
+    }
 
     // MARK: - Convenience
     
@@ -534,6 +560,7 @@ final class InputView: UIView, InputViewButtonDelegate, InputTextViewDelegate, M
 protocol InputViewDelegate: ExpandingAttachmentsButtonDelegate, VoiceMessageRecordingViewDelegate {
     func showLinkPreviewSuggestionModal()
     func handleSendButtonTapped()
+    func handleDisabledInputTapped()
     func inputTextViewDidChangeContent(_ inputTextView: InputTextView)
     func handleMentionSelected(_ mentionInfo: MentionInfo, from view: MentionSelectionView)
     func didPasteImageFromPasteboard(_ image: UIImage)

@@ -1,16 +1,21 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
+import Foundation
 import Combine
 
 public protocol CombineCompatible {}
 
 public enum PublisherError: Error, CustomStringConvertible {
     case targetPublisherIsNull
+    case invalidCollectionType
     
     // stringlint:ignore_contents
     public var description: String {
         switch self {
             case .targetPublisherIsNull: return "The target publisher is null, likely due to a 'weak self' (PublisherError.targetPublisherIsNull)."
+            case .invalidCollectionType: return "Failed to convert array literal to desired Publisher type (PublisherError.invalidCollectionType)."
         }
     }
 }
@@ -117,7 +122,7 @@ public extension Publisher {
     func subscribe<S>(
         on scheduler: S,
         options: S.SchedulerOptions? = nil,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) -> AnyPublisher<Output, Failure> where S: Scheduler {
         guard !dependencies.forceSynchronous else { return self.eraseToAnyPublisher() }
         
@@ -128,7 +133,7 @@ public extension Publisher {
     func receive<S>(
         on scheduler: S,
         options: S.SchedulerOptions? = nil,
-        using dependencies: Dependencies = Dependencies()
+        using dependencies: Dependencies
     ) -> AnyPublisher<Output, Failure> where S: Scheduler {
         guard !dependencies.forceSynchronous else { return self.eraseToAnyPublisher() }
         
@@ -183,7 +188,7 @@ public extension Publisher {
     }
 }
 
-public extension AnyPublisher {
+public extension Publisher {
     /// Converts the publisher to output a Result instead of throwing an error, can be used to ensure a subscription never
     /// closes due to a failure
     func asResult() -> AnyPublisher<Result<Output, Failure>, Never> {
@@ -194,44 +199,8 @@ public extension AnyPublisher {
     }
 }
 
-extension AnyPublisher: ExpressibleByArrayLiteral where Output: Collection {
+extension AnyPublisher: @retroactive ExpressibleByArrayLiteral where Output: RangeReplaceableCollection {
     public init(arrayLiteral elements: Output.Element...) {
-        guard let convertedElements: Output = Array(elements) as? Output else {
-            SNLog("Failed to convery array literal to Publisher due to invalid type conversation of \(type(of: Output.self))")
-            guard let empty: Output = [] as? Output else { preconditionFailure("Invalid type") }
-            
-            self = Just(empty).setFailureType(to: Failure.self).eraseToAnyPublisher()
-            return
-        }
-        
-        self = Just(convertedElements).setFailureType(to: Failure.self).eraseToAnyPublisher()
-    }
-}
-
-// MARK: - Data Decoding
-
-public extension Publisher where Output == Data, Failure == Error {
-    func decoded<R: Decodable>(
-        as type: R.Type,
-        using dependencies: Dependencies = Dependencies()
-    ) -> AnyPublisher<R, Failure> {
-        self
-            .tryMap { data -> R in try data.decoded(as: type, using: dependencies) }
-            .eraseToAnyPublisher()
-    }
-}
-
-public extension Publisher where Output == (ResponseInfoType, Data?), Failure == Error {
-    func decoded<R: Decodable>(
-        as type: R.Type,
-        using dependencies: Dependencies = Dependencies()
-    ) -> AnyPublisher<(ResponseInfoType, R), Error> {
-        self
-            .tryMap { responseInfo, maybeData -> (ResponseInfoType, R) in
-                guard let data: Data = maybeData else { throw NetworkError.parsingFailed }
-                
-                return (responseInfo, try data.decoded(as: type, using: dependencies))
-            }
-            .eraseToAnyPublisher()
+        self = Just(Output(elements)).setFailureType(to: Failure.self).eraseToAnyPublisher()
     }
 }

@@ -125,7 +125,7 @@ enum _021_ReworkRecipientState: Migration {
         /// Finally we can drop the old recipient states table
         try db.drop(table: _001_InitialSetupMigration.LegacyRecipientState.self)
         
-        Storage.update(progress: 1, for: self, in: target) // In case this is the last migration
+        Storage.update(progress: 1, for: self, in: target, using: dependencies)
     }
 }
 

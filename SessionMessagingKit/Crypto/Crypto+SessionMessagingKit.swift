@@ -3,6 +3,7 @@
 // stringlint:disable
 
 import Foundation
+import CryptoKit
 import GRDB
 import SessionSnodeKit
 import SessionUtil
@@ -27,9 +28,7 @@ public extension Crypto.Generator {
             let destinationX25519PublicKey: Data = try {
                 switch destination {
                     case .contact(let publicKey): return Data(SessionId(.standard, hex: publicKey).publicKey)
-                    case .syncMessage:
-                        return Data(SessionId(.standard, hex: getUserHexEncodedPublicKey(using: dependencies)).publicKey)
-                    
+                    case .syncMessage: return Data(dependencies[cache: .general].sessionId.publicKey)
                     case .closedGroup(let groupPublicKey):
                         return try ClosedGroupKeyPair.fetchLatestKeyPair(db, threadId: groupPublicKey)?.publicKey ?? {
                             throw MessageSenderError.noKeyPair
@@ -276,6 +275,59 @@ public extension Crypto.Generator {
             }
             
             return String(cString: cHash)
+        }
+    }
+}
+
+// MARK: - DisplayPicture
+
+public extension Crypto.Generator {
+    static func encryptedDataDisplayPicture(
+        data: Data,
+        key: Data,
+        using dependencies: Dependencies
+    ) -> Crypto.Generator<Data> {
+        return Crypto.Generator(id: "encryptedDataDisplayPicture", args: [data, key]) {
+            // The key structure is: nonce || ciphertext || authTag
+            guard
+                key.count == DisplayPictureManager.aes256KeyByteLength,
+                let nonceData: Data = dependencies[singleton: .crypto]
+                    .generate(.randomBytes(DisplayPictureManager.nonceLength)),
+                let nonce: AES.GCM.Nonce = try? AES.GCM.Nonce(data: nonceData),
+                let sealedData: AES.GCM.SealedBox = try? AES.GCM.seal(
+                    data,
+                    using: SymmetricKey(data: key),
+                    nonce: nonce
+                ),
+                let encryptedContent: Data = sealedData.combined
+            else { throw CryptoError.failedToGenerateOutput }
+
+            return encryptedContent
+        }
+    }
+
+    static func decryptedDataDisplayPicture(
+        data: Data,
+        key: Data,
+        using dependencies: Dependencies
+    ) -> Crypto.Generator<Data> {
+        return Crypto.Generator(id: "decryptedDataDisplayPicture", args: [data, key]) {
+            guard key.count == DisplayPictureManager.aes256KeyByteLength else { throw CryptoError.failedToGenerateOutput }
+
+            // The key structure is: nonce || ciphertext || authTag
+            let cipherTextLength: Int = (data.count - (DisplayPictureManager.nonceLength + DisplayPictureManager.tagLength))
+
+            guard
+                cipherTextLength > 0,
+                let sealedData: AES.GCM.SealedBox = try? AES.GCM.SealedBox(
+                    nonce: AES.GCM.Nonce(data: data.subdata(in: 0..<DisplayPictureManager.nonceLength)),
+                    ciphertext: data.subdata(in: DisplayPictureManager.nonceLength..<(DisplayPictureManager.nonceLength + cipherTextLength)),
+                    tag: data.subdata(in: (data.count - DisplayPictureManager.tagLength)..<data.count)
+                ),
+                let decryptedData: Data = try? AES.GCM.open(sealedData, using: SymmetricKey(data: key))
+            else { throw CryptoError.failedToGenerateOutput }
+
+            return decryptedData
         }
     }
 }

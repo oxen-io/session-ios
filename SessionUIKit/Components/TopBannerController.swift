@@ -1,11 +1,16 @@
 // Copyright © 2023 Rangeproof Pty Ltd. All rights reserved.
 
 import UIKit
-import SessionUtilitiesKit
 
 public class TopBannerController: UIViewController {
     public enum Warning: String, Codable {
         case invalid
+        
+        var shouldAppearOnResume: Bool {
+            switch self {
+                case .invalid: return false
+            }
+        }
         
         var text: String {
             switch self {
@@ -64,7 +69,7 @@ public class TopBannerController: UIViewController {
         )
         result.contentMode = .center
         result.themeTintColor = .black
-        result.addTarget(self, action: #selector(dismissBanner), for: .touchUpInside)
+        result.addTarget(self, action: #selector(dismissBannerTapped), for: .touchUpInside)
         
         return result
     }()
@@ -132,9 +137,9 @@ public class TopBannerController: UIViewController {
     
     // MARK: - Actions
     
-    @objc private func dismissBanner() {
+    @objc private func dismissBannerTapped() {
         // Remove the cached warning
-        UserDefaults.sharedLokiProject?[.topBannerWarningToShow] = nil
+        SNUIKit.topBannerChanged(to: nil)
         
         UIView.animate(
             withDuration: 0.3,
@@ -164,7 +169,10 @@ public class TopBannerController: UIViewController {
         child.didMove(toParent: self)
     }
     
-    public static func show(warning: Warning, inWindowFor view: UIView? = nil) {
+    public static func show(
+        warning: Warning,
+        inWindowFor view: UIView? = nil
+    ) {
         guard Thread.isMainThread else {
             DispatchQueue.main.async {
                 TopBannerController.show(warning: warning, inWindowFor: view)
@@ -178,7 +186,9 @@ public class TopBannerController: UIViewController {
         }
         
         // Cache the banner to show (so we can show it on re-launch)
-        UserDefaults.sharedLokiProject?[.topBannerWarningToShow] = warning.rawValue
+        if instance.initialCachedWarning != nil && warning != instance.initialCachedWarning {
+            SNUIKit.topBannerChanged(to: warning)
+        }
         
         UIView.performWithoutAnimation {
             instance.bannerLabel.text = warning.text
@@ -208,6 +218,6 @@ public class TopBannerController: UIViewController {
             return
         }
         
-        UIView.performWithoutAnimation { instance.dismissBanner() }
+        UIView.performWithoutAnimation { instance.dismissBannerTapped() }
     }
 }

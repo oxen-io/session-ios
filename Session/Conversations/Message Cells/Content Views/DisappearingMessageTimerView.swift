@@ -2,6 +2,7 @@
 
 import UIKit
 import SessionSnodeKit
+import SessionUtilitiesKit
 
 class DisappearingMessageTimerView: UIView {
     private var initialDurationSeconds: Double = 0
@@ -17,35 +18,35 @@ class DisappearingMessageTimerView: UIView {
     // MARK: - Lifecycle
     
     init() {
-        super.init(frame: CGRect.zero)
+        super.init(frame: .zero)
         
         self.addSubview(iconImageView)
         iconImageView.pin(to: self, withInset: 1)
     }
     
     override init(frame: CGRect) {
-        preconditionFailure("Use init(viewItem:textColor:) instead.")
+        preconditionFailure("Use init() instead.")
     }
     
     required init?(coder: NSCoder) {
-        preconditionFailure("Use init(viewItem:textColor:) instead.")
+        preconditionFailure("Use init() instead.")
     }
     
-    public func configure(expirationTimestampMs: Double, initialDurationSeconds: Double) {
+    public func configure(expirationTimestampMs: Double, initialDurationSeconds: Double, using dependencies: Dependencies) {
         self.expirationTimestampMs = expirationTimestampMs
         self.initialDurationSeconds = initialDurationSeconds
         
-        self.updateProgress()
-        self.startAnimation()
+        self.updateProgress(using: dependencies)
+        self.startAnimation(using: dependencies)
     }
     
-    @objc private func updateProgress() {
+    private func updateProgress(using dependencies: Dependencies) {
         guard self.expirationTimestampMs > 0 else {
             self.progress = 12
             return
         }
         
-        let timestampMs: Double = Double(SnodeAPI.currentOffsetTimestampMs())
+        let timestampMs: Double = dependencies[cache: .snodeAPI].currentOffsetTimestampMs()
         let secondsLeft: Double = max((self.expirationTimestampMs - timestampMs) / 1000, 0)
         let progressRatio: Double = self.initialDurationSeconds > 0 ? secondsLeft / self.initialDurationSeconds : 0
         
@@ -59,15 +60,13 @@ class DisappearingMessageTimerView: UIView {
         self.iconImageView.image = UIImage(named: imageName)?.withRenderingMode(.alwaysTemplate)
     }
     
-    private func startAnimation() {
+    private func startAnimation(using dependencies: Dependencies) {
         self.clearAnimation()
-        self.animationTimer = Timer.weakScheduledTimer(
+        self.animationTimer = Timer.scheduledTimerOnMainThread(
             withTimeInterval: 0.1,
-            target: self,
-            selector: #selector(updateProgress),
-            userInfo: nil,
-            repeats: true
-        )
+            repeats: true,
+            using: dependencies
+        ) { [weak self] _ in self?.updateProgress(using: dependencies) }
     }
     
     private func clearAnimation() {

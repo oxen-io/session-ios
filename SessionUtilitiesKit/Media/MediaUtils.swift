@@ -8,23 +8,23 @@ public enum MediaError: Error {
 }
 
 public enum MediaUtils {
-    public static var maxFileSizeAnimatedImage: UInt { SNUtilitiesKitConfiguration.maxFileSize }
-    public static var maxFileSizeImage: UInt { SNUtilitiesKitConfiguration.maxFileSize }
-    public static var maxFileSizeVideo: UInt { SNUtilitiesKitConfiguration.maxFileSize }
-    public static var maxFileSizeAudio: UInt { SNUtilitiesKitConfiguration.maxFileSize }
-    public static var maxFileSizeGeneric: UInt { SNUtilitiesKitConfiguration.maxFileSize }
+    public static var maxFileSizeAnimatedImage: UInt { SNUtilitiesKit.maxFileSize }
+    public static var maxFileSizeImage: UInt { SNUtilitiesKit.maxFileSize }
+    public static var maxFileSizeVideo: UInt { SNUtilitiesKit.maxFileSize }
+    public static var maxFileSizeAudio: UInt { SNUtilitiesKit.maxFileSize }
+    public static var maxFileSizeGeneric: UInt { SNUtilitiesKit.maxFileSize }
 
     public static let maxAnimatedImageDimensions: UInt = 1 * 1024
     public static let maxStillImageDimensions: UInt = 8 * 1024
     public static let maxVideoDimensions: CGFloat = 3 * 1024
     
-    public static func thumbnail(forImageAtPath path: String, maxDimension: CGFloat) throws -> UIImage {
+    public static func thumbnail(forImageAtPath path: String, maxDimension: CGFloat, type: String, using dependencies: Dependencies) throws -> UIImage {
         SNLog("thumbnailing image: \(path)")
 
-        guard FileManager.default.fileExists(atPath: path) else {
+        guard dependencies[singleton: .fileManager].fileExists(atPath: path) else {
             throw MediaError.failure(description: "Media file missing.")
         }
-        guard Data.isValidImage(at: path) else {
+        guard Data.isValidImage(at: path, type: UTType(sessionMimeType: type), using: dependencies) else {
             throw MediaError.failure(description: "Invalid image.")
         }
         guard let originalImage = UIImage(contentsOfFile: path) else {
@@ -36,10 +36,10 @@ public enum MediaUtils {
         return thumbnailImage
     }
 
-    public static func thumbnail(forVideoAtPath path: String, maxDimension: CGFloat) throws -> UIImage {
+    public static func thumbnail(forVideoAtPath path: String, maxDimension: CGFloat, using dependencies: Dependencies) throws -> UIImage {
         SNLog("thumbnailing video: \(path)")
 
-        guard isVideoOfValidContentTypeAndSize(path: path) else {
+        guard isVideoOfValidContentTypeAndSize(path: path, using: dependencies) else {
             throw MediaError.failure(description: "Media file has missing or invalid length.")
         }
 
@@ -59,8 +59,8 @@ public enum MediaUtils {
         return image
     }
 
-    public static func isValidVideo(path: String) -> Bool {
-        guard isVideoOfValidContentTypeAndSize(path: path) else {
+    public static func isValidVideo(path: String, using dependencies: Dependencies) -> Bool {
+        guard isVideoOfValidContentTypeAndSize(path: path, using: dependencies) else {
             SNLog("Media file has missing or invalid length.")
             return false
         }
@@ -70,8 +70,8 @@ public enum MediaUtils {
         return isValidVideo(asset: asset)
     }
 
-    private static func isVideoOfValidContentTypeAndSize(path: String) -> Bool {
-        guard FileManager.default.fileExists(atPath: path) else {
+    private static func isVideoOfValidContentTypeAndSize(path: String, using dependencies: Dependencies) -> Bool {
+        guard dependencies[singleton: .fileManager].fileExists(atPath: path) else {
             SNLog("Media file missing.")
             return false
         }
@@ -85,11 +85,11 @@ public enum MediaUtils {
             return false
         }
 
-        guard let fileSize = FileSystem.fileSize(of: path) else {
+        guard let fileSize: UInt64 = dependencies[singleton: .fileManager].fileSize(of: path) else {
             SNLog("Media file has unknown length.")
             return false
         }
-        return UInt(fileSize) <= SNUtilitiesKitConfiguration.maxFileSize
+        return UInt(fileSize) <= SNUtilitiesKit.maxFileSize
     }
 
     private static func isValidVideo(asset: AVURLAsset) -> Bool {

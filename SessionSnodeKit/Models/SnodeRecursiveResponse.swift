@@ -11,6 +11,16 @@ public class SnodeRecursiveResponse<T: SnodeSwarmItem>: SnodeResponse {
     
     // MARK: - Initialization
     
+    internal init(
+        swarm: [String: T],
+        hardFork: [Int],
+        timeOffset: Int64
+    ) {
+        self.swarm = swarm
+        
+        super.init(hardForkVersion: hardFork, timeOffset: timeOffset)
+    }
+    
     required init(from decoder: Decoder) throws {
         let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
         

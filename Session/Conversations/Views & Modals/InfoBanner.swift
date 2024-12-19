@@ -1,35 +1,134 @@
 // Copyright © 2022 Rangeproof Pty Ltd. All rights reserved.
+//
+// stringlint:disable
 
 import UIKit
 import SessionUIKit
 
 final class InfoBanner: UIView {
+    public enum Icon: Equatable, Hashable {
+        case none
+        case link
+        case close
+        
+        var image: UIImage? {
+            switch self {
+                case .none: return nil
+                case .link: return UIImage(systemName: "arrow.up.right.square")?.withRenderingMode(.alwaysTemplate)
+                case .close:
+                    return UIImage(
+                        systemName: "xmark",
+                        withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+                    )?.withRenderingMode(.alwaysTemplate)
+            }
+        }
+    }
+    
     public struct Info: Equatable, Hashable {
-        let message: String
+        let font: UIFont
+        let message: NSAttributedString
+        let icon: Icon
+        let tintColor: ThemeValue
         let backgroundColor: ThemeValue
-        let messageFont: UIFont
-        let messageTintColor: ThemeValue
-        let messageLabelAccessibilityLabel: String?
-        let height: CGFloat
+        let accessibility: Accessibility?
+        let labelAccessibility: Accessibility?
+        let height: CGFloat?
+        let onTap: (() -> Void)?
+        
+        static var empty: Info = Info(
+            font: .systemFont(ofSize: Values.smallFontSize),
+            message: NSAttributedString()
+        )
+        
+        public init(
+            font: UIFont,
+            message: NSAttributedString,
+            icon: Icon = .none,
+            tintColor: ThemeValue = .black,
+            backgroundColor: ThemeValue = .primary,
+            accessibility: Accessibility? = nil,
+            labelAccessibility: Accessibility? = nil,
+            height: CGFloat? = nil,
+            onTap: (() -> Void)? = nil
+        ) {
+            self.font = font
+            self.message = message
+            self.icon = icon
+            self.tintColor = tintColor
+            self.backgroundColor = backgroundColor
+            self.accessibility = accessibility
+            self.labelAccessibility = labelAccessibility
+            self.height = height
+            self.onTap = onTap
+        }
         
         func with(
-            message: String? = nil,
+            font: UIFont? = nil,
+            message: NSAttributedString? = nil,
+            icon: Icon? = nil,
+            tintColor: ThemeValue? = nil,
             backgroundColor: ThemeValue? = nil,
-            messageFont: UIFont? = nil,
-            messageTintColor: ThemeValue? = nil,
-            messageLabelAccessibilityLabel: String? = nil,
-            height: CGFloat? = nil
+            accessibility: Accessibility? = nil,
+            labelAccessibility: Accessibility? = nil,
+            height: CGFloat? = nil,
+            onTap: (() -> Void)? = nil
         ) -> Info {
             return Info(
+                font: font ?? self.font,
                 message: message ?? self.message,
+                icon: icon ?? self.icon,
+                tintColor: tintColor ?? self.tintColor,
                 backgroundColor: backgroundColor ?? self.backgroundColor,
-                messageFont: messageFont ?? self.messageFont,
-                messageTintColor: messageTintColor ?? self.messageTintColor,
-                messageLabelAccessibilityLabel: messageLabelAccessibilityLabel ?? self.messageLabelAccessibilityLabel,
-                height: height ?? self.height
+                accessibility: accessibility ?? self.accessibility,
+                labelAccessibility: labelAccessibility ?? self.labelAccessibility,
+                height: height ?? self.height,
+                onTap: onTap ?? self.onTap
+            )
+        }
+        
+        public func hash(into hasher: inout Hasher) {
+            font.hash(into: &hasher)
+            message.hash(into: &hasher)
+            icon.hash(into: &hasher)
+            tintColor.hash(into: &hasher)
+            backgroundColor.hash(into: &hasher)
+            accessibility.hash(into: &hasher)
+            labelAccessibility.hash(into: &hasher)
+            height.hash(into: &hasher)
+        }
+        
+        public static func == (lhs: InfoBanner.Info, rhs: InfoBanner.Info) -> Bool {
+            return (
+                lhs.font == rhs.font &&
+                lhs.message == rhs.message &&
+                lhs.icon == rhs.icon &&
+                lhs.tintColor == rhs.tintColor &&
+                lhs.backgroundColor == rhs.backgroundColor &&
+                lhs.accessibility == rhs.accessibility &&
+                lhs.labelAccessibility == rhs.labelAccessibility &&
+                lhs.height == rhs.height
             )
         }
     }
+    
+    private lazy var stackView: UIStackView = {
+        let result: UIStackView = UIStackView()
+        result.axis = .horizontal
+        result.alignment = .center
+        result.distribution = .fill
+        result.spacing = Values.smallSpacing
+        
+        return result
+    }()
+    
+    private lazy var leftIconPadding: UIView = {
+        let result: UIView = UIView()
+        result.set(.width, to: 18)
+        result.set(.height, to: 18)
+        result.isHidden = true
+        
+        return result
+    }()
     
     private lazy var label: UILabel = {
         let result: UILabel = UILabel()
@@ -41,45 +140,42 @@ final class InfoBanner: UIView {
         return result
     }()
     
-    private lazy var closeButton: UIButton = {
-        let result: UIButton = UIButton()
-        result.translatesAutoresizingMaskIntoConstraints = false
-        result.setImage(
-            UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold))?
-                .withRenderingMode(.alwaysTemplate),
-            for: .normal
+    private lazy var rightIconImageView: UIImageView = {
+        let result: UIImageView = UIImageView(
+            image: UIImage(systemName: "arrow.up.right.square")?.withRenderingMode(.alwaysTemplate)
         )
-        result.contentMode = .center
-        result.addTarget(self, action: #selector(dismissBanner), for: .touchUpInside)
+        result.set(.width, to: 18)
+        result.set(.height, to: 18)
+        result.isHidden = true
         
         return result
     }()
     
     public var info: Info?
-    public var dismiss: (() -> Void)?
+    private var heightConstraint: NSLayoutConstraint?
+    
+    public var font: UIFont { info?.font ?? .systemFont(ofSize: Values.smallFontSize) }
     
     // MARK: - Initialization
     
-    init(info: Info, dismiss: (() -> Void)? = nil) {
+    init(info: Info) {
         super.init(frame: CGRect.zero)
         
-        addSubview(label)
+        addSubview(stackView)
         
-        label.pin(.top, to: .top, of: self)
-        label.pin(.bottom, to: .bottom, of: self)
-        label.pin(.leading, to: .leading, of: self, withInset: Values.veryLargeSpacing)
-        label.pin(.trailing, to: .trailing, of: self, withInset: -Values.veryLargeSpacing)
+        stackView.addArrangedSubview(leftIconPadding)
+        stackView.addArrangedSubview(label)
+        stackView.addArrangedSubview(rightIconImageView)
         
-        addSubview(closeButton)
+        stackView.pin(.top, to: .top, of: self, withInset: Values.verySmallSpacing)
+        stackView.pin(.bottom, to: .bottom, of: self, withInset: -Values.verySmallSpacing)
+        stackView.pin(.leading, to: .leading, of: self, withInset: Values.mediumSpacing)
+        stackView.pin(.trailing, to: .trailing, of: self, withInset: -Values.mediumSpacing)
         
-        let buttonSize: CGFloat = (12 + (Values.smallSpacing * 2))
-        closeButton.center(.vertical, in: self)
-        closeButton.pin(.trailing, to: .trailing, of: self, withInset: -Values.smallSpacing)
-        closeButton.set(.width, to: buttonSize)
-        closeButton.set(.height, to: buttonSize)
+        self.update(with: info)
         
-        self.set(.height, to: info.height)
-        self.update(info, dismiss: dismiss)
+        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(bannerTapped))
+        self.addGestureRecognizer(tapGestureRecognizer)
     }
     
     override init(frame: CGRect) {
@@ -90,47 +186,63 @@ final class InfoBanner: UIView {
         preconditionFailure("Use init(coder:) instead.")
     }
     
-    // MARK: Update
+    // MARK: - Interaction
     
-    private func update(_ info: InfoBanner.Info, dismiss: (() -> Void)?) {
-        self.info = info
-        self.dismiss = dismiss
-        
-        themeBackgroundColor = info.backgroundColor
-        
-        label.font = info.messageFont
-        label.text = info.message
-        label.themeTextColor = info.messageTintColor
-        label.accessibilityLabel = info.messageLabelAccessibilityLabel
-        
-        closeButton.themeTintColor = info.messageTintColor
-        closeButton.isHidden = (dismiss == nil)
+    @objc private func bannerTapped() {
+        info?.onTap?()
     }
+    
+    // MARK: - Update
     
     public func update(
-        message: String? = nil,
+        font: UIFont? = nil,
+        message: NSAttributedString? = nil,
+        icon: Icon = .none,
+        tintColor: ThemeValue? = nil,
         backgroundColor: ThemeValue? = nil,
-        messageFont: UIFont? = nil,
-        messageTintColor: ThemeValue? = nil,
-        messageLabelAccessibilityLabel: String? = nil,
+        accessibility: Accessibility? = nil,
+        labelAccessibility: Accessibility? = nil,
         height: CGFloat? = nil,
-        dismiss: (() -> Void)? = nil
+        onTap: (() -> Void)? = nil
     ) {
-        if let updatedInfo = self.info?.with(
-            message: message,
-            backgroundColor: backgroundColor,
-            messageFont: messageFont,
-            messageTintColor: messageTintColor,
-            messageLabelAccessibilityLabel: messageLabelAccessibilityLabel,
-            height: height
-        ) {
-            self.update(updatedInfo, dismiss: dismiss)
-        }
+        guard let currentInfo: Info = self.info else { return }
+        
+        self.update(
+            with: currentInfo.with(
+                font: font,
+                message: message,
+                icon: icon,
+                tintColor: tintColor,
+                backgroundColor: backgroundColor,
+                accessibility: accessibility,
+                labelAccessibility: labelAccessibility,
+                height: height,
+                onTap: onTap
+            )
+        )
     }
     
-    // MARK: - Actions
-    
-    @objc private func dismissBanner() {
-        self.dismiss?()
+    public func update(with info: InfoBanner.Info) {
+        self.info = info
+        self.heightConstraint?.isActive = false // Calling 'set' below will enable it
+        
+        switch info.height {
+            case .some(let fixedHeight): self.heightConstraint = self.set(.height, to: fixedHeight)
+            case .none: break
+        }
+        
+        themeBackgroundColor = info.backgroundColor
+        isAccessibilityElement = (info.accessibility != nil)
+        accessibilityIdentifier = info.accessibility?.identifier
+        accessibilityLabel = info.accessibility?.label
+        
+        label.font = info.font
+        label.attributedText = info.message
+        label.themeTextColor = info.tintColor
+        label.accessibilityIdentifier = info.labelAccessibility?.identifier
+        label.accessibilityLabel = info.labelAccessibility?.label
+        rightIconImageView.image = info.icon.image
+        rightIconImageView.isHidden = (info.icon == .none)
+        rightIconImageView.themeTintColor = info.tintColor
     }
 }
